@@ -1,0 +1,25 @@
+{
+  "name": "aikeychain",
+  "version": "1.0.0",
+  "description": "<p align=\"center\">   <img src=\"https://img.shields.io/badge/platform-macOS%2014+-blue?style=for-the-badge&logo=apple\" />   <img src=\"https://img.shields.io/badge/Swift-5.9+-orange?style=for-the-badge&logo=swift\" />   <img src=\"https://img.shields.io/badge/SwiftUI-Native-purple?style=for-the-badge\" />   <img src=\"https://img.shields.io/badge/license-MIT-green?style=for-the-badge\" /> </p>",
+  "main": "index.js",
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aieo-product/AIkeychain.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aieo-product/AIkeychain/issues"
+  },
+  "homepage": "https://github.com/aieo-product/AIkeychain#readme",
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

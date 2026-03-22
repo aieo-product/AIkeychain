@@ -3,6 +3,8 @@
   <img src="https://img.shields.io/badge/Swift-5.9+-orange?style=for-the-badge&logo=swift" />
   <img src="https://img.shields.io/badge/SwiftUI-Native-purple?style=for-the-badge" />
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" />
+  <br/>
+  <a href="https://aikeychain.pages.dev"><img src="https://img.shields.io/badge/📖_設計書-aikeychain.pages.dev-blueviolet?style=for-the-badge" /></a>
 </p>
 
 # AI KeyChain
@@ -110,6 +112,18 @@ Welcome → GitHub Token (必須) → AI API Keys (推奨) → その他 (任意
 ## ライセンス
 
 MIT License
+
+## 設計書
+
+設計書は VitePress で作成し、Cloudflare Pages で公開しています。
+
+**https://aikeychain.pages.dev**
+
+- [アーキテクチャ設計](https://aikeychain.pages.dev/design/architecture)
+- [データモデル設計](https://aikeychain.pages.dev/design/data-model)
+- [UI/UXデザイン](https://aikeychain.pages.dev/design/ui-ux)
+- [セキュリティ設計](https://aikeychain.pages.dev/design/security)
+- [ロードマップ](https://aikeychain.pages.dev/dev/roadmap)
 
 ## 開発ブログ
 
