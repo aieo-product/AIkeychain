@@ -1,0 +1,234 @@
+<mxfile host="app.diagrams.net" agent="Claude" version="24.0.0">
+  <diagram name="Main Screen" id="main-screen">
+    <mxGraphModel dx="1024" dy="768" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="650" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Window outer shadow -->
+        <mxCell id="shadow" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=2;fillColor=#E5E7EB;strokeColor=none;shadow=0;opacity=40;" vertex="1" parent="1">
+          <mxGeometry x="53" y="53" width="800" height="550" as="geometry" />
+        </mxCell>
+
+        <!-- Window frame -->
+        <mxCell id="window" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=2;fillColor=#FFFFFF;strokeColor=#D1D5DB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="50" width="800" height="550" as="geometry" />
+        </mxCell>
+
+        <!-- Title bar background -->
+        <mxCell id="titlebar" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3F4F6;strokeColor=#D1D5DB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="51" y="51" width="798" height="38" as="geometry" />
+        </mxCell>
+        <!-- Title bar top rounded corners overlay -->
+        <mxCell id="titlebar-top" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=4;fillColor=#F3F4F6;strokeColor=#D1D5DB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="50" width="800" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Traffic lights -->
+        <mxCell id="tl-red" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FF5F57;strokeColor=#E0443E;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="68" y="63" width="14" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="tl-yellow" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FEBC2E;strokeColor=#DEA123;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="90" y="63" width="14" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="tl-green" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#28C840;strokeColor=#1AAB29;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="112" y="63" width="14" height="14" as="geometry" />
+        </mxCell>
+
+        <!-- Window title -->
+        <mxCell id="title" value="AI KeyChain" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontStyle=1;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="350" y="52" width="200" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- Export button -->
+        <mxCell id="btn-export" value="Export" style="rounded=1;whiteSpace=wrap;html=1;arcSize=30;fillColor=#FFFFFF;strokeColor=#D1D5DB;strokeWidth=1;fontFamily=Helvetica;fontSize=11;fontColor=#374151;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="740" y="57" width="56" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- Settings gear icon -->
+        <mxCell id="btn-settings" value="⚙" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=16;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="800" y="52" width="36" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- Toolbar divider line -->
+        <mxCell id="toolbar-line" value="" style="line;strokeWidth=1;strokeColor=#E5E7EB;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="89" width="800" height="1" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== LEFT SIDEBAR ======================== -->
+        <mxCell id="sidebar-bg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F9FAFB;strokeColor=#E5E7EB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="90" width="200" height="480" as="geometry" />
+        </mxCell>
+
+        <!-- Sidebar header -->
+        <mxCell id="sidebar-title" value="Categories" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#9CA3AF;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="50" y="96" width="200" height="28" as="geometry" />
+        </mxCell>
+
+        <!-- Category 1: AI API (SELECTED) -->
+        <mxCell id="cat1-highlight" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F3FF;strokeColor=none;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="128" width="200" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="cat1-border" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7C3AED;strokeColor=none;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="128" width="4" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="cat1-icon" value="🤖" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="58" y="134" width="32" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat1-text" value="AI API" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontStyle=1;fontColor=#7C3AED;" vertex="1" parent="1">
+          <mxGeometry x="92" y="134" width="100" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat1-badge" value="5" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#7C3AED;strokeColor=none;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#FFFFFF;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="210" y="141" width="26" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- Category 2: Code & Git -->
+        <mxCell id="cat2-icon" value="💻" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="58" y="182" width="32" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat2-text" value="Code &amp; Git" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="92" y="182" width="100" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat2-badge" value="2" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#EA580C;strokeColor=none;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#FFFFFF;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="210" y="189" width="26" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- Category 3: Cloud -->
+        <mxCell id="cat3-icon" value="☁️" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="58" y="224" width="32" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat3-text" value="Cloud" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="92" y="224" width="100" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat3-badge" value="2" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#0284C7;strokeColor=none;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#FFFFFF;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="210" y="231" width="26" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- Category 4: Communication -->
+        <mxCell id="cat4-icon" value="💬" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="58" y="266" width="32" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat4-text" value="Communication" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="92" y="266" width="110" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat4-badge" value="2" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#059669;strokeColor=none;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#FFFFFF;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="210" y="273" width="26" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- Category 5: Dev Tools -->
+        <mxCell id="cat5-icon" value="🛠️" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="58" y="308" width="32" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat5-text" value="Dev Tools" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="92" y="308" width="100" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cat5-badge" value="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#6B7280;strokeColor=none;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#FFFFFF;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="210" y="315" width="26" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- Sidebar divider -->
+        <mxCell id="sidebar-divider" value="" style="line;strokeWidth=1;strokeColor=#E5E7EB;direction=south;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="250" y="90" width="1" height="480" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== RIGHT CONTENT AREA ======================== -->
+
+        <!-- Content header -->
+        <mxCell id="content-header" value="🤖 AI API Keys" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=20;fontStyle=1;fontColor=#111827;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="260" y="96" width="300" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Card 1: Anthropic ===== -->
+        <mxCell id="card1" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#E5E7EB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="270" y="145" width="560" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="card1-name" value="Anthropic (Claude)" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="284" y="148" width="150" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card1-key" value="ANTHROPIC_API_KEY" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Courier New;fontSize=11;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="284" y="170" width="180" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card1-status" value="✅ Configured" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#ECFDF5;strokeColor=#A7F3D0;strokeWidth=1;fontFamily=Helvetica;fontSize=11;fontColor=#059669;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="718" y="163" width="100" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Card 2: OpenAI ===== -->
+        <mxCell id="card2" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#E5E7EB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="270" y="213" width="560" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="card2-name" value="OpenAI (GPT)" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="284" y="216" width="150" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card2-key" value="OPENAI_API_KEY" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Courier New;fontSize=11;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="284" y="238" width="180" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card2-status" value="✅ Configured" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#ECFDF5;strokeColor=#A7F3D0;strokeWidth=1;fontFamily=Helvetica;fontSize=11;fontColor=#059669;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="718" y="231" width="100" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Card 3: xAI ===== -->
+        <mxCell id="card3" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#E5E7EB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="270" y="281" width="560" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="card3-name" value="xAI (Grok)" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="284" y="284" width="150" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card3-key" value="XAI_API_KEY" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Courier New;fontSize=11;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="284" y="306" width="180" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card3-status" value="⚠️ Pending" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#FFFBEB;strokeColor=#FDE68A;strokeWidth=1;fontFamily=Helvetica;fontSize=11;fontColor=#D97706;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="718" y="299" width="100" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Card 4: Google AI ===== -->
+        <mxCell id="card4" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#E5E7EB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="270" y="349" width="560" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="card4-name" value="Google AI (Gemini)" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="284" y="352" width="150" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card4-key" value="GOOGLE_AI_API_KEY" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Courier New;fontSize=11;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="284" y="374" width="180" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card4-status" value="⚠️ Pending" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#FFFBEB;strokeColor=#FDE68A;strokeWidth=1;fontFamily=Helvetica;fontSize=11;fontColor=#D97706;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="718" y="367" width="100" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Card 5: Higgsfield ===== -->
+        <mxCell id="card5" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#E5E7EB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="270" y="417" width="560" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="card5-name" value="Higgsfield" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=13;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="284" y="420" width="150" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card5-key" value="HIGGSFIELD_API_KEY" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Courier New;fontSize=11;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="284" y="442" width="180" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="card5-status" value="✅ Configured" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#ECFDF5;strokeColor=#A7F3D0;strokeWidth=1;fontFamily=Helvetica;fontSize=11;fontColor=#059669;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="718" y="435" width="100" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== BOTTOM STATUS BAR ======================== -->
+        <mxCell id="statusbar-bg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F9FAFB;strokeColor=#E5E7EB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="570" width="800" height="30" as="geometry" />
+        </mxCell>
+        <!-- Bottom rounded corners -->
+        <mxCell id="statusbar-bottom" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=4;fillColor=#F9FAFB;strokeColor=#D1D5DB;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="568" width="800" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="statusbar-text" value="12 keys managed · 9 configured · 3 pending" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=11;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="50" y="570" width="800" height="28" as="geometry" />
+        </mxCell>
+
+        <!-- ======================== FLOATING ACTION BUTTON ======================== -->
+        <mxCell id="fab-shadow" value="" style="rounded=1;whiteSpace=wrap;html=1;arcSize=30;fillColor=#6D28D9;strokeColor=none;shadow=0;opacity=30;" vertex="1" parent="1">
+          <mxGeometry x="694" y="530" width="140" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="fab" value="+ Add New Key" style="rounded=1;whiteSpace=wrap;html=1;arcSize=30;fillColor=#7C3AED;strokeColor=#6D28D9;strokeWidth=1;fontFamily=Helvetica;fontSize=13;fontStyle=1;fontColor=#FFFFFF;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="692" y="527" width="140" height="38" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

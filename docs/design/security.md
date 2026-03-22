@@ -4,45 +4,9 @@
 
 ## 脅威モデル
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Threat Model                              │
-│                                                              │
-│  ┌──────────────┐                                           │
-│  │  Attacker    │                                           │
-│  └──────┬───────┘                                           │
-│         │                                                    │
-│    ┌────┴────┐────────┐────────┐────────┐                   │
-│    ▼         ▼        ▼        ▼        ▼                   │
-│ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐              │
-│ │.env  │ │Clip  │ │Memory│ │Backup│ │Git   │              │
-│ │平文  │ │board │ │Dump  │ │漏洩  │ │誤commit│             │
-│ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘              │
-│    │        │        │        │        │                    │
-│    ▼        ▼        ▼        ▼        ▼                   │
-│ ┌──────────────────────────────────────────────────┐        │
-│ │              AI KeyChain の対策                   │        │
-│ ├──────────────────────────────────────────────────┤        │
-│ │ ✅ Keychain暗号化    (平文ファイル不要)          │        │
-│ │ ✅ Clipboard自動クリア (30秒)                    │        │
-│ │ ✅ SecureField使用    (メモリ最小保持)           │        │
-│ │ ✅ .gitignore推奨     (誤commit防止)             │        │
-│ │ ✅ App Sandbox        (プロセス分離)             │        │
-│ └──────────────────────────────────────────────────┘        │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
+![Security Threat Model](/assets/diagrams/security-threat-model.svg)
 
-## 保管方法の比較
-
-| 保管方法 | 安全性 | 利便性 | 推奨度 |
-|---------|--------|--------|--------|
-| .env 平文ファイル | :star: | :star::star::star::star::star: | :x: |
-| .zshrc 直書き | :star: | :star::star::star::star::star: | :x: |
-| 環境変数 (export) | :star::star: | :star::star::star::star: | :warning: |
-| **macOS Keychain** | **:star::star::star::star:** | **:star::star::star:** | **:white_check_mark: 本アプリ** |
-| Secure Enclave | :star::star::star::star::star: | :star::star: | (SSH鍵向け) |
-| Hardware Key | :star::star::star::star::star: | :star: | (認証向け) |
+上図は脅威ソース（上部・赤）と AI KeyChain の防御策（下部・緑）の対応関係、および右側にセキュリティレベル比較を示しています。
 
 ## Keychain アクセス制御
 

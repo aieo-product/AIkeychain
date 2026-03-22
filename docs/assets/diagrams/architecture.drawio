@@ -1,0 +1,126 @@
+<mxfile host="app.diagrams.net" agent="AI KeyChain" version="24.0.0">
+  <diagram name="Architecture" id="arch">
+    <mxGraphModel dx="1034" dy="694" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="650" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ============================================ -->
+        <!-- TITLE                                        -->
+        <!-- ============================================ -->
+        <mxCell id="title" value="AI KeyChain &#8212; Application Architecture" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontFamily=Helvetica;fontStyle=1;fontColor=#1E293B;" vertex="1" parent="1">
+          <mxGeometry x="150" y="15" width="550" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- LAYER 1: Presentation Layer                  -->
+        <!-- ============================================ -->
+        <mxCell id="layer1_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#7C3AED;strokeWidth=2;arcSize=8;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="770" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="layer1_label" value="Presentation Layer" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Helvetica;fontStyle=1;fontColor=#7C3AED;" vertex="1" parent="1">
+          <mxGeometry x="52" y="65" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Onboarding Views -->
+        <mxCell id="p1" value="&#x1f465; Onboarding Views" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7C3AED;strokeWidth=1.5;fontSize=13;fontFamily=Helvetica;fontColor=#1E293B;arcSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="95" width="220" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Main View (CRUD) -->
+        <mxCell id="p2" value="&#x1f4cb; Main View (CRUD)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7C3AED;strokeWidth=1.5;fontSize=13;fontFamily=Helvetica;fontColor=#1E293B;arcSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="315" y="95" width="220" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Export View -->
+        <mxCell id="p3" value="&#x1f4e4; Export View&#xa;(.zshrc / .env)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7C3AED;strokeWidth=1.5;fontSize=13;fontFamily=Helvetica;fontColor=#1E293B;arcSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="95" width="220" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- LAYER 2: ViewModel Layer                     -->
+        <!-- ============================================ -->
+        <mxCell id="layer2_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#0284C7;strokeWidth=2;arcSize=8;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="220" width="770" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="layer2_label" value="ViewModel Layer" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Helvetica;fontStyle=1;fontColor=#0284C7;" vertex="1" parent="1">
+          <mxGeometry x="52" y="225" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ViewModels -->
+        <mxCell id="vm1" value="@Observable ViewModels&#xa;OnboardingVM  |  KeyListVM  |  EditorVM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0284C7;strokeWidth=1.5;fontSize=13;fontFamily=Helvetica;fontColor=#1E293B;arcSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="252" width="590" height="52" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- LAYER 3: Service Layer                       -->
+        <!-- ============================================ -->
+        <mxCell id="layer3_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2;arcSize=8;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="360" width="770" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="layer3_label" value="Service Layer" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Helvetica;fontStyle=1;fontColor=#059669;" vertex="1" parent="1">
+          <mxGeometry x="52" y="365" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- KeychainService -->
+        <mxCell id="s1" value="&#x1f512; KeychainService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#059669;strokeWidth=1.5;fontSize=13;fontFamily=Helvetica;fontColor=#1E293B;arcSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="395" width="270" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- ZshrcExporter -->
+        <mxCell id="s2" value="&#x1f4c4; ZshrcExporter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#059669;strokeWidth=1.5;fontSize=13;fontFamily=Helvetica;fontColor=#1E293B;arcSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="395" width="270" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- LAYER 4: System Layer                        -->
+        <!-- ============================================ -->
+        <mxCell id="layer4_bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3F4F6;strokeColor=#6B7280;strokeWidth=2;arcSize=8;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="510" width="770" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="layer4_label" value="System Layer" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Helvetica;fontStyle=1;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="52" y="515" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- macOS Keychain -->
+        <mxCell id="sys1" value="&#x1f512; macOS Keychain (Security.framework)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6B7280;strokeWidth=1.5;fontSize=14;fontFamily=Helvetica;fontStyle=1;fontColor=#1E293B;arcSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="542" width="470" height="52" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- ARROWS: Layer 1 -> Layer 2                   -->
+        <!-- ============================================ -->
+        <mxCell id="a1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7C3AED;strokeWidth=2;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" edge="1" source="p1" target="vm1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7C3AED;strokeWidth=2;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="p2" target="vm1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7C3AED;strokeWidth=2;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" edge="1" source="p3" target="vm1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- ARROWS: Layer 2 -> Layer 3                   -->
+        <!-- ============================================ -->
+        <mxCell id="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284C7;strokeWidth=2;endArrow=block;endFill=1;exitX=0.35;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="vm1" target="s1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284C7;strokeWidth=2;endArrow=block;endFill=1;exitX=0.65;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="vm1" target="s2" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!-- ARROWS: Layer 3 -> Layer 4                   -->
+        <!-- ============================================ -->
+        <mxCell id="a6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=2;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.35;entryY=0;entryDx=0;entryDy=0;" edge="1" source="s1" target="sys1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=2;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.65;entryY=0;entryDx=0;entryDy=0;" edge="1" source="s2" target="sys1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

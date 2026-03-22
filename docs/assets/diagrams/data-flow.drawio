@@ -1,0 +1,198 @@
+<mxfile host="app.diagrams.net" modified="2026-03-22T00:00:00.000Z" agent="draw.io" version="24.0.0" type="device">
+  <diagram id="data-flow" name="AI KeyChain Data Flow">
+    <mxGraphModel dx="1024" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ========== ACTOR: User ========== -->
+        <mxCell id="user" value="User" style="shape=mxgraph.basic.person;fillColor=#E5E7EB;strokeColor=#6B7280;strokeWidth=2;fontFamily=Helvetica;fontSize=13;fontStyle=1;verticalLabelPosition=bottom;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="30" y="170" width="50" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- ========== BOX 1: SwiftUI View ========== -->
+        <mxCell id="swiftui" value="" style="rounded=1;whiteSpace=wrap;fillColor=#F3E8FF;strokeColor=#7C3AED;strokeWidth=2;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="150" y="150" width="170" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="swiftui_title" value="SwiftUI View" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=14;fontStyle=1;fontColor=#7C3AED;" vertex="1" parent="1">
+          <mxGeometry x="150" y="155" width="170" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="swiftui_sub" value="SecureField入力" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=11;fontColor=#6B21A8;" vertex="1" parent="1">
+          <mxGeometry x="150" y="195" width="170" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- ========== BOX 2: ViewModel ========== -->
+        <mxCell id="viewmodel" value="" style="rounded=1;whiteSpace=wrap;fillColor=#DBEAFE;strokeColor=#0284C7;strokeWidth=2;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="390" y="150" width="180" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="vm_title" value="@Observable ViewModel" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=14;fontStyle=1;fontColor=#0284C7;" vertex="1" parent="1">
+          <mxGeometry x="390" y="155" width="180" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="vm_sub" value="バリデーション / 状態管理" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=11;fontColor=#1E40AF;" vertex="1" parent="1">
+          <mxGeometry x="390" y="195" width="180" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- ========== BOX 3: KeychainService ========== -->
+        <mxCell id="keychainservice" value="" style="rounded=1;whiteSpace=wrap;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="640" y="150" width="170" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="ks_title" value="KeychainService" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=14;fontStyle=1;fontColor=#059669;" vertex="1" parent="1">
+          <mxGeometry x="640" y="155" width="170" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="ks_sub" value="CRUD操作" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=11;fontColor=#065F46;" vertex="1" parent="1">
+          <mxGeometry x="640" y="195" width="170" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- ========== BOX 4: macOS Keychain (Cylinder) ========== -->
+        <mxCell id="keychain" value="" style="shape=cylinder3;size=10;whiteSpace=wrap;fillColor=#374151;strokeColor=#1F2937;strokeWidth=2;direction=south;" vertex="1" parent="1">
+          <mxGeometry x="890" y="145" width="170" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="kc_title" value="macOS Keychain" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=14;fontStyle=1;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="890" y="155" width="170" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="kc_sub" value="暗号化ストレージ" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=11;fontColor=#D1D5DB;" vertex="1" parent="1">
+          <mxGeometry x="890" y="195" width="170" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================== WRITE FLOW (top arrows) ==================== -->
+
+        <!-- User → SwiftUI View -->
+        <mxCell id="a1" value="トークン入力" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;strokeColor=#6B7280;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#374151;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="user" target="swiftui">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- SwiftUI View → ViewModel -->
+        <mxCell id="a2" value="save(token)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;strokeColor=#7C3AED;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#374151;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="swiftui" target="viewmodel">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ViewModel → KeychainService -->
+        <mxCell id="a3" value="save(key:, for:)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;strokeColor=#0284C7;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#374151;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="viewmodel" target="keychainservice">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- KeychainService → macOS Keychain -->
+        <mxCell id="a4" value="SecItemAdd/Update" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;strokeColor=#059669;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#374151;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="keychainservice" target="keychain">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================== WRITE RETURN FLOW (dashed, below) ==================== -->
+
+        <!-- macOS Keychain → KeychainService (return) -->
+        <mxCell id="r1" value="OSStatus" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0;exitY=0.65;exitDx=0;exitDy=0;entryX=1;entryY=0.65;entryDx=0;entryDy=0;dashed=1;strokeColor=#9CA3AF;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#6B7280;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="keychain" target="keychainservice">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- KeychainService → ViewModel (return) -->
+        <mxCell id="r2" value="Result&lt;Void&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0;exitY=0.65;exitDx=0;exitDy=0;entryX=1;entryY=0.65;entryDx=0;entryDy=0;dashed=1;strokeColor=#9CA3AF;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#6B7280;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="keychainservice" target="viewmodel">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ViewModel → SwiftUI View (return) -->
+        <mxCell id="r3" value="UI更新 (@Observable)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0;exitY=0.65;exitDx=0;exitDy=0;entryX=1;entryY=0.65;entryDx=0;entryDy=0;dashed=1;strokeColor=#9CA3AF;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#6B7280;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="viewmodel" target="swiftui">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================== LABELS ==================== -->
+        <mxCell id="label_write" value="Write Flow" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=12;fontStyle=3;fontColor=#7C3AED;" vertex="1" parent="1">
+          <mxGeometry x="150" y="115" width="100" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="label_read" value="Read Flow" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=12;fontStyle=3;fontColor=#0284C7;" vertex="1" parent="1">
+          <mxGeometry x="150" y="310" width="100" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================== READ FLOW (below) ==================== -->
+
+        <!-- SwiftUI View (read) -->
+        <mxCell id="swiftui_r" value="" style="rounded=1;whiteSpace=wrap;fillColor=#F3E8FF;strokeColor=#7C3AED;strokeWidth=1.5;arcSize=12;opacity=70;" vertex="1" parent="1">
+          <mxGeometry x="150" y="345" width="170" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="swiftui_r_label" value="SwiftUI View" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=12;fontStyle=1;fontColor=#7C3AED;" vertex="1" parent="1">
+          <mxGeometry x="150" y="355" width="170" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- ViewModel (read) -->
+        <mxCell id="vm_r" value="" style="rounded=1;whiteSpace=wrap;fillColor=#DBEAFE;strokeColor=#0284C7;strokeWidth=1.5;arcSize=12;opacity=70;" vertex="1" parent="1">
+          <mxGeometry x="390" y="345" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="vm_r_label" value="ViewModel" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=12;fontStyle=1;fontColor=#0284C7;" vertex="1" parent="1">
+          <mxGeometry x="390" y="355" width="180" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- KeychainService (read) -->
+        <mxCell id="ks_r" value="" style="rounded=1;whiteSpace=wrap;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=1.5;arcSize=12;opacity=70;" vertex="1" parent="1">
+          <mxGeometry x="640" y="345" width="170" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="ks_r_label" value="KeychainService" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=12;fontStyle=1;fontColor=#059669;" vertex="1" parent="1">
+          <mxGeometry x="640" y="355" width="170" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- macOS Keychain (read) -->
+        <mxCell id="kc_r" value="" style="shape=cylinder3;size=8;whiteSpace=wrap;fillColor=#374151;strokeColor=#1F2937;strokeWidth=1.5;direction=south;opacity=70;" vertex="1" parent="1">
+          <mxGeometry x="890" y="340" width="170" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="kc_r_label" value="macOS Keychain" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=12;fontStyle=1;fontColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="890" y="355" width="170" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================== READ FLOW ARROWS ==================== -->
+
+        <!-- SwiftUI View → ViewModel (read) -->
+        <mxCell id="ra1" value="loadKeys()" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;strokeColor=#7C3AED;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#374151;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="swiftui_r" target="vm_r">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ViewModel → KeychainService (read) -->
+        <mxCell id="ra2" value="retrieve(for:)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;strokeColor=#0284C7;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#374151;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="vm_r" target="ks_r">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- KeychainService → macOS Keychain (read) -->
+        <mxCell id="ra3" value="SecItemCopyMatching" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;strokeColor=#059669;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#374151;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="ks_r" target="kc_r">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- macOS Keychain → KeychainService (read return) -->
+        <mxCell id="rr1" value="Data?" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0;exitY=0.65;exitDx=0;exitDy=0;entryX=1;entryY=0.65;entryDx=0;entryDy=0;dashed=1;strokeColor=#9CA3AF;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#6B7280;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="kc_r" target="ks_r">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- KeychainService → ViewModel (read return) -->
+        <mxCell id="rr2" value="Result&lt;String&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0;exitY=0.65;exitDx=0;exitDy=0;entryX=1;entryY=0.65;entryDx=0;entryDy=0;dashed=1;strokeColor=#9CA3AF;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#6B7280;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="ks_r" target="vm_r">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ViewModel → SwiftUI View (read return) -->
+        <mxCell id="rr3" value="UI更新 (@Observable)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0;exitY=0.65;exitDx=0;exitDy=0;entryX=1;entryY=0.65;entryDx=0;entryDy=0;dashed=1;strokeColor=#9CA3AF;strokeWidth=1.5;fontFamily=Helvetica;fontSize=10;fontColor=#6B7280;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="vm_r" target="swiftui_r">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================== TITLE ==================== -->
+        <mxCell id="title" value="AI KeyChain — Data Flow" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Helvetica;fontSize=18;fontStyle=1;fontColor=#1F2937;" vertex="1" parent="1">
+          <mxGeometry x="370" y="50" width="300" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================== LEGEND ==================== -->
+        <mxCell id="legend_solid" value="" style="endArrow=classic;strokeColor=#374151;strokeWidth=1.5;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="150" y="470" as="sourcePoint"/>
+            <mxPoint x="200" y="470" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_solid_label" value="リクエスト" style="text;html=1;align=left;verticalAlign=middle;fontFamily=Helvetica;fontSize=10;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="210" y="460" width="80" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="legend_dashed" value="" style="endArrow=classic;dashed=1;strokeColor=#9CA3AF;strokeWidth=1.5;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="310" y="470" as="sourcePoint"/>
+            <mxPoint x="360" y="470" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_dashed_label" value="レスポンス" style="text;html=1;align=left;verticalAlign=middle;fontFamily=Helvetica;fontSize=10;fontColor=#6B7280;" vertex="1" parent="1">
+          <mxGeometry x="370" y="460" width="80" height="20" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

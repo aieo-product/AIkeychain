@@ -1,0 +1,80 @@
+<mxfile host="app.diagrams.net" modified="2026-03-22T00:00:00.000Z" agent="draw.io" version="24.0.0" type="device">
+  <diagram id="data-model" name="AI KeyChain Data Model">
+    <mxGraphModel dx="900" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ========== APIKey (struct) ========== -->
+        <!-- Header -->
+        <mxCell id="apikey-header" value="&lt;b&gt;APIKey&lt;/b&gt;&lt;br/&gt;&lt;i&gt;&amp;laquo;struct&amp;raquo;&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#7C3AED;strokeWidth=2;fontFamily=Helvetica;fontSize=13;verticalAlign=middle;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="220" height="50" as="geometry" />
+        </mxCell>
+        <!-- Body -->
+        <mxCell id="apikey-body" value="&lt;div style=&quot;text-align:left;padding:4px;&quot;&gt;&lt;span style=&quot;font-size:12px;&quot;&gt;id: UUID&lt;br/&gt;service: ServiceType&lt;br/&gt;envVarName: String&lt;br/&gt;isConfigured: Bool &lt;i&gt;(computed)&lt;/i&gt;&lt;/span&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#7C3AED;strokeWidth=2;fontFamily=Helvetica;fontSize=12;verticalAlign=top;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="130" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ========== ServiceType (enum) ========== -->
+        <!-- Header -->
+        <mxCell id="service-header" value="&lt;b&gt;ServiceType&lt;/b&gt;&lt;br/&gt;&lt;i&gt;&amp;laquo;enum&amp;raquo;&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7ED;strokeColor=#EA580C;strokeWidth=2;fontFamily=Helvetica;fontSize=13;verticalAlign=middle;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="340" y="30" width="240" height="50" as="geometry" />
+        </mxCell>
+        <!-- Cases -->
+        <mxCell id="service-cases" value="&lt;div style=&quot;text-align:left;padding:4px;&quot;&gt;&lt;span style=&quot;font-size:11px;&quot;&gt;anthropic (sk-ant-*)&lt;br/&gt;openai (sk-*)&lt;br/&gt;xai (xai-*)&lt;br/&gt;googleai (AIza*)&lt;br/&gt;higgsfield&lt;br/&gt;github (ghp_*)&lt;br/&gt;gitlab (glpat-*)&lt;br/&gt;cloudflare&lt;br/&gt;tailscale (tskey-*)&lt;br/&gt;discord&lt;br/&gt;slack (xapp-*)&lt;br/&gt;qiita&lt;/span&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7ED;strokeColor=#EA580C;strokeWidth=2;fontFamily=Helvetica;fontSize=12;verticalAlign=top;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="340" y="80" width="240" height="220" as="geometry" />
+        </mxCell>
+        <!-- Properties separator label -->
+        <mxCell id="service-props-label" value="&lt;b&gt;Properties&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7ED;strokeColor=#EA580C;strokeWidth=2;fontFamily=Helvetica;fontSize=12;verticalAlign=middle;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="340" y="300" width="240" height="30" as="geometry" />
+        </mxCell>
+        <!-- Properties -->
+        <mxCell id="service-props" value="&lt;div style=&quot;text-align:left;padding:4px;&quot;&gt;&lt;span style=&quot;font-size:12px;&quot;&gt;displayName: String&lt;br/&gt;envVarName: String&lt;br/&gt;category: KeyCategory&lt;br/&gt;tokenPrefix: String?&lt;br/&gt;setupURL: URL?&lt;/span&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7ED;strokeColor=#EA580C;strokeWidth=2;fontFamily=Helvetica;fontSize=12;verticalAlign=top;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="340" y="330" width="240" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- ========== KeyCategory (enum) ========== -->
+        <!-- Header -->
+        <mxCell id="category-header" value="&lt;b&gt;KeyCategory&lt;/b&gt;&lt;br/&gt;&lt;i&gt;&amp;laquo;enum&amp;raquo;&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#0284C7;strokeWidth=2;fontFamily=Helvetica;fontSize=13;verticalAlign=middle;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="660" y="140" width="210" height="50" as="geometry" />
+        </mxCell>
+        <!-- Body -->
+        <mxCell id="category-body" value="&lt;div style=&quot;text-align:left;padding:6px;&quot;&gt;&lt;span style=&quot;font-size:12px;&quot;&gt;&#x1f916; ai &lt;span style=&quot;color:#7C3AED;&quot;&gt;(#7C3AED)&lt;/span&gt;&lt;br/&gt;&#x1f4bb; codeAndGit &lt;span style=&quot;color:#EA580C;&quot;&gt;(#EA580C)&lt;/span&gt;&lt;br/&gt;&#x2601;&#xfe0f; cloud &lt;span style=&quot;color:#0284C7;&quot;&gt;(#0284C7)&lt;/span&gt;&lt;br/&gt;&#x1f4ac; communication &lt;span style=&quot;color:#059669;&quot;&gt;(#059669)&lt;/span&gt;&lt;br/&gt;&#x1f6e0;&#xfe0f; devTools &lt;span style=&quot;color:#6B7280;&quot;&gt;(#6B7280)&lt;/span&gt;&lt;/span&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#0284C7;strokeWidth=2;fontFamily=Helvetica;fontSize=12;verticalAlign=top;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="660" y="190" width="210" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- ========== OnboardingStep (enum) ========== -->
+        <!-- Header -->
+        <mxCell id="onboarding-header" value="&lt;b&gt;OnboardingStep&lt;/b&gt;&lt;br/&gt;&lt;i&gt;&amp;laquo;enum&amp;raquo;&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2;fontFamily=Helvetica;fontSize=13;verticalAlign=middle;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="220" height="50" as="geometry" />
+        </mxCell>
+        <!-- Body -->
+        <mxCell id="onboarding-body" value="&lt;div style=&quot;text-align:left;padding:4px;&quot;&gt;&lt;span style=&quot;font-size:12px;&quot;&gt;welcome&lt;br/&gt;githubToken &lt;i&gt;(required)&lt;/i&gt;&lt;br/&gt;aiKeys &lt;i&gt;(skippable)&lt;/i&gt;&lt;br/&gt;otherKeys &lt;i&gt;(skippable)&lt;/i&gt;&lt;br/&gt;completion&lt;/span&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2;fontFamily=Helvetica;fontSize=12;verticalAlign=top;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="370" width="220" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- ========== Relationships ========== -->
+
+        <!-- APIKey → ServiceType (composition: filled diamond) -->
+        <mxCell id="rel-apikey-service" value="service" style="endArrow=open;endFill=0;startArrow=diamondThin;startFill=1;startSize=14;endSize=10;html=1;fontFamily=Helvetica;fontSize=12;strokeWidth=1.5;strokeColor=#374151;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="apikey-body" target="service-cases" parent="1">
+          <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ServiceType → KeyCategory (association: open arrow) -->
+        <mxCell id="rel-service-category" value="category" style="endArrow=open;endFill=0;endSize=10;html=1;fontFamily=Helvetica;fontSize=12;strokeWidth=1.5;strokeColor=#374151;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="service-props" target="category-body" parent="1">
+          <mxGeometry x="-0.2" y="-10" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Title -->
+        <mxCell id="title" value="&lt;b&gt;AI KeyChain — Data Model&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=16;fontColor=#1F2937;" vertex="1" parent="1">
+          <mxGeometry x="300" y="490" width="300" height="30" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

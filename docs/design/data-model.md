@@ -4,57 +4,11 @@
 
 ## モデル関連図
 
-```
-┌──────────────┐       ┌──────────────┐
-│  APIKey      │──────▶│ ServiceType  │
-│              │       │              │
-│  id          │       │  anthropic   │
-│  service ────┼──────▶│  openai      │
-│  envVarName  │       │  github      │
-│  isConfigured│       │  ...         │
-└──────────────┘       └──────┬───────┘
-                              │
-                              │ category
-                              ▼
-                       ┌──────────────┐
-                       │ KeyCategory  │
-                       │              │
-                       │  ai          │
-                       │  codeAndGit  │
-                       │  cloud       │
-                       │  communication│
-                       │  devTools    │
-                       └──────────────┘
-```
+![Data Model](/assets/diagrams/data-model.svg)
 
 ## ServiceType
 
-アプリが管理する全サービスの定義。
-
-```
-┌──────────────────────────────────────────────────────┐
-│                   ServiceType                        │
-├──────────────────────────────────────────────────────┤
-│                                                      │
-│  AI API ─────┬── anthropic   (sk-ant-*)              │
-│              ├── openai      (sk-*)                  │
-│              ├── xai         (xai-*)                 │
-│              ├── googleai    (AIza*)                  │
-│              └── higgsfield                           │
-│                                                      │
-│  Code & Git ─┬── github      (ghp_* / gho_*)        │
-│              └── gitlab      (glpat-*)               │
-│                                                      │
-│  Cloud ──────┬── cloudflare                          │
-│              └── tailscale   (tskey-*)               │
-│                                                      │
-│  Comm ───────┬── discord                             │
-│              └── slack       (xapp-* / xoxb-*)       │
-│                                                      │
-│  DevTools ───└── qiita                               │
-│                                                      │
-└──────────────────────────────────────────────────────┘
-```
+アプリが管理する全サービスの定義。上のモデル関連図に詳細を記載。
 
 ### プロパティ
 
