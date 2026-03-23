@@ -3,7 +3,8 @@ import SwiftUI
 struct MainView: View {
     @State private var viewModel = KeyListViewModel()
     @State private var showingExport = false
-    @State private var showingSetup = !SetupManager.isConfigured()
+    @State private var showingHelp = false
+    @State private var showingOnboarding = !OnboardingViewModel.hasCompleted
 
     var body: some View {
         NavigationSplitView {
@@ -20,6 +21,13 @@ struct MainView: View {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
             }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingHelp = true
+                } label: {
+                    Label("Help", systemImage: "questionmark.circle")
+                }
+            }
         }
         .sheet(isPresented: $viewModel.showingEditor) {
             viewModel.loadKeys()
@@ -32,8 +40,11 @@ struct MainView: View {
         .sheet(isPresented: $showingExport) {
             ExportView(keys: viewModel.keys)
         }
-        .sheet(isPresented: $showingSetup) {
-            SetupView()
+        .sheet(isPresented: $showingHelp) {
+            HelpView()
+        }
+        .sheet(isPresented: $showingOnboarding) {
+            OnboardingView()
         }
         .frame(minWidth: 700, minHeight: 450)
     }

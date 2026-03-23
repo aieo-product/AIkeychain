@@ -50,6 +50,14 @@ struct MenuBarView: View {
 
             Divider()
 
+            Button("Show Tutorial") {
+                OnboardingViewModel.reset()
+                openWindow(id: "main")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+
+            Divider()
+
             Button("Quit") {
                 appState.proxyServer.stop()
                 NSApplication.shared.terminate(nil)
