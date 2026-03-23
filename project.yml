@@ -1,0 +1,28 @@
+name: AIkeychain
+options:
+  bundleIdPrefix: com.aieo
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+targets:
+  AIkeychain:
+    type: application
+    platform: macOS
+    sources:
+      - AIkeychain
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aieo.aikeychain
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_ENTITLEMENTS: AIkeychain/Resources/AIkeychain.entitlements
+        ENABLE_APP_SANDBOX: false
+        INFOPLIST_FILE: AIkeychain/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_CFBundleDisplayName: "AI KeyChain"
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.developer-tools"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
