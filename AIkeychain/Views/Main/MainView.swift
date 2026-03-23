@@ -3,6 +3,7 @@ import SwiftUI
 struct MainView: View {
     @State private var viewModel = KeyListViewModel()
     @State private var showingExport = false
+    @State private var showingSetup = !SetupManager.isConfigured()
 
     var body: some View {
         NavigationSplitView {
@@ -30,6 +31,9 @@ struct MainView: View {
         }
         .sheet(isPresented: $showingExport) {
             ExportView(keys: viewModel.keys)
+        }
+        .sheet(isPresented: $showingSetup) {
+            SetupView()
         }
         .frame(minWidth: 700, minHeight: 450)
     }
