@@ -95,10 +95,23 @@ struct HelpView: View {
                         ShortcutRow(keys: "⌘ Q", action: "アプリを終了")
                     }
                 }
+
+                Divider()
+
+                // Show tutorial button
+                Button {
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(name: .showOnboarding, object: nil)
+                    }
+                } label: {
+                    Label("Show Tutorial Again", systemImage: "play.circle")
+                }
+                .buttonStyle(.bordered)
             }
             .padding(24)
         }
-        .frame(width: 540, height: 600)
+        .frame(width: 580, height: 640)
     }
 }
 

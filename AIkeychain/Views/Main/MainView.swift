@@ -22,8 +22,13 @@ struct MainView: View {
                 }
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingHelp = true
+                Menu {
+                    Button("User Manual") {
+                        showingHelp = true
+                    }
+                    Button("Show Tutorial") {
+                        showingOnboarding = true
+                    }
                 } label: {
                     Label("Help", systemImage: "questionmark.circle")
                 }
@@ -46,6 +51,9 @@ struct MainView: View {
         .sheet(isPresented: $showingOnboarding) {
             OnboardingView()
         }
-        .frame(minWidth: 700, minHeight: 450)
+        .frame(minWidth: 750, minHeight: 500)
+        .onReceive(NotificationCenter.default.publisher(for: .showOnboarding)) { _ in
+            showingOnboarding = true
+        }
     }
 }

@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let showOnboarding = Notification.Name("showOnboarding")
+}
+
 struct MenuBarView: View {
     let appState: AppState
     @Environment(\.openWindow) private var openWindow
@@ -51,9 +55,12 @@ struct MenuBarView: View {
             Divider()
 
             Button("Show Tutorial") {
-                OnboardingViewModel.reset()
                 openWindow(id: "main")
                 NSApplication.shared.activate(ignoringOtherApps: true)
+                // Notify MainView to show onboarding
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(name: .showOnboarding, object: nil)
+                }
             }
 
             Divider()

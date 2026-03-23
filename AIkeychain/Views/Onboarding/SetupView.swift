@@ -115,7 +115,7 @@ struct SetupView: View {
             .padding(.top, 8)
         }
         .padding(30)
-        .frame(width: 500, height: 560)
+        .frame(width: 540, height: 580)
     }
 
     private func enableProxy() {

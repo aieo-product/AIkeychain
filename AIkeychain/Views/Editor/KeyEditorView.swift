@@ -129,7 +129,7 @@ struct KeyEditorView: View {
             }
             .padding()
         }
-        .frame(width: 480, height: 420)
+        .frame(width: 520, height: 460)
         .alert("Delete Key?", isPresented: $viewModel.showDeleteConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
