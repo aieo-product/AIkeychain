@@ -1,130 +1,213 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%2014+-blue?style=for-the-badge&logo=apple" />
-  <img src="https://img.shields.io/badge/Swift-5.9+-orange?style=for-the-badge&logo=swift" />
-  <img src="https://img.shields.io/badge/SwiftUI-Native-purple?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" />
-  <br/>
-  <a href="https://aikeychain.pages.dev"><img src="https://img.shields.io/badge/📖_設計書-aikeychain.pages.dev-blueviolet?style=for-the-badge" /></a>
+  <img src="AIkeychain/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" height="128" alt="AI KeyChain" />
 </p>
 
-# AI KeyChain
+<h1 align="center">AI KeyChain</h1>
 
-> AI開発者のための macOS ネイティブ鍵管理アプリ
+<p align="center">
+  <strong>Secure API key manager for AI developers on macOS</strong>
+</p>
 
-AI KeyChain は、AI開発で必要となる各種APIキー・トークンを **macOS Keychain** で安全に一元管理するネイティブアプリです。
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS%2014+-blue?style=flat-square&logo=apple" />
+  <img src="https://img.shields.io/badge/Swift-5.9+-orange?style=flat-square&logo=swift" />
+  <img src="https://img.shields.io/badge/SwiftUI-Native-purple?style=flat-square" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" />
+</p>
 
-## なぜ AI KeyChain？
+<p align="center">
+  <a href="#installation">Installation</a> |
+  <a href="#features">Features</a> |
+  <a href="#how-it-works">How It Works</a> |
+  <a href="#supported-services">Supported Services</a> |
+  <a href="https://aikeychain.pages.dev">Docs</a> |
+  <a href="#日本語">日本語</a>
+</p>
 
-AI開発では多数のAPIキーを扱います:
+---
+
+## Why AI KeyChain?
+
+AI developers juggle dozens of API keys. Most store them in `.env` or `.zshrc` in plaintext — visible via `env` command, leaked in logs, and exposed to every process.
+
+**AI KeyChain** stores your keys in macOS Keychain (encrypted, hardware-backed) and offers two modes to use them:
+
+| | Standard Mode | Proxy Mode |
+|---|---|---|
+| Storage | macOS Keychain | macOS Keychain |
+| How keys reach tools | `export` in `.zshrc` | Local proxy injects auth headers |
+| Keys visible in `env`? | Yes | **No** |
+| Requires app running? | No | Yes |
+| Best for | Simplicity | Security-critical environments |
+
+## Installation
+
+### Download DMG
+
+Download the latest release from [Releases](https://github.com/aieo-product/AIkeychain/releases).
+
+Open the DMG and drag **AI KeyChain.app** to **Applications**.
+
+### Build from Source
+
+```bash
+git clone https://github.com/aieo-product/AIkeychain.git
+cd AIkeychain
+swift build -c release
+```
+
+## Features
+
+- **macOS Keychain integration** — Keys are encrypted at rest using the Secure Enclave
+- **Two management modes** — Choose Standard (simple) or Proxy (env-safe) at first launch
+- **Local auth proxy** — Intercepts API requests and injects credentials from Keychain
+- **Guided onboarding** — Step-by-step setup with animated mode comparison
+- **Menu bar resident** — Proxy status always visible, one-click control
+- **4-step env import wizard** — Scan, recommend, preview, and import keys from env
+- **Encrypted key transfer** — P-256 + AES-256-GCM for secure device-to-device migration
+- **Custom categories** — Create your own categories with icons and colors
+- **Shell cleanup tool** — Find and remove hardcoded keys from your `.zshrc`
+- **Recovery guide** — Built-in troubleshooting for proxy mode issues
+- **Port configuration** — Choose your proxy port (default: 18121)
+
+> **Note:** The proxy binds to `localhost` (127.0.0.1) only. API keys never leave the Keychain into environment variables in Proxy mode. The key transfer feature is designed for migrating keys between your own devices. Sharing personal API keys with third parties may violate service provider terms.
+
+## How It Works
+
+### Standard Mode
+```
+Terminal                     API Server
+  │  export API_KEY=$(security ...)  │
+  │─────── API key in request ──────▶│
+```
+
+### Proxy Mode
+```
+Terminal               AI KeyChain Proxy          API Server
+  │  (no key in env)        │                         │
+  │── request (no auth) ──▶ │── Keychain read ──▶     │
+  │                         │── inject auth header ──▶│
+  │◀── response ──────────  │◀── response ──────────  │
+```
+
+The proxy runs on `localhost` only. Keys never leave the Keychain into environment variables.
+
+## Supported Services
+
+| Category | Services |
+|----------|----------|
+| **AI** | Anthropic (Claude) / OpenAI / xAI (Grok) / Higgsfield |
+| **Code & Git** | GitHub / GitLab |
+| **Cloud** | Cloudflare / Tailscale |
+| **Communication** | Discord / Slack |
+| **Dev Tools** | Qiita |
+
+## Tech Stack
+
+- **Language**: Swift 5.9+
+- **UI**: SwiftUI (macOS 14 Sonoma+)
+- **State**: Observation framework (`@Observable`)
+- **Security**: Security.framework (Keychain Services API)
+- **Proxy**: Network.framework (`NWListener`)
+- **Build**: Swift Package Manager
+
+## Documentation
+
+Design docs are available at **[aikeychain.pages.dev](https://aikeychain.pages.dev)**
+
+- [Architecture](https://aikeychain.pages.dev/design/architecture)
+- [Data Model](https://aikeychain.pages.dev/design/data-model)
+- [Security](https://aikeychain.pages.dev/design/security)
+- [Test Results](https://aikeychain.pages.dev/test/)
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+<a id="日本語"></a>
+
+## 日本語
+
+<p align="center">
+  <strong>AI 開発者のための macOS ネイティブ鍵管理アプリ</strong>
+</p>
+
+### AI KeyChain とは？
+
+AI 開発では多数の API キーを扱います。多くの開発者はこれらを `.env` や `.zshrc` に平文で保存しており、`env` コマンドで丸見え、ログに漏洩、全プロセスからアクセス可能な状態です。
+
+**AI KeyChain** は API キーを macOS Keychain（暗号化・ハードウェア保護）に保管し、2つのモードで利用できます。
+
+### モード比較
+
+| | Standard モード | Proxy モード |
+|---|---|---|
+| 保管場所 | macOS Keychain | macOS Keychain |
+| キーの取り出し方 | `.zshrc` で `export` | ローカルプロキシが認証ヘッダを注入 |
+| `env` にキーが見える？ | はい | **いいえ** |
+| アプリ常時起動が必要？ | いいえ | はい |
+| 向いている用途 | シンプルに使いたい | セキュリティ重視の環境 |
+
+### インストール
+
+#### DMG ダウンロード
+
+[Releases](https://github.com/aieo-product/AIkeychain/releases) から最新版をダウンロードしてください。
+
+DMG を開き、**AI KeyChain.app** を **Applications** フォルダにドラッグしてください。
+
+#### ソースからビルド
+
+```bash
+git clone https://github.com/aieo-product/AIkeychain.git
+cd AIkeychain
+swift build -c release
+```
+
+### 主な機能
+
+- **macOS Keychain 統合** — Secure Enclave によるハードウェアレベルの暗号化
+- **2つの管理モード** — 初回起動時に Standard（安定）か Proxy（高セキュリティ）を選択
+- **ローカル認証プロキシ** — API リクエストを中継し、Keychain からキーを読み取ってヘッダに注入
+- **ガイド付きオンボーディング** — アニメーション付きのモード比較で直感的にセットアップ
+- **メニューバー常駐** — プロキシ状態を常に確認、ワンクリックで制御
+- **4ステップ env インポート** — env のスキャン・レコメンド・プレビュー・一括登録
+- **暗号化キー転送** — P-256 + AES-256-GCM によるデバイス間の安全な移行
+- **カスタムカテゴリ** — アイコン・カラーを選んで独自カテゴリを作成
+- **Shell Cleanup** — `.zshrc` に残っているハードコードされたキーを調査・削除するガイド
+- **復旧ガイド** — Proxy モードで問題が起きた場合の復旧手順を内蔵
+- **ポート設定** — プロキシポートを自由に変更可能（デフォルト: 18121）
+
+> **注意:** プロキシは `localhost` (127.0.0.1) のみで動作します。Proxy モードでは API キーが環境変数に一切露出しません。キー転送機能はデバイス間の移行を想定しています。個人 API キーの第三者への共有は各サービスの利用規約に違反する可能性があります。
+
+### Proxy モードの仕組み
 
 ```
-Anthropic (Claude API)  →  sk-ant-api03-xxxxx
-OpenAI (GPT API)        →  sk-xxxxx
-xAI (Grok API)          →  xai-xxxxx
-Google AI (Gemini)      →  AIzaxxxxx
-GitHub / GitLab         →  ghp_xxxxx / glpat-xxxxx
-Cloudflare              →  xxxxx
-...
+Terminal               AI KeyChain Proxy          API Server
+  │  (env にキーなし)       │                         │
+  │── リクエスト(認証なし)─▶│── Keychain 読み取り ──▶  │
+  │                         │── 認証ヘッダ注入 ──────▶│
+  │◀── レスポンス ─────────  │◀── レスポンス ─────────  │
 ```
 
-これらを `.env` や `.zshrc` に平文で保存していませんか？
+プロキシは `localhost` のみで動作。キーが環境変数に露出することはありません。
 
-**AI KeyChain** は macOS Keychain の暗号化ストレージを活用し、セキュアかつ簡単にキーを管理します。
-
-## 特徴
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      AI KeyChain                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  🔐 macOS Keychain        暗号化された安全なストレージ       │
-│  🤖 AI API 特化           主要AIサービスをプリセット対応     │
-│  🎓 ガイド付きセットアップ  初回起動時のチュートリアル        │
-│  📋 ワンクリックexport     .zshrc / .env 形式で出力         │
-│  🎨 ネイティブUI           SwiftUI によるmacOS体験          │
-│  👥 チーム導入対応          社内展開を想定した設計            │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 対応サービス
+### 対応サービス
 
 | カテゴリ | サービス |
 |---------|---------|
-| **AI API** | Anthropic (Claude) / OpenAI (GPT) / xAI (Grok) / Google AI (Gemini) / Higgsfield |
-| **Code & Git** | GitHub / GitLab |
-| **Cloud & Infra** | Cloudflare / Tailscale |
-| **Communication** | Discord / Slack |
-| **Developer Tools** | Qiita |
+| **AI** | Anthropic (Claude) / OpenAI / xAI (Grok) / Higgsfield |
+| **コード & Git** | GitHub / GitLab |
+| **クラウド** | Cloudflare / Tailscale |
+| **コミュニケーション** | Discord / Slack |
+| **開発ツール** | Qiita |
 
-## アーキテクチャ
+### 設計書
 
-```
-┌──────────────────────────────────────────────────┐
-│                   AI KeyChain App                 │
-│                                                   │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────┐ │
-│  │ Onboarding  │  │   Main View  │  │ Export  │  │
-│  │   Flow      │→ │  Key Manager │→ │ .zshrc  │  │
-│  └─────────────┘  └──────────────┘  └─────────┘ │
-│         │                │                │       │
-│         └────────┬───────┘                │       │
-│                  ▼                        ▼       │
-│  ┌──────────────────────────────────────────────┐│
-│  │          KeychainService (Security.framework) ││
-│  └──────────────────────────────────────────────┘│
-│                        │                          │
-└────────────────────────┼──────────────────────────┘
-                         ▼
-              ┌─────────────────────┐
-              │   macOS Keychain    │
-              │  (暗号化ストレージ)  │
-              └─────────────────────┘
-```
+設計書は VitePress で公開しています: **[aikeychain.pages.dev](https://aikeychain.pages.dev)**
 
-## オンボーディングフロー
-
-```
-Welcome → GitHub Token (必須) → AI API Keys (推奨) → その他 (任意) → 完了
-   │          │                      │                    │           │
-   │     バリデーション付き      Anthropic/OpenAI/     GitLab等    メイン画面へ
-   │     スキップ不可           xAI をまとめて案内   スキップ可能
-```
-
-## 開発スタック
-
-- **言語**: Swift 5.9+
-- **UI**: SwiftUI (macOS 14 Sonoma+)
-- **状態管理**: Observation framework (`@Observable`)
-- **セキュリティ**: Security.framework (Keychain Services API)
-- **ビルド**: Xcode 15+
-- **配布**: DMG / Homebrew Cask (予定)
-
-## ロードマップ
-
-- [x] コンセプト設計
-- [ ] Phase 1: プロジェクト基盤構築
-- [ ] Phase 2: コア機能実装 (Keychain CRUD / メイン画面)
-- [ ] Phase 3: オンボーディング / UI仕上げ
-- [ ] Phase 4: テスト・リリース
-
-## ライセンス
+### ライセンス
 
 MIT License
-
-## 設計書
-
-設計書は VitePress で作成し、Cloudflare Pages で公開しています。
-
-**https://aikeychain.pages.dev**
-
-- [アーキテクチャ設計](https://aikeychain.pages.dev/design/architecture)
-- [データモデル設計](https://aikeychain.pages.dev/design/data-model)
-- [UI/UXデザイン](https://aikeychain.pages.dev/design/ui-ux)
-- [セキュリティ設計](https://aikeychain.pages.dev/design/security)
-- [ロードマップ](https://aikeychain.pages.dev/dev/roadmap)
-
-## 開発ブログ
-
-開発の全工程を技術ブログで発信しています。(準備中)
