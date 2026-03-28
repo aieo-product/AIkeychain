@@ -1,38 +1,185 @@
 # UI/UX デザイン
 
-> GitHub Issue: [#3 UI/UXデザイン](https://github.com/aieo-product/AIkeychain/issues/3)
+> GitHub Issue: [#3 UI/UXデザイン](https://github.com/aieo-product/AIkeychain/issues/3) → [#53 設計書更新](https://github.com/aieo-product/AIkeychain/issues/53)
 
 ## 画面一覧
 
-| 画面 | 種別 | 説明 |
-|------|------|------|
-| WelcomeStep | Onboarding | アプリ紹介 |
-| GitHubTokenStep | Onboarding | GitHub トークン設定 (必須) |
-| AIKeysStep | Onboarding | AI API キー設定 (推奨) |
-| OtherKeysStep | Onboarding | その他キー設定 (任意) |
-| CompletionStep | Onboarding | セットアップ完了 |
-| MainView | Main | キー一覧 (NavigationSplitView) |
-| KeyEditorView | Sheet | キー追加・編集 |
-| ZshrcExportView | Sheet | Export プレビュー |
+### メインウィンドウ
 
-## オンボーディングフロー
+| 画面 | ファイル | 種別 | 説明 |
+|------|---------|------|------|
+| MainView | Main/MainView.swift | Root | NavigationSplitView (Sidebar + Detail) |
+| SidebarView | Main/SidebarView.swift | Sidebar | カテゴリナビゲーション + キー数バッジ |
+| KeyListView | Main/KeyListView.swift | Detail | キーグリッド + 検索 + インポート |
+| KeyRowView | Main/KeyRowView.swift | Cell | サービスアイコン + 名前 + ステータス |
 
-![Onboarding Flow](/assets/diagrams/onboarding-flow.svg)
+### エディタ・シート
 
-## メイン画面
+| 画面 | ファイル | 種別 | 説明 |
+|------|---------|------|------|
+| KeyEditorView | Editor/KeyEditorView.swift | Sheet | キー追加・編集フォーム |
+| ExportView | Export/ExportView.swift | Sheet | .zshrc / .env エクスポート |
+| ShareKeysView | ShareKeysView.swift | Sheet | P-256 暗号化キー転送 (3 タブ) |
+| EnvImportView | EnvImportView.swift | Sheet | 4 ステップ env インポートウィザード |
+| CategoryManagerView | CategoryManagerView.swift | Sheet | カスタムカテゴリ CRUD |
 
-![Main Screen](/assets/diagrams/main-screen.svg)
+### モード・設定
+
+| 画面 | ファイル | 種別 | 説明 |
+|------|---------|------|------|
+| ModeSelectView | ModeSelectView.swift | Sheet | Standard / Proxy モード選択カード |
+| CleanupView | CleanupView.swift | Sheet | .zshrc クリーンアップガイド |
+| RecoveryView | RecoveryView.swift | Sheet | プロキシ復旧ガイド (3 手段) |
+| HelpView | HelpView.swift | Sheet | ユーザーマニュアル |
+
+### オンボーディング
+
+| 画面 | ファイル | 種別 | 説明 |
+|------|---------|------|------|
+| OnboardingView | Onboarding/OnboardingView.swift | Sheet | 5 ステップウィザードコンテナ |
+| SetupView | Onboarding/SetupView.swift | Step | シェル設定ガイド |
+
+### メニューバー
+
+| 画面 | ファイル | 種別 | 説明 |
+|------|---------|------|------|
+| MenuBarView | MenuBarView.swift | MenuBarExtra | プロキシ状態・モード切替・ポート変更 |
+
+## 画面フロー
+
+```mermaid
+graph TB
+    Launch["アプリ起動"]
+    Launch --> Check{初回起動?}
+
+    Check -- Yes --> Onboarding
+    Check -- No --> Main
+
+    subgraph Onboarding["オンボーディング (Sheet)"]
+        Welcome["Welcome"] --> ModeSelect["モード選択"]
+        ModeSelect --> RegisterKeys["キー登録案内"]
+        RegisterKeys --> SetupShell["シェル設定"]
+        SetupShell --> Completion["完了"]
+    end
+
+    Onboarding --> Main
+
+    subgraph Main["メイン画面"]
+        direction TB
+        Sidebar["SidebarView<br/>カテゴリ一覧"] --> KeyList["KeyListView<br/>キーグリッド"]
+    end
+
+    Main --> Editor["KeyEditorView<br/>追加・編集"]
+    Main --> Export["ExportView<br/>エクスポート"]
+    Main --> Import["EnvImportView<br/>4ステップインポート"]
+    Main --> Share["ShareKeysView<br/>暗号化転送"]
+    Main --> Mode["ModeSelectView<br/>モード切替"]
+    Main --> Help["HelpView<br/>ヘルプ"]
+    Main --> Cleanup["CleanupView<br/>クリーンアップ"]
+    Main --> Recovery["RecoveryView<br/>復旧ガイド"]
+    Main --> CatMgr["CategoryManagerView<br/>カテゴリ管理"]
+
+    MenuBar["MenuBarView<br/>(常駐)"] --> Mode
+    MenuBar --> Recovery
+    MenuBar --> Cleanup
+
+    style Onboarding fill:#E8D5FF,stroke:#7C3AED
+    style Main fill:#DBEAFE,stroke:#0284C7
+    style MenuBar fill:#D1FAE5,stroke:#059669
+```
+
+## メイン画面構成
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ ツールバー: [Proxy ● Active] [Transfer] [Help ▾]        │
+├──────────────┬──────────────────────────────────────────┤
+│ Sidebar      │ KeyList                                   │
+│              │                                           │
+│ All Keys (20)│ AI API                    3 keys          │
+│              │ ┌─────────────────────────────────────┐  │
+│ AI API    (4)│ │ 🧠 Anthropic (Claude)    ✅        │  │
+│ AI Web    (5)│ │    ANTHROPIC_API_KEY                │  │
+│ Code&Git  (2)│ ├─────────────────────────────────────┤  │
+│ Cloud     (3)│ │ 🤖 OpenAI (GPT)         ⚠️        │  │
+│ Comm      (2)│ │    OPENAI_API_KEY                   │  │
+│ DevTools  (1)│ ├─────────────────────────────────────┤  │
+│              │ │ ...                                  │  │
+│ ─────────── │ └─────────────────────────────────────┘  │
+│ Custom Cat   │                                           │
+│              │                                           │
+│ [Manage]     │                                           │
+│ ✅ 12  ⚠️ 8 │ [Import .env]              [+ Add Key]   │
+└──────────────┴──────────────────────────────────────────┘
+```
 
 ## キー編集シート
 
 | 要素 | 内容 |
 |------|------|
-| ヘッダー | サービス名 + アイコン |
-| 環境変数名 | 自動入力 (編集可能) |
-| トークン入力 | SecureField + 表示/非表示トグル |
-| バリデーション | プレフィックスチェック結果表示 |
-| リンク | トークン発行ページを開く |
-| アクション | キャンセル / Keychainに保存 |
+| サービス選択 | Picker (追加時のみ変更可) |
+| カテゴリ選択 | ビルトイン + カスタムカテゴリ |
+| 環境変数名 | サービス選択で自動入力 (編集可) |
+| トークン入力 | SecureField + 目のアイコンで表示/非表示 |
+| プレフィックス警告 | トークンが期待プレフィックスと不一致の場合に表示 |
+| セットアップリンク | "Get Token" ボタンで発行ページを開く |
+| 削除ボタン | 編集時のみ表示 (赤色) |
+| 保存ボタン | "Keychain に保存" |
+
+## メニューバー UI
+
+```
+┌──────────────────────────┐
+│ 🔑 AI KeyChain           │
+├──────────────────────────┤
+│ Mode: 🛡️ Proxy           │
+│ Status: 🟢 Running       │
+│ Port: 18121               │
+│ Requests: 42              │
+├──────────────────────────┤
+│ Change Mode...            │
+│ Stop Proxy                │
+│ Change Port...            │
+│ Recovery Guide            │
+├──────────────────────────┤
+│ Open KeyChain             │
+│ Open Keychain Access      │
+│ ☑ Launch at Login         │
+│ Shell Cleanup             │
+│ Show Tutorial             │
+├──────────────────────────┤
+│ Quit                      │
+└──────────────────────────┘
+```
+
+## モード選択カード
+
+| モード | アイコン | 特徴 |
+|--------|---------|------|
+| **Standard** | 🔑 key.fill | Keychain 直接参照、シンプル、常駐不要 |
+| **Proxy** | 🛡️ shield.lefthalf.filled | 環境変数にキーが露出しない、アプリ常駐必要 |
+
+Proxy モード選択時は **同意シート** を表示:
+- プロキシの常時起動が必要な旨の警告
+- 復旧方法の案内
+- チェックボックスで同意後に有効化
+
+## ShareKeysView (3 タブ)
+
+| タブ | 内容 |
+|------|------|
+| **My Keys** | P-256 キーペア生成・公開鍵エクスポート |
+| **Send** | キー選択 → 相手の公開鍵で暗号化 → .aikeychain ファイル生成 |
+| **Receive** | .aikeychain ファイル読込 → 秘密鍵で復号 → Keychain インポート |
+
+## EnvImportView (4 ステップ)
+
+| Step | 内容 |
+|------|------|
+| 1 | env コマンドのコピーガイド |
+| 2 | 出力ペースト → 認識キーの自動スキャン |
+| 3 | インポート対象のプレビュー |
+| 4 | Keychain インポート結果表示 |
 
 ## カラーパレット
 
@@ -40,18 +187,19 @@
 
 | カテゴリ | カラー | Hex |
 |---------|--------|-----|
-| AI API | :purple_circle: Purple | `#7C3AED` |
-| Code & Git | :orange_circle: Orange | `#EA580C` |
-| Cloud | :blue_circle: Blue | `#0284C7` |
-| Communication | :green_circle: Green | `#059669` |
-| DevTools | :white_circle: Gray | `#6B7280` |
+| AI API | Purple | `#7C3AED` |
+| AI Web | Pink | `#DB2777` |
+| Code & Git | Orange | `#EA580C` |
+| Cloud & Infra | Blue | `#0284C7` |
+| Communication | Green | `#059669` |
+| Developer Tools | Gray | `#6B7280` |
 
 ### ステータスカラー
 
 | ステータス | カラー | Hex |
 |-----------|--------|-----|
-| 設定済み | :green_circle: Emerald | `#10B981` |
-| 未設定 | :yellow_circle: Amber | `#F59E0B` |
+| 設定済み | Emerald | `#10B981` |
+| 未設定 | Amber | `#F59E0B` |
 
 ### アクセントグラデーション
 
@@ -68,12 +216,20 @@
 | 本文 | System Regular | 14pt |
 | コード・トークン | SF Mono | 13pt |
 | バッジ | System Medium | 11pt |
+| キャプション | System Regular | 12pt |
 
 ## アニメーション仕様
 
 | 対象 | 種類 | 時間 |
 |------|------|------|
 | オンボーディング遷移 | slide + fade | 0.3s (spring) |
+| モード選択カード | scale (spring) | 0.3s |
 | ステータスバッジ変化 | scale + color | 0.2s (easeInOut) |
 | シート表示 | system default | - |
 | 保存成功フィードバック | checkmark scale | 0.5s (spring bounce) |
+
+## ダークモード
+
+- システムデフォルトの背景色を使用
+- カテゴリカラー・ステータスカラーは明度自動調整
+- アイコンは SF Symbols のため自動対応
