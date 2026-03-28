@@ -48,8 +48,8 @@ struct OnboardingView: View {
                 switch viewModel.currentStep {
                 case .welcome:
                     WelcomeStepView()
-                case .proxyExplain:
-                    ProxyExplainStepView()
+                case .modeSelect:
+                    ModeSelectStepView()
                 case .registerKeys:
                     RegisterKeysStepView()
                 case .setupShell:
@@ -159,44 +159,195 @@ struct WelcomeStepView: View {
     }
 }
 
-struct ProxyExplainStepView: View {
+struct ModeSelectStepView: View {
+    @State private var selectedMode: KeyManagementMode = AppState.shared.keyManagementMode
+    @State private var showConsent = false
+    @State private var animateStandard = false
+    @State private var animateProxy = false
+    @State private var showDiagram = false
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                Spacer(minLength: 20)
+            VStack(spacing: 16) {
+                Spacer(minLength: 12)
 
-                Image(systemName: "shield.checkered")
-                    .font(.system(size: 48))
-                    .foregroundStyle(AppColors.cloudBlue)
-
-                Text("How It Works")
+                Text("Choose Your Mode")
                     .font(AppFonts.sectionTitle)
 
-                Text("従来の方法では API キーが環境変数に露出します。\nAI KeyChain はプロキシ経由で安全に認証します。")
+                Text("API キーの管理方式を選んでください。\nあとからいつでも変更できます。")
                     .font(AppFonts.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
-                // Flow diagram
-                VStack(spacing: 0) {
-                    FlowBox(label: "claude / AI ツール", detail: "env にキーなし — 安全", color: AppColors.aiPurple, icon: "brain")
-                    FlowArrow(label: "HTTP リクエスト (認証ヘッダなし)")
-                    FlowBox(label: "AI KeyChain Proxy", detail: "localhost:9999 — Keychain から読み取り", color: AppColors.cloudBlue, icon: "key.fill")
-                    FlowArrow(label: "Authorization ヘッダを自動注入")
-                    FlowBox(label: "API Server", detail: "api.anthropic.com — HTTPS 認証済み", color: AppColors.commGreen, icon: "cloud.fill")
+                // Mode comparison cards
+                HStack(spacing: 14) {
+                    // Standard card
+                    OnboardingModeCard(
+                        isSelected: selectedMode == .standard,
+                        icon: "key.fill",
+                        color: AppColors.commGreen,
+                        title: "Standard",
+                        subtitle: "安定・シンプル",
+                        items: [
+                            ("checkmark.circle", "プロキシ不要", AppColors.commGreen),
+                            ("checkmark.circle", "設定がシンプル", AppColors.commGreen),
+                            ("exclamationmark.triangle", "env にキーが見える", .orange),
+                            ("exclamationmark.triangle", "SSH で承認が必要な場合あり", .orange),
+                        ]
+                    ) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            selectedMode = .standard
+                            AppState.shared.switchMode(to: .standard)
+                        }
+                    }
+                    .scaleEffect(animateStandard ? 1.0 : 0.9)
+                    .opacity(animateStandard ? 1.0 : 0)
+
+                    // Proxy card
+                    OnboardingModeCard(
+                        isSelected: selectedMode == .proxy,
+                        icon: "shield.checkered",
+                        color: AppColors.aiPurple,
+                        title: "Proxy",
+                        subtitle: "高セキュリティ",
+                        items: [
+                            ("checkmark.circle", "env にキーが露出しない", AppColors.aiPurple),
+                            ("checkmark.circle", "SSH / Tailscale 対応", AppColors.aiPurple),
+                            ("exclamationmark.triangle", "アプリ常時起動が必要", .orange),
+                            ("exclamationmark.triangle", "停止時に接続不可", .orange),
+                        ]
+                    ) {
+                        if AppState.shared.hasProxyConsent {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                selectedMode = .proxy
+                                AppState.shared.switchMode(to: .proxy)
+                            }
+                        } else {
+                            showConsent = true
+                        }
+                    }
+                    .scaleEffect(animateProxy ? 1.0 : 0.9)
+                    .opacity(animateProxy ? 1.0 : 0)
                 }
-                .padding(.horizontal, 50)
+                .padding(.horizontal, 20)
 
-                Label("AI プロセスの環境変数に API キーが一切露出しません",
-                      systemImage: "checkmark.shield")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppColors.configured)
-                    .padding(.top, 4)
+                // Animated flow diagram
+                if showDiagram {
+                    VStack(spacing: 0) {
+                        if selectedMode == .standard {
+                            FlowBox(label: "Terminal / AI ツール", detail: "export API_KEY=$(security ...)", color: AppColors.commGreen, icon: "terminal")
+                            FlowArrow(label: "API キーを直接送信")
+                            FlowBox(label: "API Server", detail: "api.anthropic.com", color: AppColors.cloudBlue, icon: "cloud.fill")
+                        } else {
+                            FlowBox(label: "Terminal / AI ツール", detail: "env にキーなし", color: AppColors.aiPurple, icon: "terminal")
+                            FlowArrow(label: "認証なしリクエスト")
+                            FlowBox(label: "AI KeyChain Proxy", detail: "Keychain → ヘッダ注入", color: AppColors.cloudBlue, icon: "key.fill")
+                            FlowArrow(label: "認証済みリクエスト")
+                            FlowBox(label: "API Server", detail: "api.anthropic.com", color: AppColors.commGreen, icon: "cloud.fill")
+                        }
+                    }
+                    .padding(.horizontal, 60)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.95).combined(with: .opacity),
+                        removal: .scale(scale: 0.95).combined(with: .opacity)
+                    ))
+                    .id(selectedMode) // re-animate on mode change
+                }
 
-                Spacer(minLength: 20)
+                if selectedMode == .proxy {
+                    Label("Proxy モードはアプリ常時起動が前提です。停止時の復旧方法はアプリ内で確認できます。",
+                          systemImage: "info.circle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 30)
+                        .transition(.opacity)
+                }
+
+                Spacer(minLength: 12)
             }
             .padding(.horizontal)
         }
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1)) {
+                animateStandard = true
+            }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.25)) {
+                animateProxy = true
+            }
+            withAnimation(.easeOut(duration: 0.4).delay(0.5)) {
+                showDiagram = true
+            }
+        }
+        .sheet(isPresented: $showConsent) {
+            ProxyConsentView {
+                AppState.shared.hasProxyConsent = true
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    selectedMode = .proxy
+                    AppState.shared.switchMode(to: .proxy)
+                }
+            }
+        }
+    }
+}
+
+private struct OnboardingModeCard: View {
+    let isSelected: Bool
+    let icon: String
+    let color: Color
+    let title: String
+    let subtitle: String
+    let items: [(String, String, Color)]
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? color : Color.gray.opacity(0.1))
+                        .frame(width: 50, height: 50)
+                    Image(systemName: icon)
+                        .font(.system(size: 22))
+                        .foregroundStyle(isSelected ? .white : .secondary)
+                }
+
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                Divider()
+                    .padding(.horizontal, 8)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(items, id: \.1) { img, text, itemColor in
+                        HStack(spacing: 5) {
+                            Image(systemName: img)
+                                .font(.system(size: 9))
+                                .foregroundStyle(itemColor)
+                                .frame(width: 14)
+                            Text(text)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+            }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity)
+            .background(
+                isSelected ? color.opacity(0.06) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 14)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isSelected ? color : Color.gray.opacity(0.15), lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -228,8 +379,8 @@ struct RegisterKeysStepView: View {
                             Text(category.rawValue)
                                 .font(.system(size: 13))
                             Spacer()
-                            let total = keyListVM.categoryCount(for: category)
-                            let configured = keyListVM.categoryConfiguredCount(for: category)
+                            let total = keyListVM.builtinCategoryCount(for: category)
+                            let configured = keyListVM.builtinCategoryConfiguredCount(for: category)
                             HStack(spacing: 4) {
                                 Text("\(configured)")
                                     .foregroundStyle(configured > 0 ? AppColors.configured : .secondary)
@@ -261,6 +412,11 @@ struct RegisterKeysStepView: View {
 struct SetupShellStepView: View {
     @State private var isConfigured = SetupManager.isConfigured()
     @State private var errorMessage: String?
+    @State private var portText = "\(AppState.shared.proxyPort)"
+
+    private var currentPort: UInt16 {
+        AppState.shared.proxyPort
+    }
 
     var body: some View {
         ScrollView {
@@ -274,10 +430,25 @@ struct SetupShellStepView: View {
                 Text("Connect Your Shell")
                     .font(AppFonts.sectionTitle)
 
-                Text(".zshrc にプロキシ設定を追加して、\nターミナルからシームレスに使えるようにします。")
+                Text(".zshrc に1行追加するだけで、プロキシ起動中のみ\nBASE_URL が自動設定されます。")
                     .font(AppFonts.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+
+                // Port selector
+                HStack(spacing: 8) {
+                    Text("Port:")
+                        .font(.system(size: 13, weight: .medium))
+                    TextField("Port", text: $portText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 80)
+                        .onSubmit { applyPort() }
+                    Button("Apply") { applyPort() }
+                        .controlSize(.small)
+                    Text("(default: \(AppState.defaultPort))")
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.tertiary)
+                }
 
                 // Preview
                 VStack(alignment: .leading, spacing: 6) {
@@ -285,18 +456,22 @@ struct SetupShellStepView: View {
                         .font(AppFonts.badge)
                         .foregroundStyle(.secondary)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("export ANTHROPIC_BASE_URL=http://localhost:9999")
-                        Text("export OPENAI_BASE_URL=http://localhost:9999")
-                        Text("export XAI_BASE_URL=http://localhost:9999")
-                    }
-                    .font(AppFonts.code)
-                    .foregroundStyle(.secondary)
+                    Text("[ -f ~/.aikeychain_proxy ] && source ~/.aikeychain_proxy")
+                        .font(AppFonts.code)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
                 .padding(.horizontal, 40)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("プロキシ起動中のみ ~/.aikeychain_proxy が存在します", systemImage: "checkmark.shield")
+                    Label("プロキシ停止時はファイルが自動削除されます", systemImage: "xmark.shield")
+                    Label("BASE_URL が残り続ける問題は発生しません", systemImage: "shield.checkered")
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
 
                 if isConfigured {
                     Label("設定済み", systemImage: "checkmark.circle.fill")
@@ -331,9 +506,20 @@ struct SetupShellStepView: View {
             .padding(.horizontal)
         }
     }
+
+    private func applyPort() {
+        guard let value = UInt16(portText), value >= 1024 else {
+            errorMessage = "ポート番号は 1024〜65535 の範囲で指定してください"
+            return
+        }
+        errorMessage = nil
+        AppState.shared.changePort(to: value)
+    }
 }
 
 struct CompletionStepView: View {
+    private var isProxy: Bool { AppState.shared.isProxyMode }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -346,23 +532,41 @@ struct CompletionStepView: View {
                 Text("Setup Complete!")
                     .font(AppFonts.pageTitle)
 
-                Text("セキュアな AI 開発環境が整いました")
+                Text(isProxy
+                     ? "Proxy モードでセットアップ完了"
+                     : "Standard モードでセットアップ完了")
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: 14) {
-                    UsageRow(num: "1", icon: "app.badge", text: "AI KeyChain アプリを起動（メニューバーに常駐）")
-                    UsageRow(num: "2", icon: "terminal", text: "ターミナルで claude など AI ツールをそのまま使う")
-                    UsageRow(num: "3", icon: "shield.checkered", text: "プロキシが自動で認証 — キーは env に出ない")
-                }
-                .padding(16)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 40)
+                if isProxy {
+                    VStack(alignment: .leading, spacing: 14) {
+                        UsageRow(num: "1", icon: "app.badge", text: "AI KeyChain を常時起動（メニューバーに常駐）")
+                        UsageRow(num: "2", icon: "terminal", text: "ターミナルで claude などをそのまま使う")
+                        UsageRow(num: "3", icon: "shield.checkered", text: "プロキシが自動で認証 — キーは env に出ない")
+                    }
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 40)
 
-                Label("メニューバーの鍵アイコンからいつでもプロキシ状態を確認できます",
-                      systemImage: "menubar.rectangle")
-                    .font(AppFonts.caption)
-                    .foregroundStyle(.tertiary)
+                    Label("接続不能時はメニューバー → Recovery Guide で復旧できます",
+                          systemImage: "lifepreserver")
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    VStack(alignment: .leading, spacing: 14) {
+                        UsageRow(num: "1", icon: "key.fill", text: "API キーを Keychain に登録")
+                        UsageRow(num: "2", icon: "terminal", text: ".zshrc の export で環境変数に設定")
+                        UsageRow(num: "3", icon: "bolt.fill", text: "ターミナルで AI ツールをそのまま使う")
+                    }
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 40)
+
+                    Label("メニューバーからいつでもモードを変更できます",
+                          systemImage: "menubar.rectangle")
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.tertiary)
+                }
 
                 Spacer(minLength: 30)
             }

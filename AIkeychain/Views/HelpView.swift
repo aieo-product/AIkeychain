@@ -38,7 +38,7 @@ struct HelpView: View {
                 HelpSection(title: "仕組み", icon: "gearshape.2") {
                     VStack(alignment: .leading, spacing: 8) {
                         HelpStep(num: "1", text: "API キーは macOS Keychain に暗号化保存されます")
-                        HelpStep(num: "2", text: "アプリ起動時にローカルプロキシ (localhost:9999) が自動起動します")
+                        HelpStep(num: "2", text: "アプリ起動時にローカルプロキシ (localhost:\(AppState.shared.proxyPort)) が自動起動します")
                         HelpStep(num: "3", text: "AI ツール (claude 等) のリクエストをプロキシが中継します")
                         HelpStep(num: "4", text: "プロキシが Keychain から API キーを読み取り、認証ヘッダを注入します")
                         HelpStep(num: "5", text: "AI ツールの env には API キーが存在しないため、流出リスクがありません")
@@ -76,12 +76,14 @@ struct HelpView: View {
                 // Troubleshooting
                 HelpSection(title: "トラブルシューティング", icon: "wrench") {
                     VStack(alignment: .leading, spacing: 8) {
+                        HelpItem(title: "ECONNREFUSED エラーが出る",
+                                 desc: "Proxy モードで AI KeyChain アプリが停止しています。アプリを再起動するか、Standard モードに切り替えてください。即時復旧: rm -f ~/.aikeychain_proxy && exec $SHELL")
                         HelpItem(title: "プロキシが起動しない",
-                                 desc: "ポート 9999 が他のアプリに使用されていないか確認してください。lsof -i :9999 で確認できます。")
+                                 desc: "設定ポートが他のアプリに使用されていないか確認してください。lsof -i :\(AppState.shared.proxyPort) で確認できます。")
                         HelpItem(title: "API 認証エラー",
                                  desc: "該当するキーが Keychain に登録されているか確認してください。キーの横に ✅ が表示されていれば登録済みです。")
-                        HelpItem(title: "claude が接続できない",
-                                 desc: "~/.zshrc に ANTHROPIC_BASE_URL=http://localhost:9999 が設定されているか確認し、ターミナルを再起動してください。")
+                        HelpItem(title: "モードを切り替えたい",
+                                 desc: "メニューバー → Change Mode、またはツールバー → Help → Change Mode から切り替えできます。")
                         HelpItem(title: "オンボーディングを再表示",
                                  desc: "メニューバー → Help → Show Tutorial から再度チュートリアルを表示できます。")
                     }

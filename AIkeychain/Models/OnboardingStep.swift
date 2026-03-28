@@ -2,7 +2,7 @@ import Foundation
 
 enum OnboardingStep: Int, CaseIterable, Identifiable {
     case welcome = 0
-    case proxyExplain
+    case modeSelect
     case registerKeys
     case setupShell
     case completion
@@ -11,28 +11,18 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .welcome: "Welcome to AI KeyChain"
-        case .proxyExplain: "How It Works"
-        case .registerKeys: "Register Your Keys"
-        case .setupShell: "Connect Your Shell"
-        case .completion: "You're All Set!"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .welcome: "AI API キーをセキュアに管理するmacOSアプリ"
-        case .proxyExplain: "環境変数にキーを露出させない仕組み"
-        case .registerKeys: "Keychain に API キーを登録"
-        case .setupShell: ".zshrc にプロキシ設定を追加"
-        case .completion: "セキュアな AI 開発環境の完成"
+        case .welcome: "Welcome"
+        case .modeSelect: "Choose Mode"
+        case .registerKeys: "Register Keys"
+        case .setupShell: "Shell Setup"
+        case .completion: "Complete!"
         }
     }
 
     var systemImage: String {
         switch self {
         case .welcome: "key.fill"
-        case .proxyExplain: "shield.checkered"
+        case .modeSelect: "switch.2"
         case .registerKeys: "plus.circle"
         case .setupShell: "terminal"
         case .completion: "checkmark.seal.fill"
@@ -41,8 +31,8 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
 
     var canSkip: Bool {
         switch self {
-        case .welcome, .completion: false
-        case .proxyExplain, .registerKeys, .setupShell: true
+        case .welcome, .modeSelect, .completion: false
+        case .registerKeys, .setupShell: true
         }
     }
 }

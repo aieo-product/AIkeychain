@@ -5,6 +5,11 @@ struct SetupView: View {
     @State private var isConfigured = SetupManager.isConfigured()
     @State private var setupComplete = false
     @State private var errorMessage: String?
+    @State private var portText = "\(AppState.shared.proxyPort)"
+
+    private var currentPort: UInt16 {
+        AppState.shared.proxyPort
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -30,7 +35,7 @@ struct SetupView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Local Proxy Server")
                             .font(.system(size: 14, weight: .medium))
-                        Text("localhost:9999 — auto-starts with the app")
+                        Text("localhost:\(currentPort) — auto-starts with the app")
                             .font(AppFonts.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -39,11 +44,33 @@ struct SetupView: View {
                         .foregroundStyle(AppColors.cloudBlue)
                 }
 
+                // Port selector
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Proxy Port")
+                            .font(.system(size: 14, weight: .medium))
+                        HStack(spacing: 8) {
+                            TextField("Port", text: $portText)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 80)
+                                .onSubmit { applyPort() }
+                            Button("Apply") { applyPort() }
+                                .controlSize(.small)
+                            Text("(default: \(AppState.defaultPort))")
+                                .font(AppFonts.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: "number")
+                        .foregroundStyle(AppColors.gitOrange)
+                }
+
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Shell Configuration")
                             .font(.system(size: 14, weight: .medium))
-                        Text(".zshrc に BASE_URL を追記（API キーは書き込みません）")
+                        Text("プロキシ起動中のみ BASE_URL を自動設定（停止時は自動削除）")
                             .font(AppFonts.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -73,7 +100,7 @@ struct SetupView: View {
                 Text("Added to ~/.zshrc:")
                     .font(AppFonts.badge)
                     .foregroundStyle(.secondary)
-                Text("export ANTHROPIC_BASE_URL=http://localhost:9999")
+                Text("[ -f ~/.aikeychain_proxy ] && source ~/.aikeychain_proxy")
                     .font(AppFonts.code)
                     .foregroundStyle(.secondary)
             }
@@ -116,6 +143,15 @@ struct SetupView: View {
         }
         .padding(30)
         .frame(width: 540, height: 580)
+    }
+
+    private func applyPort() {
+        guard let value = UInt16(portText), value >= 1024 else {
+            errorMessage = "ポート番号は 1024〜65535 の範囲で指定してください"
+            return
+        }
+        errorMessage = nil
+        AppState.shared.changePort(to: value)
     }
 
     private func enableProxy() {
