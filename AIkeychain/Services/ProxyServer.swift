@@ -9,7 +9,7 @@ import Observation
 @Observable
 final class ProxyServer {
     var isRunning: Bool = false
-    var port: UInt16 = 9999
+    var port: UInt16 = AppState.defaultPort
     var requestCount: Int = 0
     var lastError: String?
 

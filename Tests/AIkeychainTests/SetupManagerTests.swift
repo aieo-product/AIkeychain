@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import AIkeychain
 
-@Suite("SetupManager Tests")
+@Suite("SetupManager Tests", .serialized)
 struct SetupManagerTests {
 
     /// テスト用の一時ファイルで検証するためのヘルパー
@@ -38,10 +38,46 @@ struct SetupManagerTests {
         }
     }
 
-    @Test("Default port is 9999")
+    @Test("Default port is 18121")
     func defaultPort() {
         // ProxyServer のデフォルトポートと SetupManager の整合性
         let server = ProxyServer(keychainService: MockKeychainService())
-        #expect(server.port == 9999)
+        #expect(server.port == AppState.defaultPort)
+    }
+
+    @Test("activateProxy creates env file, deactivateProxy removes it")
+    func proxyEnvFileLifecycle() throws {
+        let path = SetupManager.proxyEnvPath
+
+        // クリーンアップ
+        defer { SetupManager.deactivateProxy() }
+
+        // 起動 → ファイルが生成される
+        try SetupManager.activateProxy(port: 18121)
+        #expect(FileManager.default.fileExists(atPath: path))
+
+        let content = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(content.contains("ANTHROPIC_BASE_URL=http://localhost:18121"))
+        #expect(content.contains("OPENAI_BASE_URL=http://localhost:18121"))
+        #expect(content.contains("XAI_BASE_URL=http://localhost:18121"))
+
+        // 停止 → ファイルが削除される
+        SetupManager.deactivateProxy()
+        #expect(!FileManager.default.fileExists(atPath: path))
+    }
+
+    @Test("isProxyActive reflects file existence")
+    func proxyActiveState() throws {
+        // まずクリーンな状態にする
+        SetupManager.deactivateProxy()
+        #expect(!SetupManager.isProxyActive())
+
+        // activate → ファイル生成 → active
+        try SetupManager.activateProxy(port: 18121)
+        #expect(SetupManager.isProxyActive())
+
+        // deactivate → ファイル削除 → inactive
+        SetupManager.deactivateProxy()
+        #expect(!SetupManager.isProxyActive())
     }
 }

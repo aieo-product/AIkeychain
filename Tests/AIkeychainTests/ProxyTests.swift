@@ -94,7 +94,7 @@ struct ProxyServerTests {
     @Test("Server initializes with default port")
     func defaultPort() {
         let server = ProxyServer(keychainService: MockKeychainService())
-        #expect(server.port == 9999)
+        #expect(server.port == AppState.defaultPort)
         #expect(server.isRunning == false)
         #expect(server.requestCount == 0)
     }
