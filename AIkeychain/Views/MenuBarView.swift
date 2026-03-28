@@ -2,37 +2,99 @@ import SwiftUI
 
 extension Notification.Name {
     static let showOnboarding = Notification.Name("showOnboarding")
+    static let showCleanup = Notification.Name("showCleanup")
+    static let showModeSelect = Notification.Name("showModeSelect")
+    static let showRecovery = Notification.Name("showRecovery")
 }
 
 struct MenuBarView: View {
     let appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @State private var portText: String = ""
+    @State private var showPortEditor = false
+    @State private var portError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Proxy status
+            // Mode indicator
             HStack(spacing: 6) {
-                Circle()
-                    .fill(appState.proxyServer.isRunning ? Color.green : Color.red)
-                    .frame(width: 8, height: 8)
-                Text("Proxy: \(appState.proxyServer.isRunning ? "Running" : "Stopped")")
+                Image(systemName: appState.isProxyMode ? "shield.checkered" : "key.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(appState.isProxyMode ? AppColors.aiPurple : AppColors.commGreen)
+                Text("Mode: \(appState.isProxyMode ? "Proxy" : "Standard")")
+                    .font(.system(size: 11))
             }
 
-            Text("Port: \(appState.proxyServer.port)")
-                .foregroundStyle(.secondary)
-            Text("Requests: \(appState.proxyServer.requestCount)")
-                .foregroundStyle(.secondary)
+            // Proxy status (only in proxy mode)
+            if appState.isProxyMode {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(appState.proxyServer.isRunning ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text("Proxy: \(appState.proxyServer.isRunning ? "Running" : "Stopped")")
+                }
+
+                Text("Port: \(appState.proxyServer.port)")
+                    .foregroundStyle(.secondary)
+                Text("Requests: \(appState.proxyServer.requestCount)")
+                    .foregroundStyle(.secondary)
+            }
 
             Divider()
 
-            // Proxy control
-            if appState.proxyServer.isRunning {
-                Button("Stop Proxy") {
-                    appState.proxyServer.stop()
+            // Mode switch
+            Button("Change Mode...") {
+                openWindow(id: "main")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(name: .showModeSelect, object: nil)
                 }
-            } else {
-                Button("Start Proxy") {
-                    appState.startProxyIfNeeded()
+            }
+
+            // Proxy controls (only in proxy mode)
+            if appState.isProxyMode {
+                if appState.proxyServer.isRunning {
+                    Button("Stop Proxy") {
+                        appState.stopProxy()
+                    }
+                } else {
+                    Button("Start Proxy") {
+                        appState.startProxyIfNeeded()
+                    }
+                }
+
+                // Port setting
+                Button("Change Port...") {
+                    portText = "\(appState.proxyPort)"
+                    portError = nil
+                    showPortEditor.toggle()
+                }
+
+                if showPortEditor {
+                    HStack(spacing: 4) {
+                        TextField("Port", text: $portText)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 70)
+                            .onSubmit { applyPort() }
+                        Button("Apply") { applyPort() }
+                            .controlSize(.small)
+                    }
+                    .padding(.leading, 4)
+
+                    if let error = portError {
+                        Text(error)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.red)
+                            .padding(.leading, 4)
+                    }
+                }
+
+                Button("Recovery Guide...") {
+                    openWindow(id: "main")
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(name: .showRecovery, object: nil)
+                    }
                 }
             }
 
@@ -45,6 +107,10 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("k", modifiers: [.command])
 
+            Button("Open Keychain Access") {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app"))
+            }
+
             Divider()
 
             Toggle("Launch at Login", isOn: Binding(
@@ -53,6 +119,14 @@ struct MenuBarView: View {
             ))
 
             Divider()
+
+            Button("Shell Cleanup...") {
+                openWindow(id: "main")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(name: .showCleanup, object: nil)
+                }
+            }
 
             Button("Show Tutorial") {
                 openWindow(id: "main")
@@ -66,11 +140,21 @@ struct MenuBarView: View {
             Divider()
 
             Button("Quit") {
-                appState.proxyServer.stop()
+                appState.stopProxy()
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: [.command])
         }
         .padding(4)
+    }
+
+    private func applyPort() {
+        guard let value = UInt16(portText), value >= 1024 else {
+            portError = "1024〜65535 の範囲で指定"
+            return
+        }
+        portError = nil
+        showPortEditor = false
+        appState.changePort(to: value)
     }
 }
