@@ -2,13 +2,14 @@ import SwiftUI
 
 struct KeyListView: View {
     @Bindable var viewModel: KeyListViewModel
+    @State private var showingImport = false
 
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(viewModel.selectedCategory?.rawValue ?? "All Keys")
+                    Text(selectedCategoryName)
                         .font(AppFonts.sectionTitle)
                     Text("\(viewModel.filteredKeys.count) keys")
                         .font(AppFonts.caption)
@@ -18,22 +19,41 @@ struct KeyListView: View {
                 Spacer()
 
                 Button {
+                    showingImport = true
+                } label: {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                }
+
+                Button {
                     viewModel.addNewKey()
                 } label: {
                     Label("Add Key", systemImage: "plus")
                 }
             }
             .padding()
+            .sheet(isPresented: $showingImport) {
+                EnvImportView {
+                    viewModel.loadKeys()
+                }
+            }
 
             Divider()
 
             // Key list
             if viewModel.filteredKeys.isEmpty {
-                ContentUnavailableView {
-                    Label("No Keys Found", systemImage: "key.slash")
-                } description: {
-                    Text("No keys match your search.")
+                Spacer()
+                VStack(spacing: 8) {
+                    Image(systemName: "key.slash")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.tertiary)
+                    Text("No Keys Found")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text("Add Key or Import to get started.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
                 }
+                Spacer()
             } else {
                 List(viewModel.filteredKeys, selection: $viewModel.selectedKey) { key in
                     KeyRowView(key: key)
@@ -57,7 +77,7 @@ struct KeyListView: View {
                                 }
                             }
                             Divider()
-                            if let url = key.service.setupURL {
+                            if let url = key.setupURL {
                                 Button("Open Setup Page") {
                                     NSWorkspace.shared.open(url)
                                 }
@@ -69,6 +89,16 @@ struct KeyListView: View {
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
             }
+        }
+    }
+
+    private var selectedCategoryName: String {
+        guard let sel = viewModel.selectedCategory else { return "All Keys" }
+        switch sel {
+        case .all: return "All Keys"
+        case .builtin(let cat): return cat.rawValue
+        case .custom(let id):
+            return CustomKeyStore.shared.category(for: id)?.name ?? "Custom"
         }
     }
 }

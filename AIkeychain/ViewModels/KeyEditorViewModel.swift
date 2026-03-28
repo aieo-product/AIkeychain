@@ -11,6 +11,7 @@ final class KeyEditorViewModel {
     var showSaveSuccess: Bool = false
     var showDeleteConfirm: Bool = false
     var errorMessage: String?
+    var selectedCategorySelection: CategorySelection = .builtin(.ai)
 
     let editingKey: APIKey?
     private let keychainService: KeychainServiceProtocol
@@ -40,19 +41,28 @@ final class KeyEditorViewModel {
         self.keychainService = keychainService
 
         if let key = editingKey {
-            selectedService = key.service
+            selectedService = key.service ?? .anthropic
             envVarName = key.envVarName
-            // Load existing value
+
+            // Resolve current category
+            if let builtinCat = key.builtinCategory {
+                selectedCategorySelection = .builtin(builtinCat)
+            } else if let customId = key.customCategoryId {
+                selectedCategorySelection = .custom(customId)
+            }
+
             tokenValue = (try? keychainService.retrieve(for: key.envVarName)) ?? ""
         } else {
             selectedService = .anthropic
             envVarName = ServiceType.anthropic.envVarName
+            selectedCategorySelection = .builtin(.ai)
         }
     }
 
     func onServiceChange() {
         if !isEditing {
             envVarName = selectedService.envVarName
+            selectedCategorySelection = .builtin(selectedService.category)
         }
     }
 
@@ -65,6 +75,32 @@ final class KeyEditorViewModel {
 
         do {
             try keychainService.save(value: trimmedValue, for: envVarName)
+
+            // Save category override if different from default
+            if let key = editingKey, key.service != nil {
+                let defaultCategory = key.service!.category
+                let overrideValue: String? = {
+                    switch selectedCategorySelection {
+                    case .builtin(let cat) where cat == defaultCategory:
+                        return nil  // デフォルトに戻す → 上書き削除
+                    case .builtin(let cat):
+                        return "builtin:\(cat.rawValue)"
+                    case .custom(let id):
+                        return "custom:\(id.uuidString)"
+                    case .all:
+                        return nil
+                    }
+                }()
+                CustomKeyStore.shared.setCategoryOverride(envVarName: envVarName, value: overrideValue)
+            } else if let customKey = editingKey?.customKey {
+                // カスタムキーのカテゴリ変更
+                if case .custom(let id) = selectedCategorySelection {
+                    var updated = customKey
+                    updated.categoryId = id
+                    CustomKeyStore.shared.updateKey(updated)
+                }
+            }
+
             showSaveSuccess = true
         } catch {
             errorMessage = error.localizedDescription
@@ -76,5 +112,7 @@ final class KeyEditorViewModel {
     func deleteKey() throws {
         guard let key = editingKey else { return }
         try keychainService.delete(for: key.envVarName)
+        // カテゴリ上書きも削除
+        CustomKeyStore.shared.setCategoryOverride(envVarName: key.envVarName, value: nil)
     }
 }

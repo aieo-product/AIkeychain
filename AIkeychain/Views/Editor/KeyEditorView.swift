@@ -44,8 +44,24 @@ struct KeyEditorView: View {
                 } else {
                     LabeledContent("Service") {
                         HStack(spacing: 8) {
-                            ServiceIcon(service: viewModel.selectedService, size: 24)
+                            Image(systemName: viewModel.selectedService.systemImage)
+                                .foregroundStyle(viewModel.selectedService.category.color)
                             Text(viewModel.selectedService.displayName)
+                        }
+                    }
+                }
+
+                // Category
+                Picker("Category", selection: $viewModel.selectedCategorySelection) {
+                    ForEach(KeyCategory.allCases) { cat in
+                        Label(cat.rawValue, systemImage: cat.systemImage)
+                            .tag(CategorySelection.builtin(cat))
+                    }
+                    if !CustomKeyStore.shared.categories.isEmpty {
+                        Divider()
+                        ForEach(CustomKeyStore.shared.categories) { cat in
+                            Label(cat.name, systemImage: cat.systemImage)
+                                .tag(CategorySelection.custom(cat.id))
                         }
                     }
                 }

@@ -66,9 +66,9 @@ struct KeyCategoryTests {
         }
     }
 
-    @Test("Category count is 5")
+    @Test("Category count is 6")
     func categoryCount() {
-        #expect(KeyCategory.allCases.count == 5)
+        #expect(KeyCategory.allCases.count == 6)
     }
 }
 

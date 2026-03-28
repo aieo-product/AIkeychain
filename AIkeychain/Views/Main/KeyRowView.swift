@@ -5,10 +5,18 @@ struct KeyRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ServiceIcon(service: key.service)
+            if let service = key.service {
+                ServiceIcon(service: service)
+            } else {
+                Image(systemName: key.systemImage)
+                    .font(.system(size: 16))
+                    .foregroundStyle(key.categoryColor)
+                    .frame(width: 32, height: 32)
+                    .background(key.categoryColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(key.service.displayName)
+                Text(key.displayName)
                     .font(.system(size: 14, weight: .medium))
                 Text(key.envVarName)
                     .font(AppFonts.code)

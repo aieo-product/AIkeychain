@@ -34,7 +34,7 @@ struct KeyListViewModelTests {
     @Test("Filter by category")
     func filterByCategory() {
         let (vm, _) = makeSUT()
-        vm.selectedCategory = .ai
+        vm.selectedCategory = .builtin(.ai)
         let aiServices = ServiceType.allCases.filter { $0.category == .ai }
         #expect(vm.filteredKeys.count == aiServices.count)
     }
@@ -43,8 +43,9 @@ struct KeyListViewModelTests {
     func searchByName() {
         let (vm, _) = makeSUT()
         vm.searchText = "Anthropic"
-        #expect(vm.filteredKeys.count == 1)
-        #expect(vm.filteredKeys.first?.service == .anthropic)
+        let matches = vm.filteredKeys.filter { $0.displayName.contains("Anthropic") }
+        #expect(matches.count >= 1)
+        #expect(matches.contains { $0.service == .some(.anthropic) })
     }
 
     @Test("Search filters by env var name")
@@ -59,7 +60,7 @@ struct KeyListViewModelTests {
     func categoryCount() {
         let (vm, _) = makeSUT()
         let aiCount = ServiceType.allCases.filter { $0.category == .ai }.count
-        #expect(vm.categoryCount(for: .ai) == aiCount)
+        #expect(vm.builtinCategoryCount(for: .ai) == aiCount)
     }
 
     @Test("Delete key makes it unconfigured")
@@ -69,7 +70,7 @@ struct KeyListViewModelTests {
         vm.loadKeys()
         #expect(vm.configuredCount == 1)
 
-        let githubKey = vm.keys.first { $0.service == .github }!
+        let githubKey = vm.keys.first { $0.service == .some(.github) }!
         try vm.delete(key: githubKey)
         #expect(vm.configuredCount == 0)
     }

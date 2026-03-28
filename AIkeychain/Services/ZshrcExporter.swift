@@ -28,7 +28,7 @@ struct ZshrcExporter {
             "",
         ]
 
-        let grouped = Dictionary(grouping: keys) { $0.service.category }
+        let grouped = Dictionary(grouping: keys) { $0.builtinCategory }
 
         for category in KeyCategory.allCases {
             guard let categoryKeys = grouped[category], !categoryKeys.isEmpty else { continue }
