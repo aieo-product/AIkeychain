@@ -9,6 +9,7 @@ export default defineConfig({
       { text: 'ホーム', link: '/' },
       { text: '設計書', link: '/design/' },
       { text: '開発ガイド', link: '/dev/' },
+      { text: '試験結果', link: '/test/' },
     ],
     sidebar: {
       '/design/': [
@@ -37,6 +38,15 @@ export default defineConfig({
           text: 'ユーザーガイド',
           items: [
             { text: 'はじめに', link: '/guide/' },
+          ]
+        }
+      ],
+      '/test/': [
+        {
+          text: '試験結果',
+          items: [
+            { text: '概要', link: '/test/' },
+            { text: 'v1.0.0', link: '/test/v1.0.0' },
           ]
         }
       ],

@@ -20,7 +20,21 @@ xcuserdata/
 .build/
 Packages/
 
+# Swift compiler artifacts
+*.o
+*.d
+*.swiftdeps
+
 # macOS
 .DS_Store
 *.swp
 *~
+
+# Wrangler
+.wrangler/
+
+# Session logs
+SESSION_LOG.md
+
+# Feedback (internal)
+feedback/
