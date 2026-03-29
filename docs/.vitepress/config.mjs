@@ -29,6 +29,7 @@ export default defineConfig({
           text: '開発ガイド',
           items: [
             { text: 'セットアップ', link: '/dev/' },
+            { text: 'パッケージング', link: '/dev/packaging' },
             { text: 'ロードマップ', link: '/dev/roadmap' },
           ]
         }

@@ -1,0 +1,180 @@
+name: auto-release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'CHANGELOG.md'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract latest version from CHANGELOG
+        id: version
+        run: |
+          # CHANGELOG.md から最新バージョンを抽出
+          VERSION=$(grep -m1 '^## \[' CHANGELOG.md | sed 's/## \[\(.*\)\].*/\1/')
+          TAG="v${VERSION}"
+
+          if [ -z "$VERSION" ]; then
+            echo "No version found in CHANGELOG.md"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION (tag: $TAG)"
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists. Skipping."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG not found. Will create."
+          fi
+
+      - name: Extract CHANGELOG entry
+        if: steps.check.outputs.exists == 'false'
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # 該当バージョンのセクションを抽出
+          BODY=$(awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "[" ver "]")) found=1
+              next
+            }
+            found { print }
+          ' CHANGELOG.md)
+
+          if [ -z "$BODY" ]; then
+            BODY="Release v${VERSION} (auto-generated — no CHANGELOG entry found)"
+          fi
+
+          echo "$BODY" > /tmp/release-body.md
+
+      - name: Build release binary
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          swift build -c release
+
+      - name: Create .app bundle with icon
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APP="build/AI KeyChain.app/Contents"
+
+          mkdir -p "$APP/MacOS" "$APP/Resources"
+          cp .build/release/AIkeychain "$APP/MacOS/AI KeyChain"
+          cp -R .build/release/AIkeychain_AIkeychain.bundle "$APP/Resources/"
+
+          # Info.plist
+          cat > "$APP/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>AI KeyChain</string>
+              <key>CFBundleDisplayName</key>
+              <string>AI KeyChain</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.aieo.aikeychain</string>
+              <key>CFBundleVersion</key>
+              <string>${VERSION}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${VERSION}</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleExecutable</key>
+              <string>AI KeyChain</string>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>14.0</string>
+              <key>LSUIElement</key>
+              <false/>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+          </dict>
+          </plist>
+          PLIST
+
+          # .icns 生成
+          SRC="AIkeychain/Resources/Assets.xcassets/AppIcon.appiconset"
+          ICONSET="/tmp/AppIcon.iconset"
+          mkdir -p "$ICONSET"
+          cp "$SRC/icon_16x16.png"     "$ICONSET/icon_16x16.png"
+          cp "$SRC/icon_32x32.png"     "$ICONSET/icon_16x16@2x.png"
+          cp "$SRC/icon_32x32.png"     "$ICONSET/icon_32x32.png"
+          cp "$SRC/icon_64x64.png"     "$ICONSET/icon_32x32@2x.png"
+          cp "$SRC/icon_128x128.png"   "$ICONSET/icon_128x128.png"
+          cp "$SRC/icon_256x256.png"   "$ICONSET/icon_128x128@2x.png"
+          cp "$SRC/icon_256x256.png"   "$ICONSET/icon_256x256.png"
+          cp "$SRC/icon_512x512.png"   "$ICONSET/icon_256x256@2x.png"
+          cp "$SRC/icon_512x512.png"   "$ICONSET/icon_512x512.png"
+          cp "$SRC/icon_1024x1024.png" "$ICONSET/icon_512x512@2x.png"
+          iconutil -c icns "$ICONSET" -o "$APP/Resources/AppIcon.icns"
+
+          # Ad-hoc 署名
+          codesign --force --deep --sign - "build/AI KeyChain.app"
+
+      - name: Install create-dmg
+        if: steps.check.outputs.exists == 'false'
+        run: brew install create-dmg
+
+      - name: Create graphical DMG
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APP="build/AI KeyChain.app/Contents"
+
+          create-dmg \
+            --volname "AI KeyChain" \
+            --volicon "$APP/Resources/AppIcon.icns" \
+            --window-pos 200 120 \
+            --window-size 660 400 \
+            --icon-size 120 \
+            --icon "AI KeyChain.app" 160 185 \
+            --hide-extension "AI KeyChain.app" \
+            --app-drop-link 500 185 \
+            --no-internet-enable \
+            "build/AIKeyChain-v${VERSION}.dmg" \
+            "build/AI KeyChain.app"
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/release-body.md \
+            "build/AIKeyChain-v${VERSION}.dmg#AIKeyChain-v${VERSION}.dmg"
+
+          echo "Release $TAG created with DMG attached."
