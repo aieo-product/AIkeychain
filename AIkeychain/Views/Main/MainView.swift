@@ -11,6 +11,37 @@ struct MainView: View {
 
     private var appState: AppState { .shared }
 
+    @ViewBuilder
+    private var modeStatusLabel: some View {
+        let isProxy = appState.isProxyMode
+        let isRunning = appState.proxyServer.isRunning
+        let bgColor: Color = isProxy
+            ? (isRunning ? Color.green.opacity(0.12) : Color.red.opacity(0.12))
+            : Color.gray.opacity(0.1)
+        let borderColor: Color = isProxy
+            ? (isRunning ? Color.green.opacity(0.3) : Color.red.opacity(0.3))
+            : Color.gray.opacity(0.2)
+
+        HStack(spacing: 5) {
+            if isProxy {
+                Circle()
+                    .fill(isRunning ? Color.green : Color.red)
+                    .frame(width: 7, height: 7)
+                Text("Proxy")
+                    .font(.system(size: 11, weight: .medium))
+            } else {
+                Image(systemName: "shield.slash")
+                    .font(.system(size: 11))
+                Text("Standard")
+                    .font(.system(size: 11, weight: .medium))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(bgColor, in: Capsule())
+        .overlay(Capsule().stroke(borderColor, lineWidth: 1))
+    }
+
     var body: some View {
         NavigationSplitView {
             SidebarView(viewModel: viewModel)
@@ -24,37 +55,7 @@ struct MainView: View {
                 Button {
                     showingModeSelect = true
                 } label: {
-                    HStack(spacing: 5) {
-                        if appState.isProxyMode {
-                            Circle()
-                                .fill(appState.proxyServer.isRunning ? .green : .red)
-                                .frame(width: 7, height: 7)
-                            Text("Proxy")
-                                .font(.system(size: 11, weight: .medium))
-                        } else {
-                            Image(systemName: "shield.slash")
-                                .font(.system(size: 11))
-                            Text("Standard")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        appState.isProxyMode
-                            ? (appState.proxyServer.isRunning ? Color.green.opacity(0.12) : Color.red.opacity(0.12))
-                            : Color.gray.opacity(0.1),
-                        in: Capsule()
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(
-                                appState.isProxyMode
-                                    ? (appState.proxyServer.isRunning ? Color.green.opacity(0.3) : Color.red.opacity(0.3))
-                                    : Color.gray.opacity(0.2),
-                                lineWidth: 1
-                            )
-                    )
+                    modeStatusLabel
                 }
                 .help(appState.isProxyMode ? "Proxy Mode — Click to change" : "Standard Mode — Click to enable Proxy")
             }
