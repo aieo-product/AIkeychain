@@ -38,3 +38,13 @@ SESSION_LOG.md
 
 # Feedback (internal)
 feedback/
+
+# Release artifacts
+evidence/
+*.dmg
+
+# Screenshots
+docs/appCapture/
+
+# Claude Code
+.claude/
