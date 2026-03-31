@@ -57,6 +57,22 @@ struct ModeSelectView: View {
                 }
 
                 ModeCard(
+                    mode: .secretReference,
+                    isSelected: selectedMode == .secretReference,
+                    title: "Secret Reference",
+                    subtitle: "keychain:// 参照（1Password 方式）",
+                    icon: "link.badge.plus",
+                    color: AppColors.cloudBlue,
+                    features: [
+                        "env にはパス情報のみ — キー値が露出しない",
+                        "akc run で実行時に Keychain から解決",
+                        "アプリ常時起動は不要",
+                    ]
+                ) {
+                    selectedMode = .secretReference
+                }
+
+                ModeCard(
                     mode: .proxy,
                     isSelected: selectedMode == .proxy,
                     title: "Proxy",
@@ -111,7 +127,7 @@ struct ModeSelectView: View {
             }
         }
         .padding(24)
-        .frame(width: 520, height: 560)
+        .frame(width: 520, height: 700)
         .sheet(isPresented: $showProxyConsent) {
             ProxyConsentView {
                 appState.hasProxyConsent = true
