@@ -20,7 +20,7 @@
   <a href="#features">Features</a> |
   <a href="#how-it-works">How It Works</a> |
   <a href="#supported-services">Supported Services</a> |
-  <a href="https://aikeychain.pages.dev">Docs</a> |
+  <a href="https://aieo-product.github.io/AIkeychain/">Docs</a> |
   <a href="#日本語">日本語</a>
 </p>
 
@@ -46,7 +46,14 @@ AI developers juggle dozens of API keys. Most store them in `.env` or `.zshrc` i
 
 Download the latest release from [Releases](https://github.com/aieo-product/AIkeychain/releases).
 
-Open the DMG and drag **AI KeyChain.app** to **Applications**.
+1. Open the DMG and drag **AI KeyChain.app** to **Applications**
+2. Run the following command to trust the app (required before first launch):
+
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/AI\ KeyChain.app
+```
+
+> **Note:** This app is not yet notarized with Apple Developer Program. The command above removes the Gatekeeper quarantine attribute so the app can launch without a security warning.
 
 ### Build from Source
 
@@ -113,12 +120,12 @@ The proxy runs on `localhost` only. Keys never leave the Keychain into environme
 
 ## Documentation
 
-Design docs are available at **[aikeychain.pages.dev](https://aikeychain.pages.dev)**
+Design docs are available at **[aieo-product.github.io/AIkeychain](https://aieo-product.github.io/AIkeychain/)**
 
-- [Architecture](https://aikeychain.pages.dev/design/architecture)
-- [Data Model](https://aikeychain.pages.dev/design/data-model)
-- [Security](https://aikeychain.pages.dev/design/security)
-- [Test Results](https://aikeychain.pages.dev/test/)
+- [Architecture](https://aieo-product.github.io/AIkeychain//design/architecture)
+- [Data Model](https://aieo-product.github.io/AIkeychain//design/data-model)
+- [Security](https://aieo-product.github.io/AIkeychain//design/security)
+- [Test Results](https://aieo-product.github.io/AIkeychain//test/)
 
 ## License
 
@@ -156,7 +163,14 @@ AI 開発では多数の API キーを扱います。多くの開発者はこれ
 
 [Releases](https://github.com/aieo-product/AIkeychain/releases) から最新版をダウンロードしてください。
 
-DMG を開き、**AI KeyChain.app** を **Applications** フォルダにドラッグしてください。
+1. DMG を開き、**AI KeyChain.app** を **Applications** フォルダにドラッグ
+2. 初回起動前に以下のコマンドを実行してアプリを信頼させてください:
+
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/AI\ KeyChain.app
+```
+
+> **注意:** Apple Developer Program 未登録のため、このコマンドなしでは macOS Gatekeeper の警告が表示されます。
 
 #### ソースからビルド
 
@@ -206,7 +220,7 @@ Terminal               AI KeyChain Proxy          API Server
 
 ### 設計書
 
-設計書は VitePress で公開しています: **[aikeychain.pages.dev](https://aikeychain.pages.dev)**
+設計書は VitePress で公開しています: **[aieo-product.github.io/AIkeychain](https://aieo-product.github.io/AIkeychain/)**
 
 ### ライセンス
 
