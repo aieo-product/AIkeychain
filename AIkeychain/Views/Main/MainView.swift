@@ -13,24 +13,35 @@ struct MainView: View {
 
     @ViewBuilder
     private var modeStatusLabel: some View {
-        let isProxy = appState.isProxyMode
+        let mode = appState.keyManagementMode
         let isRunning = appState.proxyServer.isRunning
-        let bgColor: Color = isProxy
-            ? (isRunning ? Color.green.opacity(0.12) : Color.red.opacity(0.12))
-            : Color.gray.opacity(0.1)
-        let borderColor: Color = isProxy
-            ? (isRunning ? Color.green.opacity(0.3) : Color.red.opacity(0.3))
-            : Color.gray.opacity(0.2)
+
+        let bgColor: Color = switch mode {
+        case .proxy: isRunning ? Color.green.opacity(0.12) : Color.red.opacity(0.12)
+        case .secretReference: AppColors.cloudBlue.opacity(0.1)
+        case .standard: Color.gray.opacity(0.1)
+        }
+        let borderColor: Color = switch mode {
+        case .proxy: isRunning ? Color.green.opacity(0.3) : Color.red.opacity(0.3)
+        case .secretReference: AppColors.cloudBlue.opacity(0.25)
+        case .standard: Color.gray.opacity(0.2)
+        }
 
         HStack(spacing: 5) {
-            if isProxy {
+            switch mode {
+            case .proxy:
                 Circle()
                     .fill(isRunning ? Color.green : Color.red)
                     .frame(width: 7, height: 7)
                 Text("Proxy")
                     .font(.system(size: 11, weight: .medium))
-            } else {
-                Image(systemName: "shield.slash")
+            case .secretReference:
+                Image(systemName: "link.badge.plus")
+                    .font(.system(size: 11))
+                Text("Secret Ref")
+                    .font(.system(size: 11, weight: .medium))
+            case .standard:
+                Image(systemName: "key.fill")
                     .font(.system(size: 11))
                 Text("Standard")
                     .font(.system(size: 11, weight: .medium))
@@ -57,7 +68,7 @@ struct MainView: View {
                 } label: {
                     modeStatusLabel
                 }
-                .help(appState.isProxyMode ? "Proxy Mode — Click to change" : "Standard Mode — Click to enable Proxy")
+                .help("\(appState.keyManagementMode.displayName) Mode — Click to change")
             }
 
             ToolbarItem(placement: .primaryAction) {

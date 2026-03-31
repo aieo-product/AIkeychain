@@ -14,14 +14,30 @@ struct MenuBarView: View {
     @State private var showPortEditor = false
     @State private var portError: String?
 
+    private var modeIcon: String {
+        switch appState.keyManagementMode {
+        case .standard: "key.fill"
+        case .secretReference: "link.badge.plus"
+        case .proxy: "shield.checkered"
+        }
+    }
+
+    private var modeColor: Color {
+        switch appState.keyManagementMode {
+        case .standard: AppColors.commGreen
+        case .secretReference: AppColors.cloudBlue
+        case .proxy: AppColors.aiPurple
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Mode indicator
             HStack(spacing: 6) {
-                Image(systemName: appState.isProxyMode ? "shield.checkered" : "key.fill")
+                Image(systemName: modeIcon)
                     .font(.system(size: 10))
-                    .foregroundStyle(appState.isProxyMode ? AppColors.aiPurple : AppColors.commGreen)
-                Text("Mode: \(appState.isProxyMode ? "Proxy" : "Standard")")
+                    .foregroundStyle(modeColor)
+                Text("Mode: \(appState.keyManagementMode.displayName)")
                     .font(.system(size: 11))
             }
 

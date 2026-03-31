@@ -44,7 +44,7 @@ struct RecoveryView: View {
                     Text("Proxy: \(appState.proxyServer.isRunning ? "Running (Port \(appState.proxyPort))" : "Stopped")")
                         .font(.system(size: 13, weight: .medium))
                     Spacer()
-                    Text("Mode: \(appState.keyManagementMode.rawValue.capitalized)")
+                    Text("Mode: \(appState.keyManagementMode.displayName)")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
