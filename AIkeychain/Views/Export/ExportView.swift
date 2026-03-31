@@ -96,7 +96,11 @@ struct ExportView: View {
     private func saveToFile() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = selectedFormat == .zshrc ? "keychain_exports.sh" : ".env"
+        switch selectedFormat {
+        case .zshrc: panel.nameFieldStringValue = "keychain_exports.sh"
+        case .secretRef: panel.nameFieldStringValue = "secret_ref_exports.sh"
+        case .env: panel.nameFieldStringValue = ".env"
+        }
 
         if panel.runModal() == .OK, let url = panel.url {
             try? exportText.write(to: url, atomically: true, encoding: .utf8)

@@ -65,10 +65,20 @@ struct HelpView: View {
                     }
                 }
 
+                // Modes
+                HelpSection(title: "管理モード", icon: "switch.2") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HelpItem(title: "Standard", desc: ".zshrc で security コマンドを使い Keychain から直接 export。シンプルだが env にキー値が見える。")
+                        HelpItem(title: "Secret Reference", desc: "env に keychain:// 参照のみ設定。akc run -- <command> で実行時に Keychain から解決。1Password の op:// と同等の仕組み。")
+                        HelpItem(title: "Proxy", desc: "ローカルプロキシが API リクエストを中継し認証ヘッダを注入。キーが env に一切出ない最も安全な方式。アプリ常時起動が必要。")
+                    }
+                }
+
                 // Export
                 HelpSection(title: "エクスポート", icon: "square.and.arrow.up") {
                     VStack(alignment: .leading, spacing: 8) {
                         HelpItem(title: ".zshrc 形式", desc: "Keychain 参照の export 文を生成（トークンの値は含まれません）")
+                        HelpItem(title: ".zshrc (Secret Reference)", desc: "keychain:// 参照の export 文を生成。akc run と組み合わせて使用。")
                         HelpItem(title: ".env 形式", desc: "環境変数名のテンプレートを生成（値は <VALUE> プレースホルダー）")
                     }
                 }

@@ -6,6 +6,8 @@ import ServiceManagement
 enum KeyManagementMode: String {
     /// 通常モード: .zshrc に security find-generic-password で直接参照
     case standard
+    /// Secret Reference モード: keychain:// 参照を akc run で実行時に解決
+    case secretReference
     /// プロキシモード: ローカルプロキシ経由で認証ヘッダを注入
     case proxy
 }
@@ -43,6 +45,11 @@ final class AppState {
     /// プロキシモードが有効か
     var isProxyMode: Bool {
         keyManagementMode == .proxy
+    }
+
+    /// Secret Reference モードが有効か
+    var isSecretRefMode: Bool {
+        keyManagementMode == .secretReference
     }
 
     /// ユーザーが選択したポート番号（UserDefaults で永続化）
@@ -117,8 +124,8 @@ final class AppState {
 
     /// モード切替
     func switchMode(to mode: KeyManagementMode) {
-        if mode == .standard {
-            // プロキシ停止 & 設定ファイル削除
+        if mode != .proxy {
+            // プロキシ不要モードではプロキシ停止 & 設定ファイル削除
             stopProxy()
         }
         keyManagementMode = mode

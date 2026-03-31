@@ -162,8 +162,7 @@ struct WelcomeStepView: View {
 struct ModeSelectStepView: View {
     @State private var selectedMode: KeyManagementMode = AppState.shared.keyManagementMode
     @State private var showConsent = false
-    @State private var animateStandard = false
-    @State private var animateProxy = false
+    @State private var animateCards = false
     @State private var showDiagram = false
 
     var body: some View {
@@ -179,8 +178,8 @@ struct ModeSelectStepView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
-                // Mode comparison cards
-                HStack(spacing: 14) {
+                // Mode comparison cards — 3 columns
+                HStack(spacing: 10) {
                     // Standard card
                     OnboardingModeCard(
                         isSelected: selectedMode == .standard,
@@ -189,10 +188,8 @@ struct ModeSelectStepView: View {
                         title: "Standard",
                         subtitle: "安定・シンプル",
                         items: [
-                            ("checkmark.circle", "プロキシ不要", AppColors.commGreen),
                             ("checkmark.circle", "設定がシンプル", AppColors.commGreen),
                             ("exclamationmark.triangle", "env にキーが見える", .orange),
-                            ("exclamationmark.triangle", "SSH で承認が必要な場合あり", .orange),
                         ]
                     ) {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
@@ -200,8 +197,24 @@ struct ModeSelectStepView: View {
                             AppState.shared.switchMode(to: .standard)
                         }
                     }
-                    .scaleEffect(animateStandard ? 1.0 : 0.9)
-                    .opacity(animateStandard ? 1.0 : 0)
+
+                    // Secret Reference card
+                    OnboardingModeCard(
+                        isSelected: selectedMode == .secretReference,
+                        icon: "link.badge.plus",
+                        color: AppColors.cloudBlue,
+                        title: "Secret Ref",
+                        subtitle: "1Password 方式",
+                        items: [
+                            ("checkmark.circle", "env にキー値が出ない", AppColors.cloudBlue),
+                            ("exclamationmark.triangle", "akc run が必要", .orange),
+                        ]
+                    ) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            selectedMode = .secretReference
+                            AppState.shared.switchMode(to: .secretReference)
+                        }
+                    }
 
                     // Proxy card
                     OnboardingModeCard(
@@ -209,12 +222,10 @@ struct ModeSelectStepView: View {
                         icon: "shield.checkered",
                         color: AppColors.aiPurple,
                         title: "Proxy",
-                        subtitle: "高セキュリティ",
+                        subtitle: "最も安全",
                         items: [
-                            ("checkmark.circle", "env にキーが露出しない", AppColors.aiPurple),
-                            ("checkmark.circle", "SSH / Tailscale 対応", AppColors.aiPurple),
-                            ("exclamationmark.triangle", "アプリ常時起動が必要", .orange),
-                            ("exclamationmark.triangle", "停止時に接続不可", .orange),
+                            ("checkmark.circle", "キーが完全に隠蔽", AppColors.aiPurple),
+                            ("exclamationmark.triangle", "アプリ常時起動", .orange),
                         ]
                     ) {
                         if AppState.shared.hasProxyConsent {
@@ -226,19 +237,26 @@ struct ModeSelectStepView: View {
                             showConsent = true
                         }
                     }
-                    .scaleEffect(animateProxy ? 1.0 : 0.9)
-                    .opacity(animateProxy ? 1.0 : 0)
                 }
-                .padding(.horizontal, 20)
+                .scaleEffect(animateCards ? 1.0 : 0.9)
+                .opacity(animateCards ? 1.0 : 0)
+                .padding(.horizontal, 16)
 
                 // Animated flow diagram
                 if showDiagram {
                     VStack(spacing: 0) {
-                        if selectedMode == .standard {
+                        switch selectedMode {
+                        case .standard:
                             FlowBox(label: "Terminal / AI ツール", detail: "export API_KEY=$(security ...)", color: AppColors.commGreen, icon: "terminal")
                             FlowArrow(label: "API キーを直接送信")
                             FlowBox(label: "API Server", detail: "api.anthropic.com", color: AppColors.cloudBlue, icon: "cloud.fill")
-                        } else {
+                        case .secretReference:
+                            FlowBox(label: "Terminal / AI ツール", detail: "env: keychain://API_KEY", color: AppColors.cloudBlue, icon: "terminal")
+                            FlowArrow(label: "akc run が Keychain から解決")
+                            FlowBox(label: "子プロセス", detail: "実際のキー値を env に注入", color: AppColors.commGreen, icon: "gearshape")
+                            FlowArrow(label: "API キーを送信")
+                            FlowBox(label: "API Server", detail: "api.anthropic.com", color: AppColors.cloudBlue, icon: "cloud.fill")
+                        case .proxy:
                             FlowBox(label: "Terminal / AI ツール", detail: "env にキーなし", color: AppColors.aiPurple, icon: "terminal")
                             FlowArrow(label: "認証なしリクエスト")
                             FlowBox(label: "AI KeyChain Proxy", detail: "Keychain → ヘッダ注入", color: AppColors.cloudBlue, icon: "key.fill")
@@ -263,16 +281,22 @@ struct ModeSelectStepView: View {
                         .transition(.opacity)
                 }
 
+                if selectedMode == .secretReference {
+                    Label("akc run -- <command> でラップして実行すると、keychain:// が自動解決されます。",
+                          systemImage: "info.circle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppColors.cloudBlue)
+                        .padding(.horizontal, 30)
+                        .transition(.opacity)
+                }
+
                 Spacer(minLength: 12)
             }
             .padding(.horizontal)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1)) {
-                animateStandard = true
-            }
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.25)) {
-                animateProxy = true
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.15)) {
+                animateCards = true
             }
             withAnimation(.easeOut(duration: 0.4).delay(0.5)) {
                 showDiagram = true
@@ -518,7 +542,7 @@ struct SetupShellStepView: View {
 }
 
 struct CompletionStepView: View {
-    private var isProxy: Bool { AppState.shared.isProxyMode }
+    private var mode: KeyManagementMode { AppState.shared.keyManagementMode }
 
     var body: some View {
         ScrollView {
@@ -532,27 +556,12 @@ struct CompletionStepView: View {
                 Text("Setup Complete!")
                     .font(AppFonts.pageTitle)
 
-                Text(isProxy
-                     ? "Proxy モードでセットアップ完了"
-                     : "Standard モードでセットアップ完了")
+                Text(completionMessage)
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
 
-                if isProxy {
-                    VStack(alignment: .leading, spacing: 14) {
-                        UsageRow(num: "1", icon: "app.badge", text: "AI KeyChain を常時起動（メニューバーに常駐）")
-                        UsageRow(num: "2", icon: "terminal", text: "ターミナルで claude などをそのまま使う")
-                        UsageRow(num: "3", icon: "shield.checkered", text: "プロキシが自動で認証 — キーは env に出ない")
-                    }
-                    .padding(16)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 40)
-
-                    Label("接続不能時はメニューバー → Recovery Guide で復旧できます",
-                          systemImage: "lifepreserver")
-                        .font(AppFonts.caption)
-                        .foregroundStyle(.orange)
-                } else {
+                switch mode {
+                case .standard:
                     VStack(alignment: .leading, spacing: 14) {
                         UsageRow(num: "1", icon: "key.fill", text: "API キーを Keychain に登録")
                         UsageRow(num: "2", icon: "terminal", text: ".zshrc の export で環境変数に設定")
@@ -566,11 +575,49 @@ struct CompletionStepView: View {
                           systemImage: "menubar.rectangle")
                         .font(AppFonts.caption)
                         .foregroundStyle(.tertiary)
+
+                case .secretReference:
+                    VStack(alignment: .leading, spacing: 14) {
+                        UsageRow(num: "1", icon: "key.fill", text: "API キーを Keychain に登録")
+                        UsageRow(num: "2", icon: "terminal", text: ".zshrc に keychain:// 参照を設定")
+                        UsageRow(num: "3", icon: "play.fill", text: "akc run -- <command> で実行")
+                    }
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 40)
+
+                    Label("akc run なしで直接実行すると keychain:// がそのまま送信されます",
+                          systemImage: "exclamationmark.triangle")
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.orange)
+
+                case .proxy:
+                    VStack(alignment: .leading, spacing: 14) {
+                        UsageRow(num: "1", icon: "app.badge", text: "AI KeyChain を常時起動（メニューバーに常駐）")
+                        UsageRow(num: "2", icon: "terminal", text: "ターミナルで claude などをそのまま使う")
+                        UsageRow(num: "3", icon: "shield.checkered", text: "プロキシが自動で認証 — キーは env に出ない")
+                    }
+                    .padding(16)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 40)
+
+                    Label("接続不能時はメニューバー → Recovery Guide で復旧できます",
+                          systemImage: "lifepreserver")
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.orange)
                 }
 
                 Spacer(minLength: 30)
             }
             .padding(.horizontal)
+        }
+    }
+
+    private var completionMessage: String {
+        switch mode {
+        case .standard: "Standard モードでセットアップ完了"
+        case .secretReference: "Secret Reference モードでセットアップ完了"
+        case .proxy: "Proxy モードでセットアップ完了"
         }
     }
 }

@@ -2,6 +2,7 @@ import Foundation
 
 enum ExportFormat: String, CaseIterable, Identifiable {
     case zshrc = ".zshrc (Keychain reference)"
+    case secretRef = ".zshrc (Secret Reference)"
     case env = ".env (plaintext)"
 
     var id: String { rawValue }
@@ -14,6 +15,8 @@ struct ZshrcExporter {
         switch format {
         case .zshrc:
             return generateZshrc(keys: configured)
+        case .secretRef:
+            return generateSecretRef(keys: configured)
         case .env:
             return generateEnv(keys: configured)
         }
@@ -35,7 +38,34 @@ struct ZshrcExporter {
 
             lines.append("# --- \(category.rawValue) ---")
             for key in categoryKeys {
+                lines.append("# [AI KeyChain] \(key.displayName)")
                 lines.append("export \(key.envVarName)=$(security find-generic-password -s \"\(key.envVarName)\" -a \"$USER\" -w)")
+            }
+            lines.append("")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private static func generateSecretRef(keys: [APIKey]) -> String {
+        var lines: [String] = [
+            "# AI KeyChain - Secret Reference exports",
+            "# Keys are resolved at runtime via 'akc run'",
+            "# Usage: akc run -- <command>",
+            "#",
+            "# Generated: \(formattedDate())",
+            "",
+        ]
+
+        let grouped = Dictionary(grouping: keys) { $0.builtinCategory }
+
+        for category in KeyCategory.allCases {
+            guard let categoryKeys = grouped[category], !categoryKeys.isEmpty else { continue }
+
+            lines.append("# --- \(category.rawValue) ---")
+            for key in categoryKeys {
+                lines.append("# [AI KeyChain] \(key.displayName)")
+                lines.append("export \(key.envVarName)=\"keychain://\(key.envVarName)\"")
             }
             lines.append("")
         }
@@ -54,6 +84,7 @@ struct ZshrcExporter {
         ]
 
         for key in keys {
+            lines.append("# \(key.displayName)")
             lines.append("\(key.envVarName)=<VALUE>")
         }
 

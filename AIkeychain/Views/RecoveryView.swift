@@ -44,7 +44,7 @@ struct RecoveryView: View {
                     Text("Proxy: \(appState.proxyServer.isRunning ? "Running (Port \(appState.proxyPort))" : "Stopped")")
                         .font(.system(size: 13, weight: .medium))
                     Spacer()
-                    Text("Mode: \(appState.isProxyMode ? "Proxy" : "Standard")")
+                    Text("Mode: \(appState.keyManagementMode.rawValue.capitalized)")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -118,6 +118,14 @@ struct RecoveryView: View {
                     FAQItem(
                         q: "元の方式に完全に戻したい",
                         a: "Step 2 で Standard モードに切り替えてください。.zshrc のフックも削除したい場合は Step 4 を実行してください。"
+                    )
+                    FAQItem(
+                        q: "akc run で「keychain:// が解決できない」と出る",
+                        a: "該当するキーが Keychain に登録されているか確認してください。akc run --dry-run で解決可能なキーを確認できます。"
+                    )
+                    FAQItem(
+                        q: "Secret Reference モードで SDK が認証エラーになる",
+                        a: "akc run -- <command> でラップして実行してください。直接実行すると keychain:// の文字列がそのまま送信されます。"
                     )
                 }
             }
