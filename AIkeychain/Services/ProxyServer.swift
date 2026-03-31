@@ -95,12 +95,22 @@ final class ProxyServer {
 
         // Find route for this host
         guard let route = ProxyRoute.route(for: parsed.host) else {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: parsed.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: 502, latency: 0, isError: true
+            ))
             sendErrorResponse(connection: connection, statusCode: 502, message: "No proxy route for host: \(parsed.host)")
             return
         }
 
         // Read API key from Keychain
         guard let apiKey = try? keychainService.retrieve(for: route.keychainAccount), !apiKey.isEmpty else {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: route.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: 401, latency: 0, isError: true
+            ))
             sendErrorResponse(connection: connection, statusCode: 401, message: "API key not found in Keychain for \(route.keychainAccount)")
             return
         }
@@ -147,7 +157,7 @@ final class ProxyServer {
 
             if let error {
                 // ログ記録（エラー）
-                ProxyLogStore.shared.append(ProxyLog(
+                AppState.shared.proxyLogStore.append(ProxyLog(
                     timestamp: requestStart, service: route.host,
                     method: parsed.method, path: parsed.path,
                     statusCode: 502, latency: latency, isError: true
@@ -157,7 +167,7 @@ final class ProxyServer {
             }
 
             guard let httpResponse = response as? HTTPURLResponse, let data else {
-                ProxyLogStore.shared.append(ProxyLog(
+                AppState.shared.proxyLogStore.append(ProxyLog(
                     timestamp: requestStart, service: route.host,
                     method: parsed.method, path: parsed.path,
                     statusCode: 502, latency: latency, isError: true
@@ -167,7 +177,7 @@ final class ProxyServer {
             }
 
             // ログ記録（成功）
-            ProxyLogStore.shared.append(ProxyLog(
+            AppState.shared.proxyLogStore.append(ProxyLog(
                 timestamp: requestStart, service: route.host,
                 method: parsed.method, path: parsed.path,
                 statusCode: httpResponse.statusCode, latency: latency,

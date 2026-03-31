@@ -2,8 +2,8 @@ import SwiftUI
 
 /// プロキシリクエストログの Activity 表示
 struct ActivityView: View {
-    private var logStore: ProxyLogStore { .shared }
     private var appState: AppState { .shared }
+    private var logStore: ProxyLogStore { appState.proxyLogStore }
 
     var body: some View {
         VStack(spacing: 0) {

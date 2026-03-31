@@ -40,9 +40,7 @@ struct ProxyLog: Identifiable {
 /// ディスクには永続化しない（セキュリティ要件）
 @Observable
 final class ProxyLogStore {
-    static let shared = ProxyLogStore()
-
-    private(set) var logs: [ProxyLog] = []
+    var logs: [ProxyLog] = []
 
     /// 本日のリクエスト数
     var todayCount: Int {
@@ -57,18 +55,18 @@ final class ProxyLogStore {
     }
 
     func append(_ log: ProxyLog) {
-        DispatchQueue.main.async {
-            self.logs.insert(log, at: 0) // 新しい順
-            // メモリ保護: 最大500件
-            if self.logs.count > 500 {
-                self.logs = Array(self.logs.prefix(500))
+        if Thread.isMainThread {
+            logs.insert(log, at: 0)
+            if logs.count > 500 { logs = Array(logs.prefix(500)) }
+        } else {
+            DispatchQueue.main.async { [self] in
+                self.logs.insert(log, at: 0)
+                if self.logs.count > 500 { self.logs = Array(self.logs.prefix(500)) }
             }
         }
     }
 
     func clear() {
-        DispatchQueue.main.async {
-            self.logs.removeAll()
-        }
+        logs.removeAll()
     }
 }

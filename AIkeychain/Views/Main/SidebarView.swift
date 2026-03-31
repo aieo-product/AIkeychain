@@ -7,7 +7,7 @@ struct SidebarView: View {
     private var customStore: CustomKeyStore { .shared }
 
     private var appState: AppState { .shared }
-    private var logStore: ProxyLogStore { .shared }
+    private var logStore: ProxyLogStore { appState.proxyLogStore }
 
     var body: some View {
         List(selection: $viewModel.selectedCategory) {

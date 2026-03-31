@@ -188,7 +188,6 @@ struct ProxyLogTests {
             method: "POST", path: "/v1/messages",
             statusCode: 200, latency: 0.100, isError: false
         )
-        // Direct append (bypassing DispatchQueue for test)
         store.logs.insert(log, at: 0)
         #expect(store.logs.count == 1)
         #expect(store.todayCount == 1)
@@ -204,6 +203,19 @@ struct ProxyLogTests {
             statusCode: 500, latency: 0.050, isError: true
         ), at: 0)
         #expect(store.todayErrorCount == 1)
+    }
+
+    @Test("ProxyLogStore clear removes all logs")
+    func storeClear() {
+        let store = ProxyLogStore()
+        store.logs.insert(ProxyLog(
+            timestamp: Date(), service: "api.anthropic.com",
+            method: "POST", path: "/v1/messages",
+            statusCode: 200, latency: 0.100, isError: false
+        ), at: 0)
+        #expect(store.logs.count == 1)
+        store.clear()
+        #expect(store.logs.count == 0)
     }
 
     @Test("Log does not contain API key or request body")
