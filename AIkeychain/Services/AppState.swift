@@ -10,6 +10,14 @@ enum KeyManagementMode: String {
     case secretReference
     /// プロキシモード: ローカルプロキシ経由で認証ヘッダを注入
     case proxy
+
+    var displayName: String {
+        switch self {
+        case .standard: "Standard"
+        case .secretReference: "Secret Reference"
+        case .proxy: "Proxy"
+        }
+    }
 }
 
 /// アプリ全体の共有状態
