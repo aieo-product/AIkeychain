@@ -100,6 +100,14 @@ struct ModeSelectView: View {
                     .foregroundStyle(.orange)
             }
 
+            // Mode comparison detail
+            DisclosureGroup("モード比較の詳細") {
+                ModeComparisonView()
+                    .padding(.top, 8)
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+
             Spacer()
 
             // Actions
@@ -127,7 +135,7 @@ struct ModeSelectView: View {
             }
         }
         .padding(24)
-        .frame(width: 520, height: 700)
+        .frame(width: 540, height: 740)
         .sheet(isPresented: $showProxyConsent) {
             ProxyConsentView {
                 appState.hasProxyConsent = true
