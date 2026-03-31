@@ -49,6 +49,7 @@ export default defineConfig({
           items: [
             { text: '概要', link: '/test/' },
             { text: 'v1.0.0', link: '/test/v1.0.0' },
+            { text: 'v1.5.1', link: '/test/v1.5.1' },
           ]
         }
       ],
