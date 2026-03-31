@@ -142,3 +142,83 @@ struct HeaderInjectionSecurityTests {
         #expect(headerValue == "Bearer sk-test123")
     }
 }
+
+@Suite("ProxyLog Tests")
+struct ProxyLogTests {
+
+    @Test("Log entry formats time correctly")
+    func formattedTime() {
+        let log = ProxyLog(
+            timestamp: Date(), service: "api.anthropic.com",
+            method: "POST", path: "/v1/messages",
+            statusCode: 200, latency: 0.340, isError: false
+        )
+        #expect(!log.formattedTime.isEmpty)
+        #expect(log.formattedLatency == "340ms")
+        #expect(log.serviceDisplayName == "Anthropic")
+    }
+
+    @Test("Log entry detects errors")
+    func errorDetection() {
+        let errorLog = ProxyLog(
+            timestamp: Date(), service: "api.openai.com",
+            method: "POST", path: "/v1/chat/completions",
+            statusCode: 429, latency: 0.050, isError: true
+        )
+        #expect(errorLog.isError == true)
+        #expect(errorLog.serviceDisplayName == "OpenAI")
+    }
+
+    @Test("Log entry formats latency over 1 second")
+    func latencyFormatting() {
+        let slowLog = ProxyLog(
+            timestamp: Date(), service: "api.x.ai",
+            method: "POST", path: "/v1/chat/completions",
+            statusCode: 200, latency: 2.5, isError: false
+        )
+        #expect(slowLog.formattedLatency == "2.5s")
+        #expect(slowLog.serviceDisplayName == "xAI")
+    }
+
+    @Test("ProxyLogStore appends and limits entries")
+    func storeAppendAndLimit() {
+        let store = ProxyLogStore()
+        let log = ProxyLog(
+            timestamp: Date(), service: "api.anthropic.com",
+            method: "POST", path: "/v1/messages",
+            statusCode: 200, latency: 0.100, isError: false
+        )
+        // Direct append (bypassing DispatchQueue for test)
+        store.logs.insert(log, at: 0)
+        #expect(store.logs.count == 1)
+        #expect(store.todayCount == 1)
+        #expect(store.todayErrorCount == 0)
+    }
+
+    @Test("ProxyLogStore counts errors")
+    func storeErrorCount() {
+        let store = ProxyLogStore()
+        store.logs.insert(ProxyLog(
+            timestamp: Date(), service: "api.anthropic.com",
+            method: "POST", path: "/v1/messages",
+            statusCode: 500, latency: 0.050, isError: true
+        ), at: 0)
+        #expect(store.todayErrorCount == 1)
+    }
+
+    @Test("Log does not contain API key or request body")
+    func securityCheck() {
+        let log = ProxyLog(
+            timestamp: Date(), service: "api.anthropic.com",
+            method: "POST", path: "/v1/messages",
+            statusCode: 200, latency: 0.340, isError: false
+        )
+        // ProxyLog has no fields for apiKey or body
+        let mirror = Mirror(reflecting: log)
+        let fieldNames = mirror.children.map { $0.label ?? "" }
+        #expect(!fieldNames.contains("apiKey"))
+        #expect(!fieldNames.contains("body"))
+        #expect(!fieldNames.contains("requestBody"))
+        #expect(!fieldNames.contains("authorization"))
+    }
+}

@@ -110,6 +110,7 @@ final class ProxyServer {
     }
 
     private func forwardRequest(parsed: HTTPRequestParser.ParsedRequest, route: ProxyRoute, apiKey: String, connection: NWConnection) {
+        let requestStart = Date()
         // Build upstream URL
         guard let url = URL(string: "\(route.targetScheme)://\(route.host)\(parsed.path)") else {
             sendErrorResponse(connection: connection, statusCode: 500, message: "Invalid upstream URL")
@@ -142,16 +143,36 @@ final class ProxyServer {
         // Execute request
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             defer { connection.cancel() }
+            let latency = Date().timeIntervalSince(requestStart)
 
             if let error {
+                // ログ記録（エラー）
+                ProxyLogStore.shared.append(ProxyLog(
+                    timestamp: requestStart, service: route.host,
+                    method: parsed.method, path: parsed.path,
+                    statusCode: 502, latency: latency, isError: true
+                ))
                 self?.sendErrorResponse(connection: connection, statusCode: 502, message: "Upstream error: \(error.localizedDescription)")
                 return
             }
 
             guard let httpResponse = response as? HTTPURLResponse, let data else {
+                ProxyLogStore.shared.append(ProxyLog(
+                    timestamp: requestStart, service: route.host,
+                    method: parsed.method, path: parsed.path,
+                    statusCode: 502, latency: latency, isError: true
+                ))
                 self?.sendErrorResponse(connection: connection, statusCode: 502, message: "Invalid upstream response")
                 return
             }
+
+            // ログ記録（成功）
+            ProxyLogStore.shared.append(ProxyLog(
+                timestamp: requestStart, service: route.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: httpResponse.statusCode, latency: latency,
+                isError: httpResponse.statusCode >= 400
+            ))
 
             DispatchQueue.main.async {
                 self?.requestCount += 1

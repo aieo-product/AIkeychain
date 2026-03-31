@@ -46,7 +46,11 @@ struct MainView: View {
         NavigationSplitView {
             SidebarView(viewModel: viewModel)
         } detail: {
-            KeyListView(viewModel: viewModel)
+            if viewModel.selectedCategory == .activity {
+                ActivityView()
+            } else {
+                KeyListView(viewModel: viewModel)
+            }
         }
         .searchable(text: $viewModel.searchText, prompt: "Search keys...")
         .toolbar {

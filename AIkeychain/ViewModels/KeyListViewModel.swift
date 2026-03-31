@@ -6,6 +6,7 @@ enum CategorySelection: Hashable {
     case all
     case builtin(KeyCategory)
     case custom(UUID)
+    case activity
 }
 
 @Observable
@@ -32,7 +33,7 @@ final class KeyListViewModel {
 
         if let selection = selectedCategory {
             switch selection {
-            case .all:
+            case .all, .activity:
                 break // no filter
             case .builtin(let category):
                 result = result.filter { $0.builtinCategory == category }

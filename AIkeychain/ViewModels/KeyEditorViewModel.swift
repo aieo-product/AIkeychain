@@ -87,7 +87,7 @@ final class KeyEditorViewModel {
                         return "builtin:\(cat.rawValue)"
                     case .custom(let id):
                         return "custom:\(id.uuidString)"
-                    case .all:
+                    case .all, .activity:
                         return nil
                     }
                 }()
