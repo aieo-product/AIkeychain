@@ -131,6 +131,16 @@ Design docs are available at **[aieo-product.github.io/AIkeychain](https://aieo-
 
 MIT License. See [LICENSE](LICENSE) for details.
 
+## Disclaimer
+
+- API keys are stored encrypted in macOS Keychain (backed by Secure Enclave).
+- In Proxy mode, keys are designed to never be exposed as environment variables.
+
+However, this software is provided **"AS IS"**.
+The author assumes no responsibility for any damages resulting from the use of this application, including but not limited to API key leakage, unexpected charges, or data loss.
+
+**Use entirely at your own risk.**
+
 ---
 
 <a id="日本語"></a>
@@ -225,3 +235,13 @@ Terminal               AI KeyChain Proxy          API Server
 ### ライセンス
 
 MIT License
+
+### 免責事項
+
+- APIキーはmacOS Keychain（Secure Enclave使用）に暗号化されて保存されます。
+- Proxyモードではキーが環境変数に一切露出しないよう設計しています。
+
+しかしながら、本ソフトウェアは**「AS IS（現状のまま）」**で提供されます。
+作者は本アプリの使用によって生じたいかなる損害（APIキー漏洩、請求発生、データ損失など）についても一切の責任を負いません。
+
+**すべて自己責任**でご利用ください。
