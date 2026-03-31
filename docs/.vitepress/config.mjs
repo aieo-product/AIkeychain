@@ -4,6 +4,7 @@ export default defineConfig({
   title: "AI KeyChain",
   description: "AI開発者のための macOS ネイティブ鍵管理アプリ - 設計書",
   lang: 'ja-JP',
+  base: '/AIkeychain/',
   themeConfig: {
     nav: [
       { text: 'ホーム', link: '/' },
