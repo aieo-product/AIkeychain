@@ -151,45 +151,46 @@ final class ProxyServer {
         }
 
         // Execute request
+        let proxyQueue = self.queue
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            defer { connection.cancel() }
             let latency = Date().timeIntervalSince(requestStart)
 
-            if let error {
-                // ログ記録（エラー）
+            // NWConnection 操作は proxy queue 上で実行
+            proxyQueue.async {
+                if let error {
+                    AppState.shared.proxyLogStore.append(ProxyLog(
+                        timestamp: requestStart, service: route.host,
+                        method: parsed.method, path: parsed.path,
+                        statusCode: 502, latency: latency, isError: true
+                    ))
+                    self?.sendErrorResponse(connection: connection, statusCode: 502, message: "Upstream error: \(error.localizedDescription)")
+                    return
+                }
+
+                guard let httpResponse = response as? HTTPURLResponse, let data else {
+                    AppState.shared.proxyLogStore.append(ProxyLog(
+                        timestamp: requestStart, service: route.host,
+                        method: parsed.method, path: parsed.path,
+                        statusCode: 502, latency: latency, isError: true
+                    ))
+                    self?.sendErrorResponse(connection: connection, statusCode: 502, message: "Invalid upstream response")
+                    return
+                }
+
                 AppState.shared.proxyLogStore.append(ProxyLog(
                     timestamp: requestStart, service: route.host,
                     method: parsed.method, path: parsed.path,
-                    statusCode: 502, latency: latency, isError: true
+                    statusCode: httpResponse.statusCode, latency: latency,
+                    isError: httpResponse.statusCode >= 400
                 ))
-                self?.sendErrorResponse(connection: connection, statusCode: 502, message: "Upstream error: \(error.localizedDescription)")
-                return
+
+                DispatchQueue.main.async {
+                    self?.requestCount += 1
+                }
+
+                // sendResponse handles connection lifecycle via .contentProcessed
+                self?.sendResponse(connection: connection, statusCode: httpResponse.statusCode, headers: httpResponse.allHeaderFields, body: data)
             }
-
-            guard let httpResponse = response as? HTTPURLResponse, let data else {
-                AppState.shared.proxyLogStore.append(ProxyLog(
-                    timestamp: requestStart, service: route.host,
-                    method: parsed.method, path: parsed.path,
-                    statusCode: 502, latency: latency, isError: true
-                ))
-                self?.sendErrorResponse(connection: connection, statusCode: 502, message: "Invalid upstream response")
-                return
-            }
-
-            // ログ記録（成功）
-            AppState.shared.proxyLogStore.append(ProxyLog(
-                timestamp: requestStart, service: route.host,
-                method: parsed.method, path: parsed.path,
-                statusCode: httpResponse.statusCode, latency: latency,
-                isError: httpResponse.statusCode >= 400
-            ))
-
-            DispatchQueue.main.async {
-                self?.requestCount += 1
-            }
-
-            // Build HTTP response
-            self?.sendResponse(connection: connection, statusCode: httpResponse.statusCode, headers: httpResponse.allHeaderFields, body: data)
         }
         task.resume()
     }
