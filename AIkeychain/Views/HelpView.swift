@@ -67,11 +67,7 @@ struct HelpView: View {
 
                 // Modes
                 HelpSection(title: "管理モード", icon: "switch.2") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HelpItem(title: "Standard", desc: ".zshrc で security コマンドを使い Keychain から直接 export。シンプルだが env にキー値が見える。")
-                        HelpItem(title: "Secret Reference", desc: "env に keychain:// 参照のみ設定。akc run -- <command> で実行時に Keychain から解決。1Password の op:// と同等の仕組み。")
-                        HelpItem(title: "Proxy", desc: "ローカルプロキシが API リクエストを中継し認証ヘッダを注入。キーが env に一切出ない最も安全な方式。アプリ常時起動が必要。")
-                    }
+                    ModeComparisonView()
                 }
 
                 // Export
@@ -124,6 +120,132 @@ struct HelpView: View {
             .padding(24)
         }
         .frame(width: 580, height: 640)
+    }
+}
+
+// MARK: - Mode Comparison View
+
+struct ModeComparisonView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Mode descriptions
+            VStack(alignment: .leading, spacing: 10) {
+                ModeRow(
+                    icon: "key.fill", color: AppColors.commGreen,
+                    name: "Standard", security: 1,
+                    desc: ".zshrc で Keychain から直接 export。シンプルだが env にキー値が見える。"
+                )
+                ModeRow(
+                    icon: "link.badge.plus", color: AppColors.cloudBlue,
+                    name: "Secret Reference", security: 2,
+                    desc: "env に keychain:// 参照のみ。akc run で実行時に解決。1Password op:// と同等。"
+                )
+                ModeRow(
+                    icon: "shield.checkered", color: AppColors.aiPurple,
+                    name: "Proxy", security: 3,
+                    desc: "プロキシが認証ヘッダを注入。キーがどのプロセスにも渡らない最も安全な方式。"
+                )
+            }
+
+            Divider()
+
+            // Key reach comparison
+            Text("キーの到達範囲")
+                .font(.system(size: 12, weight: .semibold))
+
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+                GridRow {
+                    Text("").frame(width: 120, alignment: .leading)
+                    Text("Standard").font(.system(size: 10, weight: .semibold)).foregroundStyle(AppColors.commGreen)
+                    Text("Secret Ref").font(.system(size: 10, weight: .semibold)).foregroundStyle(AppColors.cloudBlue)
+                    Text("Proxy").font(.system(size: 10, weight: .semibold)).foregroundStyle(AppColors.aiPurple)
+                }
+                Divider()
+                ComparisonRow(label: "親プロセスの env", values: ["キー値あり", "パスのみ", "キーなし"], danger: [true, false, false])
+                ComparisonRow(label: "子プロセスのメモリ", values: ["キーあり", "キーあり", "キーなし"], danger: [true, true, false])
+                ComparisonRow(label: "プロセスダンプ漏洩", values: ["リスクあり", "リスクあり", "リスクなし"], danger: [true, true, false])
+                ComparisonRow(label: "アプリ常時起動", values: ["不要", "不要", "必要"], danger: [false, false, true])
+                ComparisonRow(label: "SDK 直接実行", values: ["可能", "akc run 必要", "可能"], danger: [false, true, false])
+            }
+            .font(.system(size: 11))
+
+            Divider()
+
+            // Visual explanation
+            Text("Secret Reference vs Proxy の核心的な違い")
+                .font(.system(size: 12, weight: .semibold))
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.system(size: 11))
+                    Text("Secret Reference: akc run が子プロセスの env にキー値を注入するため、子プロセスのメモリにはキーが存在する。プロセスダンプで漏洩する可能性がある。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .foregroundStyle(AppColors.aiPurple)
+                        .font(.system(size: 11))
+                    Text("Proxy: キーはプロキシプロセス内部でのみ読み取られ、HTTP ヘッダとして外部に送信される。ユーザーのプロセスにキーが一切渡らない。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+private struct ModeRow: View {
+    let icon: String
+    let color: Color
+    let name: String
+    let security: Int
+    let desc: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(color)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(name)
+                        .font(.system(size: 12, weight: .semibold))
+                    HStack(spacing: 1) {
+                        ForEach(0..<3, id: \.self) { i in
+                            Image(systemName: i < security ? "star.fill" : "star")
+                                .font(.system(size: 8))
+                                .foregroundStyle(i < security ? color : Color.gray.opacity(0.3))
+                        }
+                    }
+                }
+                Text(desc)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct ComparisonRow: View {
+    let label: String
+    let values: [String]
+    let danger: [Bool]
+
+    var body: some View {
+        GridRow {
+            Text(label)
+                .font(.system(size: 11))
+                .frame(width: 120, alignment: .leading)
+            ForEach(Array(values.enumerated()), id: \.offset) { i, val in
+                Text(val)
+                    .font(.system(size: 10))
+                    .foregroundStyle(danger[i] ? .orange : AppColors.configured)
+            }
+        }
     }
 }
 
