@@ -58,7 +58,10 @@ struct APIKey: Identifiable, Equatable, Hashable {
             if case .builtin(let cat) = override { return cat }
             return nil  // カスタムカテゴリに上書きされた場合
         }
-        return service?.category
+        if let service { return service.category }
+        // カスタムキーが stableId でビルトインカテゴリを参照している場合
+        if let customKey { return KeyCategory.from(stableId: customKey.categoryId) }
+        return nil
     }
 
     var customCategoryId: UUID? {
@@ -66,7 +69,12 @@ struct APIKey: Identifiable, Equatable, Hashable {
             if case .custom(let id) = override { return id }
             return nil  // ビルトインカテゴリに上書きされた場合
         }
-        return customKey?.categoryId
+        if let customKey {
+            // stableId がビルトインカテゴリに該当する場合は nil
+            if KeyCategory.from(stableId: customKey.categoryId) != nil { return nil }
+            return customKey.categoryId
+        }
+        return nil
     }
 
     var setupURL: URL? {
