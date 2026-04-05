@@ -6,6 +6,9 @@ struct SidebarView: View {
 
     private var customStore: CustomKeyStore { .shared }
 
+    private var appState: AppState { .shared }
+    private var logStore: ProxyLogStore { appState.proxyLogStore }
+
     var body: some View {
         List(selection: $viewModel.selectedCategory) {
             Section {
@@ -21,6 +24,23 @@ struct SidebarView: View {
                     } icon: {
                         Image(systemName: "key.fill")
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                NavigationLink(value: CategorySelection.activity) {
+                    Label {
+                        HStack {
+                            Text("Activity")
+                            Spacer()
+                            if appState.isProxyMode && logStore.todayCount > 0 {
+                                Text("\(logStore.todayCount)")
+                                    .font(AppFonts.badge)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: "chart.bar.fill")
+                            .foregroundStyle(.blue)
                     }
                 }
             }

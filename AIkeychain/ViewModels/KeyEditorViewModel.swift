@@ -96,7 +96,7 @@ final class KeyEditorViewModel {
                             return "builtin:\(cat.rawValue)"
                         case .custom(let id):
                             return "custom:\(id.uuidString)"
-                        case .all, .none:
+                        case .all, .activity, .none:
                             return nil
                         }
                     }()
@@ -145,7 +145,7 @@ final class KeyEditorViewModel {
             return cat.stableId
         case .custom(let id):
             return id
-        case .all, .none:
+        case .all, .activity, .none:
             return KeyCategory.ai.stableId
         }
     }

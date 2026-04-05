@@ -46,6 +46,8 @@ struct OnboardingView: View {
             // Content area with transition
             Group {
                 switch viewModel.currentStep {
+                case .language:
+                    LanguageSelectStepView()
                 case .welcome:
                     WelcomeStepView()
                 case .modeSelect:
@@ -75,14 +77,14 @@ struct OnboardingView: View {
                             viewModel.back()
                         }
                     } label: {
-                        Label("Back", systemImage: "chevron.left")
+                        Label(L10n.t("back"), systemImage: "chevron.left")
                     }
                 }
 
                 Spacer()
 
                 if viewModel.currentStep.canSkip {
-                    Button("Skip") {
+                    Button(L10n.t("skip")) {
                         withAnimation(AppAnimations.transition) {
                             viewModel.next()
                         }
@@ -95,7 +97,7 @@ struct OnboardingView: View {
                         viewModel.complete()
                         dismiss()
                     } label: {
-                        Label("Get Started", systemImage: "checkmark.circle.fill")
+                        Label(L10n.t("get_started"), systemImage: "checkmark.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
@@ -105,7 +107,7 @@ struct OnboardingView: View {
                             viewModel.next()
                         }
                     } label: {
-                        Label("Next", systemImage: "chevron.right")
+                        Label(L10n.t("next"), systemImage: "chevron.right")
                     }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
@@ -114,7 +116,63 @@ struct OnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
         }
-        .frame(width: 660, height: 600)
+        .frame(width: 660, height: 640)
+    }
+}
+
+// MARK: - Language Select
+
+struct LanguageSelectStepView: View {
+    @State private var selected: AppLanguage = AppState.shared.appLanguage
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer(minLength: 30)
+
+            Image(systemName: "globe")
+                .font(.system(size: 56))
+                .foregroundStyle(AppColors.accentGradient)
+
+            Text(L10n.t("language_title"))
+                .font(AppFonts.pageTitle)
+
+            Text(L10n.t("language_subtitle"))
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 20) {
+                ForEach(AppLanguage.allCases) { lang in
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            selected = lang
+                            AppState.shared.appLanguage = lang
+                        }
+                    } label: {
+                        VStack(spacing: 12) {
+                            Text(lang.flag)
+                                .font(.system(size: 48))
+                            Text(lang.displayName)
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .frame(width: 160, height: 130)
+                        .background(
+                            selected == lang ? AppColors.aiPurple.opacity(0.08) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 16)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(selected == lang ? AppColors.aiPurple : Color.gray.opacity(0.15),
+                                        lineWidth: selected == lang ? 2.5 : 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer(minLength: 30)
+        }
+        .padding(.horizontal)
     }
 }
 
@@ -130,23 +188,23 @@ struct WelcomeStepView: View {
                     .font(.system(size: 56))
                     .foregroundStyle(AppColors.accentGradient)
 
-                Text("AI KeyChain")
+                Text(L10n.t("welcome_title"))
                     .font(AppFonts.pageTitle)
 
-                Text("AI API キーをセキュアに管理する macOS アプリ")
+                Text(L10n.t("welcome_subtitle"))
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 14) {
                     FeatureRow(icon: "lock.shield", color: AppColors.aiPurple,
-                               title: "Keychain で安全に保管",
-                               desc: "API キーは macOS Keychain に暗号化保存")
+                               title: L10n.t("welcome_feature1_title"),
+                               desc: L10n.t("welcome_feature1_desc"))
                     FeatureRow(icon: "eye.slash", color: AppColors.cloudBlue,
-                               title: "環境変数に露出しない",
-                               desc: "AI が env コマンドで見てもキーは表示されない")
+                               title: L10n.t("welcome_feature2_title"),
+                               desc: L10n.t("welcome_feature2_desc"))
                     FeatureRow(icon: "arrow.triangle.2.circlepath", color: AppColors.commGreen,
-                               title: "ローカルプロキシで自動注入",
-                               desc: "認証ヘッダをバックグラウンドで安全に追加")
+                               title: L10n.t("welcome_feature3_title"),
+                               desc: L10n.t("welcome_feature3_desc"))
                 }
                 .padding(16)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -170,10 +228,10 @@ struct ModeSelectStepView: View {
             VStack(spacing: 16) {
                 Spacer(minLength: 12)
 
-                Text("Choose Your Mode")
+                Text(L10n.t("mode_select_title"))
                     .font(AppFonts.sectionTitle)
 
-                Text("API キーの管理方式を選んでください。\nあとからいつでも変更できます。")
+                Text(L10n.t("mode_select_subtitle"))
                     .font(AppFonts.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -186,10 +244,10 @@ struct ModeSelectStepView: View {
                         icon: "key.fill",
                         color: AppColors.commGreen,
                         title: "Standard",
-                        subtitle: "安定・シンプル",
+                        subtitle: L10n.t("mode_standard_subtitle"),
                         items: [
-                            ("checkmark.circle", "設定がシンプル", AppColors.commGreen),
-                            ("exclamationmark.triangle", "env にキーが見える", .orange),
+                            ("checkmark.circle", L10n.t("mode_standard_pro"), AppColors.commGreen),
+                            ("exclamationmark.triangle", L10n.t("mode_standard_con"), .orange),
                         ]
                     ) {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
@@ -204,10 +262,10 @@ struct ModeSelectStepView: View {
                         icon: "link.badge.plus",
                         color: AppColors.cloudBlue,
                         title: "Secret Ref",
-                        subtitle: "1Password 方式",
+                        subtitle: L10n.t("mode_secretref_subtitle"),
                         items: [
-                            ("checkmark.circle", "env にキー値が出ない", AppColors.cloudBlue),
-                            ("exclamationmark.triangle", "akc run が必要", .orange),
+                            ("checkmark.circle", L10n.t("mode_secretref_pro"), AppColors.cloudBlue),
+                            ("exclamationmark.triangle", L10n.t("mode_secretref_con"), .orange),
                         ]
                     ) {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
@@ -222,10 +280,10 @@ struct ModeSelectStepView: View {
                         icon: "shield.checkered",
                         color: AppColors.aiPurple,
                         title: "Proxy",
-                        subtitle: "最も安全",
+                        subtitle: L10n.t("mode_proxy_subtitle"),
                         items: [
-                            ("checkmark.circle", "キーが完全に隠蔽", AppColors.aiPurple),
-                            ("exclamationmark.triangle", "アプリ常時起動", .orange),
+                            ("checkmark.circle", L10n.t("mode_proxy_pro"), AppColors.aiPurple),
+                            ("exclamationmark.triangle", L10n.t("mode_proxy_con"), .orange),
                         ]
                     ) {
                         if AppState.shared.hasProxyConsent {
@@ -247,21 +305,21 @@ struct ModeSelectStepView: View {
                     VStack(spacing: 0) {
                         switch selectedMode {
                         case .standard:
-                            FlowBox(label: "Terminal / AI ツール", detail: "export API_KEY=$(security ...)", color: AppColors.commGreen, icon: "terminal")
-                            FlowArrow(label: "API キーを直接送信")
-                            FlowBox(label: "API Server", detail: "api.anthropic.com", color: AppColors.cloudBlue, icon: "cloud.fill")
+                            FlowBox(label: L10n.t("flow_terminal"), detail: L10n.t("flow_standard_detail"), color: AppColors.commGreen, icon: "terminal")
+                            FlowArrow(label: L10n.t("flow_standard_arrow"))
+                            FlowBox(label: L10n.t("flow_api_server"), detail: "api.anthropic.com", color: AppColors.cloudBlue, icon: "cloud.fill")
                         case .secretReference:
-                            FlowBox(label: "Terminal / AI ツール", detail: "env: keychain://API_KEY", color: AppColors.cloudBlue, icon: "terminal")
-                            FlowArrow(label: "akc run が Keychain から解決")
-                            FlowBox(label: "子プロセス", detail: "実際のキー値を env に注入", color: AppColors.commGreen, icon: "gearshape")
-                            FlowArrow(label: "API キーを送信")
-                            FlowBox(label: "API Server", detail: "api.anthropic.com", color: AppColors.cloudBlue, icon: "cloud.fill")
+                            FlowBox(label: L10n.t("flow_terminal"), detail: L10n.t("flow_secretref_detail"), color: AppColors.cloudBlue, icon: "terminal")
+                            FlowArrow(label: L10n.t("flow_secretref_arrow1"))
+                            FlowBox(label: L10n.t("flow_secretref_child"), detail: L10n.t("flow_secretref_child_detail"), color: AppColors.commGreen, icon: "gearshape")
+                            FlowArrow(label: L10n.t("flow_secretref_arrow2"))
+                            FlowBox(label: L10n.t("flow_api_server"), detail: "api.anthropic.com", color: AppColors.cloudBlue, icon: "cloud.fill")
                         case .proxy:
-                            FlowBox(label: "Terminal / AI ツール", detail: "env にキーなし", color: AppColors.aiPurple, icon: "terminal")
-                            FlowArrow(label: "認証なしリクエスト")
-                            FlowBox(label: "AI KeyChain Proxy", detail: "Keychain → ヘッダ注入", color: AppColors.cloudBlue, icon: "key.fill")
-                            FlowArrow(label: "認証済みリクエスト")
-                            FlowBox(label: "API Server", detail: "api.anthropic.com", color: AppColors.commGreen, icon: "cloud.fill")
+                            FlowBox(label: L10n.t("flow_terminal"), detail: L10n.t("flow_proxy_detail"), color: AppColors.aiPurple, icon: "terminal")
+                            FlowArrow(label: L10n.t("flow_proxy_arrow1"))
+                            FlowBox(label: L10n.t("flow_proxy_box"), detail: L10n.t("flow_proxy_box_detail"), color: AppColors.cloudBlue, icon: "key.fill")
+                            FlowArrow(label: L10n.t("flow_proxy_arrow2"))
+                            FlowBox(label: L10n.t("flow_api_server"), detail: "api.anthropic.com", color: AppColors.commGreen, icon: "cloud.fill")
                         }
                     }
                     .padding(.horizontal, 60)
@@ -273,7 +331,7 @@ struct ModeSelectStepView: View {
                 }
 
                 if selectedMode == .proxy {
-                    Label("Proxy モードはアプリ常時起動が前提です。停止時の復旧方法はアプリ内で確認できます。",
+                    Label(L10n.t("mode_proxy_warning"),
                           systemImage: "info.circle")
                         .font(.system(size: 11))
                         .foregroundStyle(.orange)
@@ -282,7 +340,7 @@ struct ModeSelectStepView: View {
                 }
 
                 if selectedMode == .secretReference {
-                    Label("akc run -- <command> でラップして実行すると、keychain:// が自動解決されます。",
+                    Label(L10n.t("mode_secretref_info"),
                           systemImage: "info.circle")
                         .font(.system(size: 11))
                         .foregroundStyle(AppColors.cloudBlue)
@@ -387,10 +445,10 @@ struct RegisterKeysStepView: View {
                     .font(.system(size: 48))
                     .foregroundStyle(AppColors.commGreen)
 
-                Text("Register Your Keys")
+                Text(L10n.t("register_title"))
                     .font(AppFonts.sectionTitle)
 
-                Text("管理したい API キーを登録しましょう。\nあとからメイン画面でいつでも追加・編集できます。")
+                Text(L10n.t("register_subtitle"))
                     .font(AppFonts.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -421,7 +479,7 @@ struct RegisterKeysStepView: View {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal, 50)
 
-                Label("Tip: メイン画面でキーをダブルクリック or 右クリック → Edit",
+                Label(L10n.t("register_tip"),
                       systemImage: "lightbulb")
                     .font(AppFonts.caption)
                     .foregroundStyle(.tertiary)
@@ -451,32 +509,32 @@ struct SetupShellStepView: View {
                     .font(.system(size: 48))
                     .foregroundStyle(AppColors.gitOrange)
 
-                Text("Connect Your Shell")
+                Text(L10n.t("shell_title"))
                     .font(AppFonts.sectionTitle)
 
-                Text(".zshrc に1行追加するだけで、プロキシ起動中のみ\nBASE_URL が自動設定されます。")
+                Text(L10n.t("shell_subtitle"))
                     .font(AppFonts.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
                 // Port selector
                 HStack(spacing: 8) {
-                    Text("Port:")
+                    Text(L10n.t("shell_port"))
                         .font(.system(size: 13, weight: .medium))
                     TextField("Port", text: $portText)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 80)
                         .onSubmit { applyPort() }
-                    Button("Apply") { applyPort() }
+                    Button(L10n.t("apply")) { applyPort() }
                         .controlSize(.small)
-                    Text("(default: \(AppState.defaultPort))")
+                    Text(L10n.t("shell_default_port").replacingOccurrences(of: "%@", with: "\(AppState.defaultPort)"))
                         .font(AppFonts.caption)
                         .foregroundStyle(.tertiary)
                 }
 
                 // Preview
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("~/.zshrc に追記される内容:")
+                    Text(L10n.t("shell_zshrc_label"))
                         .font(AppFonts.badge)
                         .foregroundStyle(.secondary)
 
@@ -490,19 +548,19 @@ struct SetupShellStepView: View {
                 .padding(.horizontal, 40)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Label("プロキシ起動中のみ ~/.aikeychain_proxy が存在します", systemImage: "checkmark.shield")
-                    Label("プロキシ停止時はファイルが自動削除されます", systemImage: "xmark.shield")
-                    Label("BASE_URL が残り続ける問題は発生しません", systemImage: "shield.checkered")
+                    Label(L10n.t("shell_note1"), systemImage: "checkmark.shield")
+                    Label(L10n.t("shell_note2"), systemImage: "xmark.shield")
+                    Label(L10n.t("shell_note3"), systemImage: "shield.checkered")
                 }
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
 
                 if isConfigured {
-                    Label("設定済み", systemImage: "checkmark.circle.fill")
+                    Label(L10n.t("shell_configured"), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(AppColors.configured)
                         .font(.system(size: 14, weight: .medium))
                 } else {
-                    Button("Enable Secure Proxy") {
+                    Button(L10n.t("shell_enable_proxy")) {
                         do {
                             try SetupManager.configure()
                             withAnimation { isConfigured = true }
@@ -520,7 +578,7 @@ struct SetupShellStepView: View {
                         .foregroundStyle(.red)
                 }
 
-                Label("API キーの値は書き込まれません。安全です。",
+                Label(L10n.t("shell_key_safe"),
                       systemImage: "lock.shield")
                     .font(AppFonts.caption)
                     .foregroundStyle(.tertiary)
@@ -533,7 +591,7 @@ struct SetupShellStepView: View {
 
     private func applyPort() {
         guard let value = UInt16(portText), value >= 1024 else {
-            errorMessage = "ポート番号は 1024〜65535 の範囲で指定してください"
+            errorMessage = L10n.t("shell_port_error")
             return
         }
         errorMessage = nil
@@ -553,7 +611,7 @@ struct CompletionStepView: View {
                     .font(.system(size: 56))
                     .foregroundStyle(AppColors.configured)
 
-                Text("Setup Complete!")
+                Text(L10n.t("completion_title"))
                     .font(AppFonts.pageTitle)
 
                 Text(completionMessage)
@@ -563,45 +621,45 @@ struct CompletionStepView: View {
                 switch mode {
                 case .standard:
                     VStack(alignment: .leading, spacing: 14) {
-                        UsageRow(num: "1", icon: "key.fill", text: "API キーを Keychain に登録")
-                        UsageRow(num: "2", icon: "terminal", text: ".zshrc の export で環境変数に設定")
-                        UsageRow(num: "3", icon: "bolt.fill", text: "ターミナルで AI ツールをそのまま使う")
+                        UsageRow(num: "1", icon: "key.fill", text: L10n.t("completion_standard_step1"))
+                        UsageRow(num: "2", icon: "terminal", text: L10n.t("completion_standard_step2"))
+                        UsageRow(num: "3", icon: "bolt.fill", text: L10n.t("completion_standard_step3"))
                     }
                     .padding(16)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, 40)
 
-                    Label("メニューバーからいつでもモードを変更できます",
+                    Label(L10n.t("completion_mode_change_hint"),
                           systemImage: "menubar.rectangle")
                         .font(AppFonts.caption)
                         .foregroundStyle(.tertiary)
 
                 case .secretReference:
                     VStack(alignment: .leading, spacing: 14) {
-                        UsageRow(num: "1", icon: "key.fill", text: "API キーを Keychain に登録")
-                        UsageRow(num: "2", icon: "terminal", text: ".zshrc に keychain:// 参照を設定")
-                        UsageRow(num: "3", icon: "play.fill", text: "akc run -- <command> で実行")
+                        UsageRow(num: "1", icon: "key.fill", text: L10n.t("completion_secretref_step1"))
+                        UsageRow(num: "2", icon: "terminal", text: L10n.t("completion_secretref_step2"))
+                        UsageRow(num: "3", icon: "play.fill", text: L10n.t("completion_secretref_step3"))
                     }
                     .padding(16)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, 40)
 
-                    Label("akc run なしで直接実行すると keychain:// がそのまま送信されます",
+                    Label(L10n.t("completion_secretref_warning"),
                           systemImage: "exclamationmark.triangle")
                         .font(AppFonts.caption)
                         .foregroundStyle(.orange)
 
                 case .proxy:
                     VStack(alignment: .leading, spacing: 14) {
-                        UsageRow(num: "1", icon: "app.badge", text: "AI KeyChain を常時起動（メニューバーに常駐）")
-                        UsageRow(num: "2", icon: "terminal", text: "ターミナルで claude などをそのまま使う")
-                        UsageRow(num: "3", icon: "shield.checkered", text: "プロキシが自動で認証 — キーは env に出ない")
+                        UsageRow(num: "1", icon: "app.badge", text: L10n.t("completion_proxy_step1"))
+                        UsageRow(num: "2", icon: "terminal", text: L10n.t("completion_proxy_step2"))
+                        UsageRow(num: "3", icon: "shield.checkered", text: L10n.t("completion_proxy_step3"))
                     }
                     .padding(16)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal, 40)
 
-                    Label("接続不能時はメニューバー → Recovery Guide で復旧できます",
+                    Label(L10n.t("completion_proxy_hint"),
                           systemImage: "lifepreserver")
                         .font(AppFonts.caption)
                         .foregroundStyle(.orange)
@@ -615,9 +673,9 @@ struct CompletionStepView: View {
 
     private var completionMessage: String {
         switch mode {
-        case .standard: "Standard モードでセットアップ完了"
-        case .secretReference: "Secret Reference モードでセットアップ完了"
-        case .proxy: "Proxy モードでセットアップ完了"
+        case .standard: L10n.t("completion_standard")
+        case .secretReference: L10n.t("completion_secretref")
+        case .proxy: L10n.t("completion_proxy")
         }
     }
 }

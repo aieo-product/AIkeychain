@@ -99,6 +99,8 @@ struct KeyListView: View {
         case .builtin(let cat): return cat.rawValue
         case .custom(let id):
             return CustomKeyStore.shared.category(for: id)?.name ?? "Custom"
+        case .activity:
+            return "Activity"
         }
     }
 }

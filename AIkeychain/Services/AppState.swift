@@ -30,8 +30,10 @@ final class AppState {
     private static let portKey = "proxy_port"
     private static let modeKey = "key_management_mode"
     private static let proxyConsentKey = "proxy_mode_consent"
+    private static let languageKey = "app_language"
 
     let proxyServer = ProxyServer()
+    let proxyLogStore = ProxyLogStore()
 
     /// ユーザーが選択したキー管理モード（UserDefaults で永続化）
     var keyManagementMode: KeyManagementMode {
@@ -41,6 +43,17 @@ final class AppState {
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: Self.modeKey)
+        }
+    }
+
+    /// アプリ内表示言語（UserDefaults で永続化）
+    var appLanguage: AppLanguage {
+        get {
+            let raw = UserDefaults.standard.string(forKey: Self.languageKey) ?? ""
+            return AppLanguage(rawValue: raw) ?? .ja
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: Self.languageKey)
         }
     }
 

@@ -57,9 +57,13 @@ struct MainView: View {
         NavigationSplitView {
             SidebarView(viewModel: viewModel)
         } detail: {
-            KeyListView(viewModel: viewModel)
+            if viewModel.selectedCategory == .activity {
+                ActivityView()
+            } else {
+                KeyListView(viewModel: viewModel)
+            }
         }
-        .searchable(text: $viewModel.searchText, prompt: "Search keys...")
+        .searchable(text: $viewModel.searchText, prompt: L10n.t("main_search"))
         .toolbar {
             // Proxy status button (prominent)
             ToolbarItem(placement: .navigation) {
@@ -68,38 +72,38 @@ struct MainView: View {
                 } label: {
                     modeStatusLabel
                 }
-                .help("\(appState.keyManagementMode.displayName) Mode — Click to change")
+                .help(L10n.t("main_mode_hint"))
             }
 
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showingShare = true
                 } label: {
-                    Label("Transfer", systemImage: "lock.shield")
+                    Label(L10n.t("main_transfer"), systemImage: "lock.shield")
                 }
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button("User Manual") {
+                    Button(L10n.t("main_user_manual")) {
                         showingHelp = true
                     }
-                    Button("Change Mode...") {
+                    Button(L10n.t("main_change_mode")) {
                         showingModeSelect = true
                     }
                     if appState.isProxyMode {
-                        Button("Recovery Guide...") {
+                        Button(L10n.t("main_recovery")) {
                             showingRecovery = true
                         }
-                        Button("Shell Cleanup...") {
+                        Button(L10n.t("main_shell_cleanup")) {
                             showingCleanup = true
                         }
                     }
                     Divider()
-                    Button("Show Tutorial") {
+                    Button(L10n.t("main_show_tutorial")) {
                         showingOnboarding = true
                     }
                 } label: {
-                    Label("Help", systemImage: "questionmark.circle")
+                    Label(L10n.t("main_help"), systemImage: "questionmark.circle")
                 }
             }
         }
