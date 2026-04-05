@@ -22,6 +22,7 @@ final class AppState {
     private static let proxyConsentKey = "proxy_mode_consent"
 
     let proxyServer = ProxyServer()
+    let proxyLogStore = ProxyLogStore()
 
     /// ユーザーが選択したキー管理モード（UserDefaults で永続化）
     var keyManagementMode: KeyManagementMode {

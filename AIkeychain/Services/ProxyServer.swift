@@ -95,72 +95,172 @@ final class ProxyServer {
 
         // Find route for this host
         guard let route = ProxyRoute.route(for: parsed.host) else {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: parsed.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: 502, latency: 0, isError: true
+            ))
             sendErrorResponse(connection: connection, statusCode: 502, message: "No proxy route for host: \(parsed.host)")
             return
         }
 
         // Read API key from Keychain
         guard let apiKey = try? keychainService.retrieve(for: route.keychainAccount), !apiKey.isEmpty else {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: route.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: 401, latency: 0, isError: true
+            ))
             sendErrorResponse(connection: connection, statusCode: 401, message: "API key not found in Keychain for \(route.keychainAccount)")
             return
         }
 
         // Forward request with injected auth header
-        forwardRequest(parsed: parsed, route: route, apiKey: apiKey, connection: connection)
+        forwardRequest(parsed: parsed, route: route, apiKey: apiKey, clientConnection: connection)
     }
 
-    private func forwardRequest(parsed: HTTPRequestParser.ParsedRequest, route: ProxyRoute, apiKey: String, connection: NWConnection) {
-        // Build upstream URL
-        guard let url = URL(string: "\(route.targetScheme)://\(route.host)\(parsed.path)") else {
-            sendErrorResponse(connection: connection, statusCode: 500, message: "Invalid upstream URL")
-            return
-        }
+    // MARK: - Upstream Forwarding (NWConnection-based)
 
-        var request = URLRequest(url: url)
-        request.httpMethod = parsed.method
-        request.timeoutInterval = 120
+    private func forwardRequest(parsed: HTTPRequestParser.ParsedRequest, route: ProxyRoute, apiKey: String, clientConnection: NWConnection) {
+        let requestStart = Date()
+
+        // Build upstream HTTP request
+        var requestLines = ["\(parsed.method) \(parsed.path) HTTP/1.1"]
+        requestLines.append("Host: \(route.host)")
+
+        // Inject auth header
+        let headerValue = route.headerValuePrefix + apiKey
+        requestLines.append("\(route.headerName): \(headerValue)")
 
         // Copy original headers (except Host and auth headers)
         for (name, value) in parsed.headers {
             let lower = name.lowercased()
             if lower == "host" || lower == "authorization" || lower == "x-api-key" { continue }
-            request.setValue(value, forHTTPHeaderField: name)
+            requestLines.append("\(name): \(value)")
         }
 
-        // Inject auth header from Keychain
-        let headerValue = route.headerValuePrefix + apiKey
-        request.setValue(headerValue, forHTTPHeaderField: route.headerName)
+        requestLines.append("Connection: close")
+        requestLines.append("")
+        requestLines.append("")
 
-        // Set correct Host
-        request.setValue(route.host, forHTTPHeaderField: "Host")
-
-        // Set body if present
+        var requestData = requestLines.joined(separator: "\r\n").data(using: .utf8)!
         if let body = parsed.body {
-            request.httpBody = body
+            requestData.append(body)
         }
 
-        // Execute request
-        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            defer { connection.cancel() }
+        // Connect to upstream via NWConnection (TLS)
+        let tlsParams = NWParameters.tls
+        let upstreamConnection = NWConnection(
+            host: NWEndpoint.Host(route.host),
+            port: .https,
+            using: tlsParams
+        )
 
-            if let error {
-                self?.sendErrorResponse(connection: connection, statusCode: 502, message: "Upstream error: \(error.localizedDescription)")
-                return
+        upstreamConnection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready:
+                // Connection established - send the request
+                upstreamConnection.send(content: requestData, completion: .contentProcessed { sendError in
+                    if let sendError {
+                        self?.logAndRespondError(
+                            clientConnection: clientConnection, requestStart: requestStart,
+                            route: route, parsed: parsed, latency: Date().timeIntervalSince(requestStart),
+                            message: "Upstream send error: \(sendError.localizedDescription)"
+                        )
+                        upstreamConnection.cancel()
+                        return
+                    }
+                    // Receive upstream response
+                    self?.receiveUpstreamResponse(
+                        upstream: upstreamConnection, clientConnection: clientConnection,
+                        requestStart: requestStart, route: route, parsed: parsed
+                    )
+                })
+
+            case .failed(let error):
+                self?.logAndRespondError(
+                    clientConnection: clientConnection, requestStart: requestStart,
+                    route: route, parsed: parsed, latency: Date().timeIntervalSince(requestStart),
+                    message: "Upstream connection failed: \(error.localizedDescription)"
+                )
+                upstreamConnection.cancel()
+
+            default:
+                break
             }
-
-            guard let httpResponse = response as? HTTPURLResponse, let data else {
-                self?.sendErrorResponse(connection: connection, statusCode: 502, message: "Invalid upstream response")
-                return
-            }
-
-            DispatchQueue.main.async {
-                self?.requestCount += 1
-            }
-
-            // Build HTTP response
-            self?.sendResponse(connection: connection, statusCode: httpResponse.statusCode, headers: httpResponse.allHeaderFields, body: data)
         }
-        task.resume()
+
+        upstreamConnection.start(queue: queue)
+    }
+
+    private func receiveUpstreamResponse(upstream: NWConnection, clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest) {
+        // Receive all data from upstream
+        var allData = Data()
+
+        func readMore() {
+            upstream.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+                if let data {
+                    allData.append(data)
+                }
+
+                if isComplete || error != nil {
+                    // All data received - forward to client
+                    upstream.cancel()
+                    let latency = Date().timeIntervalSince(requestStart)
+
+                    if allData.isEmpty {
+                        self?.logAndRespondError(
+                            clientConnection: clientConnection, requestStart: requestStart,
+                            route: route, parsed: parsed, latency: latency,
+                            message: "Empty upstream response"
+                        )
+                        return
+                    }
+
+                    // Parse status code from response for logging
+                    let statusCode = self?.parseStatusCode(from: allData) ?? 200
+
+                    AppState.shared.proxyLogStore.append(ProxyLog(
+                        timestamp: requestStart, service: route.host,
+                        method: parsed.method, path: parsed.path,
+                        statusCode: statusCode, latency: latency,
+                        isError: statusCode >= 400
+                    ))
+                    DispatchQueue.main.async { self?.requestCount += 1 }
+
+                    // Forward raw HTTP response to client
+                    clientConnection.send(content: allData, completion: .contentProcessed { _ in
+                        clientConnection.cancel()
+                    })
+                    return
+                }
+
+                // More data to read
+                readMore()
+            }
+        }
+
+        readMore()
+    }
+
+    private func parseStatusCode(from responseData: Data) -> Int {
+        guard let str = String(data: responseData.prefix(32), encoding: .utf8),
+              str.hasPrefix("HTTP/") else { return 200 }
+        // "HTTP/1.1 200 OK" → extract 200
+        let parts = str.split(separator: " ", maxSplits: 2)
+        if parts.count >= 2, let code = Int(parts[1]) {
+            return code
+        }
+        return 200
+    }
+
+    private func logAndRespondError(clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest, latency: TimeInterval, message: String) {
+        AppState.shared.proxyLogStore.append(ProxyLog(
+            timestamp: requestStart, service: route.host,
+            method: parsed.method, path: parsed.path,
+            statusCode: 502, latency: latency, isError: true
+        ))
+        sendErrorResponse(connection: clientConnection, statusCode: 502, message: message)
     }
 
     // MARK: - Response Helpers
