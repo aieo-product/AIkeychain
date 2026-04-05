@@ -11,7 +11,7 @@ struct ExportView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Export Keys")
+                Text(L10n.t("export_title"))
                     .font(AppFonts.sectionTitle)
                 Spacer()
                 Button { dismiss() } label: {
@@ -26,7 +26,7 @@ struct ExportView: View {
             Divider()
 
             // Format picker
-            Picker("Format", selection: $selectedFormat) {
+            Picker(L10n.t("export_format"), selection: $selectedFormat) {
                 ForEach(ExportFormat.allCases) { format in
                     Text(format.rawValue).tag(format)
                 }
@@ -52,7 +52,7 @@ struct ExportView: View {
             // Info
             HStack {
                 Image(systemName: "info.circle")
-                Text("\(keys.filter(\.isConfigured).count) configured keys will be exported")
+                Text(L10n.t("export_count").replacingOccurrences(of: "%d", with: "\(keys.filter(\.isConfigured).count)"))
                     .font(AppFonts.caption)
             }
             .foregroundStyle(.secondary)
@@ -64,7 +64,7 @@ struct ExportView: View {
             // Actions
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button(L10n.t("cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
 
                 Button {
@@ -75,10 +75,10 @@ struct ExportView: View {
                         copied = false
                     }
                 } label: {
-                    Label(copied ? "Copied!" : "Copy to Clipboard", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    Label(copied ? L10n.t("export_copied") : L10n.t("export_copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
 
-                Button("Save to File...") {
+                Button(L10n.t("export_save")) {
                     saveToFile()
                 }
                 .keyboardShortcut(.defaultAction)

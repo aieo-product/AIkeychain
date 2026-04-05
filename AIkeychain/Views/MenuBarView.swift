@@ -37,7 +37,7 @@ struct MenuBarView: View {
                 Image(systemName: modeIcon)
                     .font(.system(size: 10))
                     .foregroundStyle(modeColor)
-                Text("Mode: \(appState.keyManagementMode.displayName)")
+                Text(L10n.t("menubar_mode").replacingOccurrences(of: "%@", with: appState.keyManagementMode.displayName))
                     .font(.system(size: 11))
             }
 
@@ -47,19 +47,19 @@ struct MenuBarView: View {
                     Circle()
                         .fill(appState.proxyServer.isRunning ? Color.green : Color.red)
                         .frame(width: 8, height: 8)
-                    Text("Proxy: \(appState.proxyServer.isRunning ? "Running" : "Stopped")")
+                    Text(appState.proxyServer.isRunning ? L10n.t("menubar_proxy_running") : L10n.t("menubar_proxy_stopped"))
                 }
 
-                Text("Port: \(appState.proxyServer.port)")
+                Text(L10n.t("menubar_port").replacingOccurrences(of: "%@", with: "\(appState.proxyServer.port)"))
                     .foregroundStyle(.secondary)
-                Text("Requests: \(appState.proxyServer.requestCount)")
+                Text(L10n.t("menubar_requests").replacingOccurrences(of: "%@", with: "\(appState.proxyServer.requestCount)"))
                     .foregroundStyle(.secondary)
             }
 
             Divider()
 
             // Mode switch
-            Button("Change Mode...") {
+            Button(L10n.t("menubar_change_mode")) {
                 openWindow(id: "main")
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -70,17 +70,17 @@ struct MenuBarView: View {
             // Proxy controls (only in proxy mode)
             if appState.isProxyMode {
                 if appState.proxyServer.isRunning {
-                    Button("Stop Proxy") {
+                    Button(L10n.t("menubar_stop_proxy")) {
                         appState.stopProxy()
                     }
                 } else {
-                    Button("Start Proxy") {
+                    Button(L10n.t("menubar_start_proxy")) {
                         appState.startProxyIfNeeded()
                     }
                 }
 
                 // Port setting
-                Button("Change Port...") {
+                Button(L10n.t("menubar_change_port")) {
                     portText = "\(appState.proxyPort)"
                     portError = nil
                     showPortEditor.toggle()
@@ -92,7 +92,7 @@ struct MenuBarView: View {
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 70)
                             .onSubmit { applyPort() }
-                        Button("Apply") { applyPort() }
+                        Button(L10n.t("apply")) { applyPort() }
                             .controlSize(.small)
                     }
                     .padding(.leading, 4)
@@ -105,7 +105,7 @@ struct MenuBarView: View {
                     }
                 }
 
-                Button("Recovery Guide...") {
+                Button(L10n.t("menubar_recovery")) {
                     openWindow(id: "main")
                     NSApplication.shared.activate(ignoringOtherApps: true)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -117,26 +117,42 @@ struct MenuBarView: View {
             Divider()
 
             // Open main window
-            Button("Open KeyChain...") {
+            Button(L10n.t("menubar_open_keychain")) {
                 openWindow(id: "main")
                 NSApplication.shared.activate(ignoringOtherApps: true)
             }
             .keyboardShortcut("k", modifiers: [.command])
 
-            Button("Open Keychain Access") {
+            Button(L10n.t("menubar_open_keychain_access")) {
                 NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app"))
             }
 
             Divider()
 
-            Toggle("Launch at Login", isOn: Binding(
+            Toggle(L10n.t("menubar_launch_at_login"), isOn: Binding(
                 get: { appState.launchAtLogin },
                 set: { appState.launchAtLogin = $0 }
             ))
 
+            // Language switcher
+            Menu(L10n.t("menubar_language")) {
+                ForEach(AppLanguage.allCases) { lang in
+                    Button {
+                        appState.appLanguage = lang
+                    } label: {
+                        HStack {
+                            Text("\(lang.flag) \(lang.displayName)")
+                            if appState.appLanguage == lang {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+
             Divider()
 
-            Button("Shell Cleanup...") {
+            Button(L10n.t("menubar_shell_cleanup")) {
                 openWindow(id: "main")
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -144,10 +160,9 @@ struct MenuBarView: View {
                 }
             }
 
-            Button("Show Tutorial") {
+            Button(L10n.t("menubar_show_tutorial")) {
                 openWindow(id: "main")
                 NSApplication.shared.activate(ignoringOtherApps: true)
-                // Notify MainView to show onboarding
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     NotificationCenter.default.post(name: .showOnboarding, object: nil)
                 }
@@ -155,7 +170,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button("Quit") {
+            Button(L10n.t("menubar_quit")) {
                 appState.stopProxy()
                 NSApplication.shared.terminate(nil)
             }
@@ -166,7 +181,7 @@ struct MenuBarView: View {
 
     private func applyPort() {
         guard let value = UInt16(portText), value >= 1024 else {
-            portError = "1024〜65535 の範囲で指定"
+            portError = L10n.t("shell_port_error")
             return
         }
         portError = nil
