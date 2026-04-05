@@ -33,35 +33,41 @@ struct KeyEditorView: View {
                 // Service picker
                 if !viewModel.isEditing {
                     Picker("Service", selection: $viewModel.selectedService) {
+                        Text("Select a service...")
+                            .foregroundStyle(.secondary)
+                            .tag(ServiceType?.none)
                         ForEach(ServiceType.allCases) { service in
                             Label(service.displayName, systemImage: service.systemImage)
-                                .tag(service)
+                                .tag(ServiceType?.some(service))
                         }
                     }
                     .onChange(of: viewModel.selectedService) {
                         viewModel.onServiceChange()
                     }
-                } else {
+                } else if let service = viewModel.selectedService {
                     LabeledContent("Service") {
                         HStack(spacing: 8) {
-                            Image(systemName: viewModel.selectedService.systemImage)
-                                .foregroundStyle(viewModel.selectedService.category.color)
-                            Text(viewModel.selectedService.displayName)
+                            Image(systemName: service.systemImage)
+                                .foregroundStyle(service.category.color)
+                            Text(service.displayName)
                         }
                     }
                 }
 
                 // Category
                 Picker("Category", selection: $viewModel.selectedCategorySelection) {
+                    Text("Select a category...")
+                        .foregroundStyle(.secondary)
+                        .tag(CategorySelection?.none)
                     ForEach(KeyCategory.allCases) { cat in
                         Label(cat.rawValue, systemImage: cat.systemImage)
-                            .tag(CategorySelection.builtin(cat))
+                            .tag(CategorySelection?.some(.builtin(cat)))
                     }
                     if !CustomKeyStore.shared.categories.isEmpty {
                         Divider()
                         ForEach(CustomKeyStore.shared.categories) { cat in
                             Label(cat.name, systemImage: cat.systemImage)
-                                .tag(CategorySelection.custom(cat.id))
+                                .tag(CategorySelection?.some(.custom(cat.id)))
                         }
                     }
                 }
@@ -96,7 +102,7 @@ struct KeyEditorView: View {
                 }
 
                 // Setup URL
-                if let url = viewModel.selectedService.setupURL {
+                if let url = viewModel.selectedService?.setupURL {
                     Section {
                         Link(destination: url) {
                             Label("Get Token", systemImage: "arrow.up.right.square")
