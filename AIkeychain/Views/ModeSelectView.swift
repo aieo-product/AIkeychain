@@ -7,6 +7,7 @@ struct ModeSelectView: View {
     let appState: AppState
     @State private var selectedMode: KeyManagementMode
     @State private var showProxyConsent = false
+    @State private var showComparison = false
 
     init(appState: AppState = .shared) {
         self.appState = appState
@@ -105,12 +106,28 @@ struct ModeSelectView: View {
                     }
 
                     // Mode comparison detail
-                    DisclosureGroup("モード比較の詳細") {
-                        ModeComparisonView()
-                            .padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Button {
+                            withAnimation { showComparison.toggle() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: showComparison ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text("モード比較の詳細")
+                                    .font(.system(size: 13))
+                                Spacer()
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if showComparison {
+                            ModeComparisonView()
+                                .padding(.top, 4)
+                        }
                     }
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
                 }
                 .padding(.top, 16)
             }
@@ -201,6 +218,7 @@ private struct ModeCard: View {
                     .foregroundStyle(isSelected ? color : Color.gray.opacity(0.3))
             }
             .padding(14)
+            .contentShape(Rectangle())
             .background(
                 isSelected ? color.opacity(0.06) : Color.clear,
                 in: RoundedRectangle(cornerRadius: 12)
