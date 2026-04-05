@@ -14,7 +14,7 @@ struct ModeSelectView: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 0) {
             // Header
             HStack {
                 Image(systemName: "switch.2")
@@ -35,82 +35,89 @@ struct ModeSelectView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.bottom, 16)
 
             Divider()
 
-            // Mode cards
-            VStack(spacing: 12) {
-                ModeCard(
-                    mode: .standard,
-                    isSelected: selectedMode == .standard,
-                    title: "Standard",
-                    subtitle: "通常 Keychain 参照",
-                    icon: "key.fill",
-                    color: AppColors.commGreen,
-                    features: [
-                        "API キーを .zshrc で直接 export",
-                        "プロキシ不要 — シンプルで安定",
-                        "SSH 経由では Keychain 承認が必要な場合あり",
-                    ]
-                ) {
-                    selectedMode = .standard
-                }
+            // Scrollable content
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Mode cards
+                    VStack(spacing: 12) {
+                        ModeCard(
+                            mode: .standard,
+                            isSelected: selectedMode == .standard,
+                            title: "Standard",
+                            subtitle: "通常 Keychain 参照",
+                            icon: "key.fill",
+                            color: AppColors.commGreen,
+                            features: [
+                                "API キーを .zshrc で直接 export",
+                                "プロキシ不要 — シンプルで安定",
+                                "SSH 経由では Keychain 承認が必要な場合あり",
+                            ]
+                        ) {
+                            selectedMode = .standard
+                        }
 
-                ModeCard(
-                    mode: .secretReference,
-                    isSelected: selectedMode == .secretReference,
-                    title: "Secret Reference",
-                    subtitle: "keychain:// 参照（1Password 方式）",
-                    icon: "link.badge.plus",
-                    color: AppColors.cloudBlue,
-                    features: [
-                        "env にはパス情報のみ — キー値が露出しない",
-                        "akc run で実行時に Keychain から解決",
-                        "アプリ常時起動は不要",
-                    ]
-                ) {
-                    selectedMode = .secretReference
-                }
+                        ModeCard(
+                            mode: .secretReference,
+                            isSelected: selectedMode == .secretReference,
+                            title: "Secret Reference",
+                            subtitle: "keychain:// 参照（1Password 方式）",
+                            icon: "link.badge.plus",
+                            color: AppColors.cloudBlue,
+                            features: [
+                                "env にはパス情報のみ — キー値が露出しない",
+                                "akc run で実行時に Keychain から解決",
+                                "アプリ常時起動は不要",
+                            ]
+                        ) {
+                            selectedMode = .secretReference
+                        }
 
-                ModeCard(
-                    mode: .proxy,
-                    isSelected: selectedMode == .proxy,
-                    title: "Proxy",
-                    subtitle: "プロキシ経由（上級者向け）",
-                    icon: "shield.checkered",
-                    color: AppColors.aiPurple,
-                    features: [
-                        "env に API キーが露出しない",
-                        "SSH / Tailscale 経由でも Keychain 承認不要",
-                        "AI KeyChain アプリの常時起動が必須",
-                    ]
-                ) {
-                    if appState.hasProxyConsent {
-                        selectedMode = .proxy
-                    } else {
-                        showProxyConsent = true
+                        ModeCard(
+                            mode: .proxy,
+                            isSelected: selectedMode == .proxy,
+                            title: "Proxy",
+                            subtitle: "プロキシ経由（上級者向け）",
+                            icon: "shield.checkered",
+                            color: AppColors.aiPurple,
+                            features: [
+                                "env に API キーが露出しない",
+                                "SSH / Tailscale 経由でも Keychain 承認不要",
+                                "AI KeyChain アプリの常時起動が必須",
+                            ]
+                        ) {
+                            if appState.hasProxyConsent {
+                                selectedMode = .proxy
+                            } else {
+                                showProxyConsent = true
+                            }
+                        }
                     }
-                }
-            }
 
-            // Current mode indicator
-            if appState.keyManagementMode != selectedMode {
-                Label("適用ボタンでモードを切り替えます", systemImage: "arrow.triangle.2.circlepath")
+                    // Current mode indicator
+                    if appState.keyManagementMode != selectedMode {
+                        Label("適用ボタンでモードを切り替えます", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.orange)
+                    }
+
+                    // Mode comparison detail
+                    DisclosureGroup("モード比較の詳細") {
+                        ModeComparisonView()
+                            .padding(.top, 8)
+                    }
                     .font(.system(size: 12))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.top, 16)
             }
 
-            // Mode comparison detail
-            DisclosureGroup("モード比較の詳細") {
-                ModeComparisonView()
-                    .padding(.top, 8)
-            }
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
+            Divider()
 
-            Spacer()
-
-            // Actions
+            // Actions (fixed at bottom)
             HStack {
                 if appState.isProxyMode {
                     Button("Recovery Guide") {
@@ -133,6 +140,7 @@ struct ModeSelectView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(appState.keyManagementMode == selectedMode)
             }
+            .padding(.top, 16)
         }
         .padding(24)
         .frame(width: 540, height: 740)
