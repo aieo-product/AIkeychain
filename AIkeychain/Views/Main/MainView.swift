@@ -99,6 +99,25 @@ struct MainView: View {
                         }
                     }
                     Divider()
+
+                    // Language switcher
+                    Menu {
+                        ForEach(AppLanguage.allCases) { lang in
+                            Button {
+                                appState.appLanguage = lang
+                            } label: {
+                                HStack {
+                                    Text("\(lang.flag) \(lang.displayName)")
+                                    if appState.appLanguage == lang {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(L10n.t("menubar_language"), systemImage: "globe")
+                    }
+
                     Button(L10n.t("main_show_tutorial")) {
                         showingOnboarding = true
                     }
