@@ -24,7 +24,7 @@ struct ModeSelectView: View {
                 VStack(alignment: .leading) {
                     Text("Key Management Mode")
                         .font(AppFonts.sectionTitle)
-                    Text("API キーの管理方式を選択")
+                    Text(L10n.s(ja: "API キーの管理方式を選択", en: "Select API key management method"))
                         .font(AppFonts.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -49,13 +49,13 @@ struct ModeSelectView: View {
                             mode: .standard,
                             isSelected: selectedMode == .standard,
                             title: "Standard",
-                            subtitle: "通常 Keychain 参照",
+                            subtitle: L10n.s(ja: "通常 Keychain 参照", en: "Standard Keychain"),
                             icon: "key.fill",
                             color: AppColors.commGreen,
                             features: [
-                                "API キーを .zshrc で直接 export",
-                                "プロキシ不要 — シンプルで安定",
-                                "SSH 経由では Keychain 承認が必要な場合あり",
+                                L10n.s(ja: "API キーを .zshrc で直接 export", en: "Export API keys directly in .zshrc"),
+                                L10n.s(ja: "プロキシ不要 — シンプルで安定", en: "No proxy needed — simple and stable"),
+                                L10n.s(ja: "SSH 経由では Keychain 承認が必要な場合あり", en: "Keychain authorization may be required via SSH"),
                             ]
                         ) {
                             selectedMode = .standard
@@ -65,13 +65,13 @@ struct ModeSelectView: View {
                             mode: .secretReference,
                             isSelected: selectedMode == .secretReference,
                             title: "Secret Reference",
-                            subtitle: "keychain:// 参照（1Password 方式）",
+                            subtitle: L10n.s(ja: "keychain:// 参照（1Password 方式）", en: "keychain:// reference (1Password style)"),
                             icon: "link.badge.plus",
                             color: AppColors.cloudBlue,
                             features: [
-                                "env にはパス情報のみ — キー値が露出しない",
-                                "akc run で実行時に Keychain から解決",
-                                "アプリ常時起動は不要",
+                                L10n.s(ja: "env にはパス情報のみ — キー値が露出しない", en: "Only path info in env — key values are never exposed"),
+                                L10n.s(ja: "akc run で実行時に Keychain から解決", en: "Resolved from Keychain at runtime via akc run"),
+                                L10n.s(ja: "アプリ常時起動は不要", en: "App does not need to run constantly"),
                             ]
                         ) {
                             selectedMode = .secretReference
@@ -81,13 +81,13 @@ struct ModeSelectView: View {
                             mode: .proxy,
                             isSelected: selectedMode == .proxy,
                             title: "Proxy",
-                            subtitle: "プロキシ経由（上級者向け）",
+                            subtitle: L10n.s(ja: "プロキシ経由（上級者向け）", en: "Via proxy (advanced)"),
                             icon: "shield.checkered",
                             color: AppColors.aiPurple,
                             features: [
-                                "env に API キーが露出しない",
-                                "SSH / Tailscale 経由でも Keychain 承認不要",
-                                "AI KeyChain アプリの常時起動が必須",
+                                L10n.s(ja: "env に API キーが露出しない", en: "API keys are never exposed in env"),
+                                L10n.s(ja: "SSH / Tailscale 経由でも Keychain 承認不要", en: "No Keychain authorization needed via SSH / Tailscale"),
+                                L10n.s(ja: "AI KeyChain アプリの常時起動が必須", en: "AI KeyChain app must be running at all times"),
                             ]
                         ) {
                             if appState.hasProxyConsent {
@@ -100,7 +100,7 @@ struct ModeSelectView: View {
 
                     // Current mode indicator
                     if appState.keyManagementMode != selectedMode {
-                        Label("適用ボタンでモードを切り替えます", systemImage: "arrow.triangle.2.circlepath")
+                        Label(L10n.s(ja: "適用ボタンでモードを切り替えます", en: "Press Apply to switch modes"), systemImage: "arrow.triangle.2.circlepath")
                             .font(.system(size: 12))
                             .foregroundStyle(.orange)
                     }
@@ -113,7 +113,7 @@ struct ModeSelectView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: showComparison ? "chevron.down" : "chevron.right")
                                     .font(.system(size: 10, weight: .semibold))
-                                Text("モード比較の詳細")
+                                Text(L10n.s(ja: "モード比較の詳細", en: "Mode Comparison Details"))
                                     .font(.system(size: 13))
                                 Spacer()
                             }
@@ -245,32 +245,32 @@ struct ProxyConsentView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(.orange)
 
-            Text("Proxy Mode — 利用上の注意")
+            Text(L10n.s(ja: "Proxy Mode — 利用上の注意", en: "Proxy Mode — Important Notice"))
                 .font(.system(size: 16, weight: .bold))
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ConsentSection(icon: "exclamationmark.circle", color: .orange, items: [
-                        "Proxy モードでは AI KeyChain アプリが常時起動している必要があります",
-                        "アプリが停止すると AI API (Claude, OpenAI 等) への接続が一時的にできなくなります",
-                        "PC のシャットダウンや強制終了時にも同様の影響があります",
+                        L10n.s(ja: "Proxy モードでは AI KeyChain アプリが常時起動している必要があります", en: "Proxy mode requires the AI KeyChain app to be running at all times"),
+                        L10n.s(ja: "アプリが停止すると AI API (Claude, OpenAI 等) への接続が一時的にできなくなります", en: "If the app stops, connections to AI APIs (Claude, OpenAI, etc.) will be temporarily unavailable"),
+                        L10n.s(ja: "PC のシャットダウンや強制終了時にも同様の影響があります", en: "The same applies during PC shutdown or force quit"),
                     ])
 
                     Divider()
 
-                    Text("復旧方法")
+                    Text(L10n.s(ja: "復旧方法", en: "Recovery Steps"))
                         .font(.system(size: 13, weight: .semibold))
 
                     ConsentSection(icon: "wrench", color: .blue, items: [
-                        "AI KeyChain アプリを再起動すればプロキシが自動復旧します",
-                        "急ぎの場合は Standard モードに切り替えてください",
-                        "最終手段: ~/.aikeychain_proxy を手動削除すれば直接 API 接続に戻ります",
+                        L10n.s(ja: "AI KeyChain アプリを再起動すればプロキシが自動復旧します", en: "Restart the AI KeyChain app to automatically restore the proxy"),
+                        L10n.s(ja: "急ぎの場合は Standard モードに切り替えてください", en: "Switch to Standard mode if you need immediate access"),
+                        L10n.s(ja: "最終手段: ~/.aikeychain_proxy を手動削除すれば直接 API 接続に戻ります", en: "Last resort: manually delete ~/.aikeychain_proxy to restore direct API access"),
                     ])
 
                     Divider()
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("即時復旧コマンド（ターミナルで実行）:")
+                        Text(L10n.s(ja: "即時復旧コマンド（ターミナルで実行）:", en: "Immediate recovery command (run in Terminal):"))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.secondary)
                         Text("rm -f ~/.aikeychain_proxy && exec $SHELL")
@@ -286,14 +286,14 @@ struct ProxyConsentView: View {
             .frame(height: 280)
 
             Toggle(isOn: $agreed) {
-                Text("上記の注意事項を理解し、自己責任で利用します")
+                Text(L10n.s(ja: "上記の注意事項を理解し、自己責任で利用します", en: "I understand the above and accept responsibility"))
                     .font(.system(size: 12))
             }
 
             HStack {
                 Button("Cancel") { dismiss() }
                 Spacer()
-                Button("同意して有効化") {
+                Button(L10n.s(ja: "同意して有効化", en: "Agree and Enable")) {
                     onConsent()
                     dismiss()
                 }
