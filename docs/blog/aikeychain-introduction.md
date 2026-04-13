@@ -6,7 +6,7 @@
 - **想定読者**: macOS で AI 開発をしている個人開発者・小規模チーム
 - **キーワード**: API キー管理, macOS Keychain, プロキシ, Claude, OpenAI, セキュリティ, SwiftUI
 - **トーン**: 技術ブログ（実体験ベース、課題→解決の流れ）
-- **画像素材**: evidence/localhosteror.png, evidence/カスタムカテゴリ.png
+- **画像素材**: evidence/カスタムカテゴリ.png
 
 ---
 
@@ -33,8 +33,7 @@ export GITHUB_TOKEN=ghp_ENNotSwW...
 API Error: Unable to connect to API (ECONNREFUSED)
 ```
 
-> **画像: evidence/localhosteror.png**
-> localhost:9999 にプロキシ設定された状態で Claude が ECONNREFUSED エラーとなったスクリーンショット
+> localhost:9999 にプロキシ設定された状態で Claude が ECONNREFUSED エラーとなった
 
 原因は `.zshrc` に `ANTHROPIC_BASE_URL=http://localhost:9999` が書き込まれていたこと。プロキシサーバーが起動していない状態で、全ての API リクエストが存在しないプロキシに向かっていた。
 
@@ -225,6 +224,5 @@ macOS の GUI アプリは Finder 経由で起動するため、`.zshrc` で設�
 
 ## 補足: 記事化時の注意
 
-- `evidence/localhosteror.png` は実際のエラー画面のスクリーンショット。API キーの値が一部見えている可能性があるため、公開前にマスク処理が必要
-- `env` コマンドの出力例も同様にマスク処理すること
+- `env` コマンドの出力例はマスク処理すること
 - GitHub リポジトリの URL は公開後に差し替え
