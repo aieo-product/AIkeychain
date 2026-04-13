@@ -32,11 +32,17 @@ final class KeyEditorViewModel {
         return "Expected prefix: \(prefix)"
     }
 
+    /// envVarName が安全なシェル変数名パターンに一致するか
+    var isValidEnvVarName: Bool {
+        let trimmed = envVarName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil
+    }
+
     var canSave: Bool {
         selectedService != nil
         && selectedCategorySelection != nil
         && !tokenValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && !envVarName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && isValidEnvVarName
     }
 
     init(editingKey: APIKey? = nil,
