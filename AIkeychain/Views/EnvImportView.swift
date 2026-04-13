@@ -129,10 +129,10 @@ struct EnvImportView: View {
 
     private var stepSubtitle: String {
         switch currentStep {
-        case 0: "ターミナルで env を取得"
-        case 1: "貼り付けてスキャン"
-        case 2: "インポート内容を確認"
-        case 3: "完了"
+        case 0: L10n.s(ja: "ターミナルで env を取得", en: "Get env from terminal")
+        case 1: L10n.s(ja: "貼り付けてスキャン", en: "Paste and scan")
+        case 2: L10n.s(ja: "インポート内容を確認", en: "Review import contents")
+        case 3: L10n.s(ja: "完了", en: "Done")
         default: ""
         }
     }
@@ -144,33 +144,33 @@ struct EnvImportView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Spacer(minLength: 10)
 
-                Text("ターミナルで以下のコマンドを実行し、結果をコピーしてください。")
+                Text(L10n.s(ja: "ターミナルで以下のコマンドを実行し、結果をコピーしてください。", en: "Run the following command in Terminal and copy the result."))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
 
                 CommandBlock(
-                    title: "API キー・トークンを抽出",
+                    title: L10n.s(ja: "API キー・トークンを抽出", en: "Extract API keys and tokens"),
                     command: "env | grep -E 'API_KEY|TOKEN|SECRET|ACCOUNT_ID|AUTH_KEY'"
                 )
 
                 CommandBlock(
-                    title: "全 env を取得（上記で不足の場合）",
+                    title: L10n.s(ja: "全 env を取得（上記で不足の場合）", en: "Get all env (if the above is insufficient)"),
                     command: "env"
                 )
 
                 CommandBlock(
-                    title: ".zshrc の export 行を取得",
+                    title: L10n.s(ja: ".zshrc の export 行を取得", en: "Get export lines from .zshrc"),
                     command: "grep '^export' ~/.zshrc"
                 )
 
                 if let envPath = findLocalEnvFile() {
                     CommandBlock(
-                        title: ".env ファイルの内容を取得",
+                        title: L10n.s(ja: ".env ファイルの内容を取得", en: "Get .env file contents"),
                         command: "cat \(envPath)"
                     )
                 }
 
-                Label("コマンドの実行結果をコピーしたら「I have the env copied」をクリック",
+                Label(L10n.s(ja: "コマンドの実行結果をコピーしたら「I have the env copied」をクリック", en: "After copying the command output, click \"I have the env copied\""),
                       systemImage: "arrow.right.circle")
                     .font(.system(size: 12))
                     .foregroundStyle(AppColors.aiPurple)
@@ -186,7 +186,7 @@ struct EnvImportView: View {
     private var step2PasteAndScan: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("env の内容を貼り付けてください:")
+                Text(L10n.s(ja: "env の内容を貼り付けてください:", en: "Paste the env contents:"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
 
@@ -205,7 +205,7 @@ struct EnvImportView: View {
                 HStack {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
-                    Text("有効な env 変数が見つかりません")
+                    Text(L10n.s(ja: "有効な env 変数が見つかりません", en: "No valid env variables found"))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -234,7 +234,7 @@ struct EnvImportView: View {
                                 }
                             }
                         } header: {
-                            Label("Proxy 移行推奨 — env から API キーが丸見えです", systemImage: "exclamationmark.shield")
+                            Label(L10n.s(ja: "Proxy 移行推奨 — env から API キーが丸見えです", en: "Proxy migration recommended — API keys are exposed in env"), systemImage: "exclamationmark.shield")
                                 .foregroundStyle(.red)
                                 .font(.system(size: 11))
                         }
@@ -250,7 +250,7 @@ struct EnvImportView: View {
                                 }
                             }
                         } header: {
-                            Label("利用状況を確認", systemImage: "questionmark.circle")
+                            Label(L10n.s(ja: "利用状況を確認", en: "Check usage"), systemImage: "questionmark.circle")
                                 .foregroundStyle(.orange)
                                 .font(.system(size: 11))
                         }
@@ -266,7 +266,7 @@ struct EnvImportView: View {
                                 }
                             }
                         } header: {
-                            Label("Keychain 保存可能", systemImage: "checkmark.circle")
+                            Label(L10n.s(ja: "Keychain 保存可能", en: "Ready to save to Keychain"), systemImage: "checkmark.circle")
                                 .foregroundStyle(.green)
                                 .font(.system(size: 11))
                         }
@@ -282,7 +282,7 @@ struct EnvImportView: View {
                                 }
                             }
                         } header: {
-                            Label("その他", systemImage: "key")
+                            Label(L10n.s(ja: "その他", en: "Other"), systemImage: "key")
                                 .foregroundStyle(.secondary)
                                 .font(.system(size: 11))
                         }
@@ -302,7 +302,7 @@ struct EnvImportView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Spacer(minLength: 10)
 
-                Text("以下のキーを Keychain に保存します")
+                Text(L10n.s(ja: "以下のキーを Keychain に保存します", en: "The following keys will be saved to Keychain"))
                     .font(.system(size: 14, weight: .medium))
 
                 VStack(spacing: 1) {
@@ -354,9 +354,9 @@ struct EnvImportView: View {
                 // .zshrc cleanup option
                 Toggle(isOn: $removeFromZshrc) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(".zshrc から該当する export 行を削除する")
+                        Text(L10n.s(ja: ".zshrc から該当する export 行を削除する", en: "Remove matching export lines from .zshrc"))
                             .font(.system(size: 12, weight: .medium))
-                        Text("Keychain に移行後、env への露出を防ぎます。バックアップが自動作成されます。")
+                        Text(L10n.s(ja: "Keychain に移行後、env への露出を防ぎます。バックアップが自動作成されます。", en: "Prevents env exposure after migrating to Keychain. A backup is created automatically."))
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
@@ -365,14 +365,14 @@ struct EnvImportView: View {
                 .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("保存先: macOS Keychain (com.aieo.aikeychain)", systemImage: "lock.shield")
+                    Label(L10n.s(ja: "保存先: macOS Keychain (com.aieo.aikeychain)", en: "Destination: macOS Keychain (com.aieo.aikeychain)"), systemImage: "lock.shield")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
                     if AppState.shared.isProxyMode {
                         let aiCount = selected.filter { isAIKey($0.key) }.count
                         if aiCount > 0 {
-                            Label("AI API キー \(aiCount)件: Proxy 経由で env に露出せず利用可能",
+                            Label(L10n.s(ja: "AI API キー \(aiCount)件: Proxy 経由で env に露出せず利用可能", en: "\(aiCount) AI API key(s): available via Proxy without env exposure"),
                                   systemImage: "shield.checkered")
                                 .font(.system(size: 11))
                                 .foregroundStyle(AppColors.aiPurple)
@@ -425,12 +425,12 @@ struct EnvImportView: View {
                         Label("Backup: ~/.zshrc.aikeychain.bak", systemImage: "doc.badge.clock")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                        Label("新しいターミナルを開くと反映されます", systemImage: "terminal")
+                        Label(L10n.s(ja: "新しいターミナルを開くと反映されます", en: "Changes will take effect in a new terminal session"), systemImage: "terminal")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
                 } else if result.saved > 0 {
-                    Label("新しいターミナルを開くと反映されます", systemImage: "terminal")
+                    Label(L10n.s(ja: "新しいターミナルを開くと反映されます", en: "Changes will take effect in a new terminal session"), systemImage: "terminal")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }

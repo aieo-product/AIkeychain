@@ -70,7 +70,7 @@ struct SetupView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Shell Configuration")
                             .font(.system(size: 14, weight: .medium))
-                        Text("プロキシ起動中のみ BASE_URL を自動設定（停止時は自動削除）")
+                        Text(L10n.s(ja: "プロキシ起動中のみ BASE_URL を自動設定（停止時は自動削除）", en: "Auto-sets BASE_URL while proxy is running (auto-removed when stopped)"))
                             .font(AppFonts.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -147,7 +147,7 @@ struct SetupView: View {
 
     private func applyPort() {
         guard let value = UInt16(portText), value >= 1024 else {
-            errorMessage = "ポート番号は 1024〜65535 の範囲で指定してください"
+            errorMessage = L10n.s(ja: "ポート番号は 1024〜65535 の範囲で指定してください", en: "Port number must be between 1024 and 65535")
             return
         }
         errorMessage = nil

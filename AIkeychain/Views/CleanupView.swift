@@ -18,7 +18,7 @@ struct CleanupView: View {
                     VStack(alignment: .leading) {
                         Text("Shell Cleanup")
                             .font(AppFonts.sectionTitle)
-                        Text("API キーの直接参照を安全に除去")
+                        Text(L10n.s(ja: "API キーの直接参照を安全に除去", en: "Safely remove direct API key references"))
                             .font(AppFonts.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -35,19 +35,29 @@ struct CleanupView: View {
 
                 // Why
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("なぜクリーンアップが必要？", systemImage: "exclamationmark.triangle")
+                    Label(L10n.s(ja: "なぜクリーンアップが必要？", en: "Why is cleanup needed?"), systemImage: "exclamationmark.triangle")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.orange)
 
-                    Text("""
-                    .zshrc に `export API_KEY=$(security find-generic-password ...)` の形式で API キーを取得していると:
+                    Text(L10n.s(
+                        ja: """
+                        .zshrc に `export API_KEY=$(security find-generic-password ...)` の形式で API キーを取得していると:
 
-                    1. **env コマンドでキーが丸見え** — AI ツールが意図せずキーを読み取るリスク
-                    2. **SSH 経由で Keychain 承認ダイアログが出せない** — Tailscale SSH 等でエラーになる
-                    3. **シェル起動が遅くなる** — Keychain アクセスに時間がかかる
+                        1. **env コマンドでキーが丸見え** — AI ツールが意図せずキーを読み取るリスク
+                        2. **SSH 経由で Keychain 承認ダイアログが出せない** — Tailscale SSH 等でエラーになる
+                        3. **シェル起動が遅くなる** — Keychain アクセスに時間がかかる
 
-                    AI KeyChain プロキシ経由なら、これらの問題を全て解決できます。
-                    """)
+                        AI KeyChain プロキシ経由なら、これらの問題を全て解決できます。
+                        """,
+                        en: """
+                        If your .zshrc fetches API keys with `export API_KEY=$(security find-generic-password ...)`:
+
+                        1. **Keys are visible via env command** — risk of AI tools reading keys unintentionally
+                        2. **Cannot show Keychain auth dialog via SSH** — causes errors with Tailscale SSH, etc.
+                        3. **Slower shell startup** — Keychain access takes time
+
+                        Using AI KeyChain proxy solves all of these issues.
+                        """))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 }
@@ -59,17 +69,17 @@ struct CleanupView: View {
                 // Step 1: 調査
                 CommandSection(
                     step: "1",
-                    title: "現在の .zshrc を調査",
-                    description: ".zshrc に残っている API キーの直接参照を確認します。",
+                    title: L10n.s(ja: "現在の .zshrc を調査", en: "Inspect current .zshrc"),
+                    description: L10n.s(ja: ".zshrc に残っている API キーの直接参照を確認します。", en: "Check for direct API key references remaining in .zshrc."),
                     command: "grep -n 'security find-generic-password' ~/.zshrc",
-                    note: "結果が表示された行が、API キーを環境変数に直接読み込んでいる箇所です。"
+                    note: L10n.s(ja: "結果が表示された行が、API キーを環境変数に直接読み込んでいる箇所です。", en: "Lines shown in the result are where API keys are loaded directly into environment variables.")
                 )
 
                 // Step 2: AI系キーの削除
                 CommandSection(
                     step: "2",
-                    title: "AI 系 API キーの直接参照を削除",
-                    description: "プロキシ対応の AI API キーは BASE_URL 経由に切り替えます。\n以下のコマンドで該当行を削除してください。",
+                    title: L10n.s(ja: "AI 系 API キーの直接参照を削除", en: "Remove direct AI API key references"),
+                    description: L10n.s(ja: "プロキシ対応の AI API キーは BASE_URL 経由に切り替えます。\n以下のコマンドで該当行を削除してください。", en: "Switch proxy-compatible AI API keys to use BASE_URL.\nDelete the matching lines with the commands below."),
                     command: """
                     # 削除対象の行を確認（ドライラン）
                     grep -n 'ANTHROPIC_API_KEY\\|OPENAI_API_KEY\\|XAI_API_KEY' ~/.zshrc | grep 'security'
@@ -79,14 +89,14 @@ struct CleanupView: View {
                     sed -i '' '/security.*OPENAI_API_KEY/d' ~/.zshrc
                     sed -i '' '/security.*XAI_API_KEY/d' ~/.zshrc
                     """,
-                    note: "削除後、代わりに BASE_URL を追加してください（Step 3）。"
+                    note: L10n.s(ja: "削除後、代わりに BASE_URL を追加してください（Step 3）。", en: "After deletion, add the BASE_URL instead (Step 3).")
                 )
 
                 // Step 3: BASE_URL追加
                 CommandSection(
                     step: "3",
-                    title: "プロキシ BASE_URL を設定",
-                    description: "以下を .zshrc に追加します。アプリの「Enable Secure Proxy」ボタンでも自動設定できます。",
+                    title: L10n.s(ja: "プロキシ BASE_URL を設定", en: "Configure proxy BASE_URL"),
+                    description: L10n.s(ja: "以下を .zshrc に追加します。アプリの「Enable Secure Proxy」ボタンでも自動設定できます。", en: "Add the following to .zshrc. You can also auto-configure via the \"Enable Secure Proxy\" button in the app."),
                     command: """
                     cat >> ~/.zshrc << 'EOF'
 
@@ -97,14 +107,14 @@ struct CleanupView: View {
                     # --- End AI KeyChain ---
                     EOF
                     """,
-                    note: "既に設定済みの場合は重複追加しないでください。"
+                    note: L10n.s(ja: "既に設定済みの場合は重複追加しないでください。", en: "Do not add duplicates if already configured.")
                 )
 
                 // Step 4: 非AI系の確認
                 CommandSection(
                     step: "4",
-                    title: "非 AI 系トークンの確認（任意）",
-                    description: "Cloudflare / GitHub / GitLab 等のトークンもクリーンアップしたい場合。\nこれらはプロキシ非対応のため、用途に応じて判断してください。",
+                    title: L10n.s(ja: "非 AI 系トークンの確認（任意）", en: "Check non-AI tokens (optional)"),
+                    description: L10n.s(ja: "Cloudflare / GitHub / GitLab 等のトークンもクリーンアップしたい場合。\nこれらはプロキシ非対応のため、用途に応じて判断してください。", en: "For cleaning up Cloudflare / GitHub / GitLab tokens as well.\nThese are not proxy-compatible, so decide based on your use case."),
                     command: """
                     # 残っている security 参照を一覧
                     grep -n 'security find-generic-password' ~/.zshrc
@@ -115,23 +125,23 @@ struct CleanupView: View {
                       -s "GITHUB_TOKEN" -a "$USER" \\
                       -S "apple-tool:,apple:" -k "ログインパスワード"
                     """,
-                    note: "ACL 設定はローカルの GUI セッションで実行してください。"
+                    note: L10n.s(ja: "ACL 設定はローカルの GUI セッションで実行してください。", en: "Run ACL configuration in a local GUI session.")
                 )
 
                 // Step 5: 反映
                 CommandSection(
                     step: "5",
-                    title: "設定を反映",
-                    description: "変更を現在のシェルに反映します。",
+                    title: L10n.s(ja: "設定を反映", en: "Apply changes"),
+                    description: L10n.s(ja: "変更を現在のシェルに反映します。", en: "Apply the changes to the current shell."),
                     command: "source ~/.zshrc",
-                    note: "新しいターミナルを開いても反映されます。"
+                    note: L10n.s(ja: "新しいターミナルを開いても反映されます。", en: "Changes will also take effect in new terminal windows.")
                 )
 
                 // Step 6: 確認
                 CommandSection(
                     step: "6",
-                    title: "確認",
-                    description: "env に API キーが露出していないことを確認します。",
+                    title: L10n.s(ja: "確認", en: "Verify"),
+                    description: L10n.s(ja: "env に API キーが露出していないことを確認します。", en: "Verify that API keys are not exposed in env."),
                     command: """
                     # AI API キーが env に出ていないことを確認
                     env | grep -i 'ANTHROPIC_API_KEY\\|OPENAI_API_KEY\\|XAI_API_KEY'
@@ -139,7 +149,7 @@ struct CleanupView: View {
                     # BASE_URL が設定されていることを確認
                     env | grep -i 'BASE_URL'
                     """,
-                    note: "API_KEY の grep 結果が空なら成功です。BASE_URL が表示されれば OK。"
+                    note: L10n.s(ja: "API_KEY の grep 結果が空なら成功です。BASE_URL が表示されれば OK。", en: "Success if the API_KEY grep returns empty. OK if BASE_URL is shown.")
                 )
             }
             .padding(24)

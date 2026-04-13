@@ -1,7 +1,6 @@
 import SwiftUI
 
 /// プロキシモードの復旧ガイド
-/// API 接続ができなくなった場合の復旧手順を表示する
 struct RecoveryView: View {
     @Environment(\.dismiss) private var dismiss
     let appState: AppState
@@ -19,9 +18,9 @@ struct RecoveryView: View {
                         .font(.system(size: 28))
                         .foregroundStyle(.orange)
                     VStack(alignment: .leading) {
-                        Text("Recovery Guide")
+                        Text(L10n.t("recovery_title"))
                             .font(AppFonts.sectionTitle)
-                        Text("プロキシモード復旧ガイド")
+                        Text(L10n.t("recovery_subtitle"))
                             .font(AppFonts.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -41,10 +40,12 @@ struct RecoveryView: View {
                     Circle()
                         .fill(appState.proxyServer.isRunning ? Color.green : Color.red)
                         .frame(width: 10, height: 10)
-                    Text("Proxy: \(appState.proxyServer.isRunning ? "Running (Port \(appState.proxyPort))" : "Stopped")")
+                    Text(appState.proxyServer.isRunning
+                         ? L10n.t("recovery_running").replacingOccurrences(of: "%@", with: "\(appState.proxyPort)")
+                         : L10n.t("recovery_stopped"))
                         .font(.system(size: 13, weight: .medium))
                     Spacer()
-                    Text("Mode: \(appState.isProxyMode ? "Proxy" : "Standard")")
+                    Text(L10n.t("recovery_mode").replacingOccurrences(of: "%@", with: appState.keyManagementMode.displayName))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -53,47 +54,47 @@ struct RecoveryView: View {
 
                 // Recovery options
                 VStack(alignment: .leading, spacing: 16) {
-
                     RecoveryOption(
                         step: "1",
-                        title: "AI KeyChain を再起動",
-                        description: "最も簡単な方法です。アプリを再起動すればプロキシが自動復旧します。",
+                        title: L10n.t("recovery_restart_title"),
+                        description: L10n.t("recovery_restart_desc"),
                         command: nil,
                         severity: .info
                     )
 
                     RecoveryOption(
                         step: "2",
-                        title: "Standard モードに切り替え",
-                        description: "プロキシを使わず、従来の Keychain 直接参照に戻します。",
+                        title: L10n.t("recovery_switch_title"),
+                        description: L10n.t("recovery_switch_desc"),
                         command: nil,
                         severity: .info,
-                        action: appState.isProxyMode ? ("Switch to Standard", {
+                        action: appState.isProxyMode ? (L10n.s(ja: "Standard に切替", en: "Switch to Standard"), {
                             AppState.shared.switchMode(to: .standard)
                         }) : nil
                     )
 
                     RecoveryOption(
                         step: "3",
-                        title: "設定ファイルを手動削除（即時復旧）",
-                        description: "ターミナルで以下を実行すると、プロキシ設定が即座に解除され、直接 API 接続に戻ります。",
+                        title: L10n.t("recovery_manual_title"),
+                        description: L10n.t("recovery_manual_desc"),
                         command: "rm -f ~/.aikeychain_proxy && exec $SHELL",
                         severity: .warning
                     )
 
                     RecoveryOption(
                         step: "4",
-                        title: ".zshrc のフックを削除（完全除去）",
-                        description: "プロキシモードを完全に無効化し、.zshrc からフックも削除します。",
+                        title: L10n.t("recovery_zshrc_title"),
+                        description: L10n.s(ja: "プロキシモードを完全に無効化し、.zshrc からフックも削除します。",
+                                            en: "Completely disable proxy mode and remove the hook from .zshrc."),
                         command: """
-                        # フックを削除
+                        # \(L10n.s(ja: "フックを削除", en: "Remove hook"))
                         sed -i '' '/aikeychain_proxy/d' ~/.zshrc
                         sed -i '' '/AI KeyChain.*proxy env/d' ~/.zshrc
 
-                        # 設定ファイルも削除
+                        # \(L10n.s(ja: "設定ファイルも削除", en: "Remove config file"))
                         rm -f ~/.aikeychain_proxy
 
-                        # シェルを再読み込み
+                        # \(L10n.s(ja: "シェルを再読み込み", en: "Reload shell"))
                         exec $SHELL
                         """,
                         severity: .destructive
@@ -104,20 +105,38 @@ struct RecoveryView: View {
 
                 // FAQ
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("FAQ")
+                    Text(L10n.t("recovery_faq"))
                         .font(.system(size: 14, weight: .semibold))
 
                     FAQItem(
-                        q: "PC を強制シャットダウンしたら Claude が使えなくなった",
-                        a: "AI KeyChain アプリを起動してください。プロキシが自動起動し復旧します。急ぎの場合は Step 3 のコマンドを実行してください。"
+                        q: L10n.s(ja: "PC を強制シャットダウンしたら Claude が使えなくなった",
+                                  en: "Claude stopped working after a forced shutdown"),
+                        a: L10n.s(ja: "AI KeyChain アプリを起動してください。プロキシが自動起動し復旧します。急ぎの場合は Step 3 のコマンドを実行してください。",
+                                  en: "Launch AI KeyChain. The proxy will auto-start and recover. For urgent cases, run the Step 3 command.")
                     )
                     FAQItem(
-                        q: "ECONNREFUSED エラーが出る",
-                        a: "プロキシが停止しています。AI KeyChain を起動するか、Step 3 で設定ファイルを削除してください。"
+                        q: L10n.s(ja: "ECONNREFUSED エラーが出る",
+                                  en: "Getting ECONNREFUSED error"),
+                        a: L10n.s(ja: "プロキシが停止しています。AI KeyChain を起動するか、Step 3 で設定ファイルを削除してください。",
+                                  en: "The proxy is stopped. Launch AI KeyChain or delete the config file via Step 3.")
                     )
                     FAQItem(
-                        q: "元の方式に完全に戻したい",
-                        a: "Step 2 で Standard モードに切り替えてください。.zshrc のフックも削除したい場合は Step 4 を実行してください。"
+                        q: L10n.s(ja: "元の方式に完全に戻したい",
+                                  en: "Want to revert completely to the original method"),
+                        a: L10n.s(ja: "Step 2 で Standard モードに切り替えてください。.zshrc のフックも削除したい場合は Step 4 を実行してください。",
+                                  en: "Switch to Standard mode in Step 2. To also remove the .zshrc hook, run Step 4.")
+                    )
+                    FAQItem(
+                        q: L10n.s(ja: "akc run で「keychain:// が解決できない」と出る",
+                                  en: "akc run says \"keychain:// cannot be resolved\""),
+                        a: L10n.s(ja: "該当するキーが Keychain に登録されているか確認してください。akc run --dry-run で解決可能なキーを確認できます。",
+                                  en: "Verify the key is registered in Keychain. Use akc run --dry-run to check which keys can be resolved.")
+                    )
+                    FAQItem(
+                        q: L10n.s(ja: "Secret Reference モードで SDK が認証エラーになる",
+                                  en: "SDK auth error in Secret Reference mode"),
+                        a: L10n.s(ja: "akc run -- <command> でラップして実行してください。直接実行すると keychain:// の文字列がそのまま送信されます。",
+                                  en: "Wrap your command with akc run -- <command>. Running directly sends the keychain:// string as-is.")
                     )
                 }
             }
@@ -178,7 +197,7 @@ private struct RecoveryOption: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .help("Copy")
+                        .help(L10n.t("copy"))
                     }
                     .padding(8)
                     .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))

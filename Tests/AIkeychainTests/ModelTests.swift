@@ -75,11 +75,12 @@ struct KeyCategoryTests {
 @Suite("KeyEditorViewModel Tests")
 struct KeyEditorViewModelTests {
 
-    @Test("New editor defaults to anthropic")
+    @Test("New editor starts with no selection")
     func defaultService() {
         let vm = KeyEditorViewModel(keychainService: MockKeychainService())
-        #expect(vm.selectedService == .anthropic)
-        #expect(vm.envVarName == "ANTHROPIC_API_KEY")
+        #expect(vm.selectedService == nil)
+        #expect(vm.envVarName == "")
+        #expect(vm.selectedCategorySelection == nil)
     }
 
     @Test("Service change updates env var name")
@@ -88,6 +89,7 @@ struct KeyEditorViewModelTests {
         vm.selectedService = .github
         vm.onServiceChange()
         #expect(vm.envVarName == "GITHUB_TOKEN")
+        #expect(vm.selectedCategorySelection == .builtin(.codeAndGit))
     }
 
     @Test("Prefix warning shows for wrong prefix")
@@ -106,16 +108,47 @@ struct KeyEditorViewModelTests {
         #expect(vm.prefixWarning == nil)
     }
 
+    @Test("No prefix warning when service not selected")
+    func noPrefixWarningNoService() {
+        let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.tokenValue = "any-value"
+        #expect(vm.prefixWarning == nil)
+    }
+
+    @Test("Cannot save without service selection")
+    func cannotSaveNoService() {
+        let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.tokenValue = "test"
+        vm.envVarName = "TEST_KEY"
+        #expect(vm.canSave == false)
+    }
+
+    @Test("Cannot save without category selection")
+    func cannotSaveNoCategory() {
+        let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.selectedService = .anthropic
+        vm.envVarName = "ANTHROPIC_API_KEY"
+        vm.tokenValue = "test"
+        vm.selectedCategorySelection = nil
+        #expect(vm.canSave == false)
+    }
+
     @Test("Cannot save with empty token")
     func cannotSaveEmpty() {
         let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.selectedService = .anthropic
+        vm.selectedCategorySelection = .builtin(.ai)
+        vm.envVarName = "ANTHROPIC_API_KEY"
         vm.tokenValue = ""
         #expect(vm.canSave == false)
     }
 
-    @Test("Can save with valid token")
+    @Test("Can save with valid selection and token")
     func canSaveValid() {
         let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.selectedService = .anthropic
+        vm.selectedCategorySelection = .builtin(.ai)
+        vm.envVarName = "ANTHROPIC_API_KEY"
         vm.tokenValue = "sk-ant-test123"
         #expect(vm.canSave == true)
     }
@@ -124,10 +157,12 @@ struct KeyEditorViewModelTests {
     func saveStoresValue() throws {
         let mock = MockKeychainService()
         let vm = KeyEditorViewModel(keychainService: mock)
+        vm.selectedService = .anthropic
+        vm.selectedCategorySelection = .builtin(.ai)
         vm.tokenValue = "test-token"
-        vm.envVarName = "TEST_KEY"
+        vm.envVarName = "ANTHROPIC_API_KEY"
         try vm.save()
-        #expect(mock.store["TEST_KEY"] == "test-token")
+        #expect(mock.store["ANTHROPIC_API_KEY"] == "test-token")
     }
 
     @Test("Editing key loads existing value")
