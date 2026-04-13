@@ -13,6 +13,10 @@ final class ProxyServer {
     var requestCount: Int = 0
     var lastError: String?
 
+    /// セッションごとのランダム認証トークン（プロキシ起動時に生成）
+    private(set) var sessionToken: String = ""
+    static let tokenHeaderName = "X-AIKeyChain-Token"
+
     private var listener: NWListener?
     private let keychainService: KeychainServiceProtocol
     private let queue = DispatchQueue(label: "com.aieo.aikeychain.proxy", qos: .userInitiated)
@@ -23,6 +27,7 @@ final class ProxyServer {
 
     func start() throws {
         guard !isRunning else { return }
+        sessionToken = UUID().uuidString
 
         let params = NWParameters.tcp
         params.acceptLocalOnly = true // localhost のみ
@@ -93,6 +98,13 @@ final class ProxyServer {
             return
         }
 
+        // セッショントークン認証（必須）
+        let tokenHeader = parsed.headers.first(where: { $0.name.lowercased() == Self.tokenHeaderName.lowercased() })?.value
+        guard tokenHeader == sessionToken, !sessionToken.isEmpty else {
+            sendErrorResponse(connection: connection, statusCode: 403, message: "Missing or invalid session token")
+            return
+        }
+
         // Find route for this host
         guard let route = ProxyRoute.route(for: parsed.host) else {
             AppState.shared.proxyLogStore.append(ProxyLog(
@@ -132,10 +144,11 @@ final class ProxyServer {
         let headerValue = route.headerValuePrefix + apiKey
         requestLines.append("\(route.headerName): \(headerValue)")
 
-        // Copy original headers (except Host and auth headers)
+        // Copy original headers (except Host, auth headers, and internal token)
+        let tokenHeaderLower = Self.tokenHeaderName.lowercased()
         for (name, value) in parsed.headers {
             let lower = name.lowercased()
-            if lower == "host" || lower == "authorization" || lower == "x-api-key" { continue }
+            if lower == "host" || lower == "authorization" || lower == "x-api-key" || lower == tokenHeaderLower { continue }
             requestLines.append("\(name): \(value)")
         }
 
@@ -194,7 +207,9 @@ final class ProxyServer {
     }
 
     private func receiveUpstreamResponse(upstream: NWConnection, clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest) {
-        // Receive all data from upstream
+        // Receive all data from upstream then forward to client
+        // Note: NWConnection の send は中間チャンクをフラッシュしないため、
+        // ストリーミング転送ではなくバッファリング方式を使用
         var allData = Data()
 
         func readMore() {
@@ -204,7 +219,6 @@ final class ProxyServer {
                 }
 
                 if isComplete || error != nil {
-                    // All data received - forward to client
                     upstream.cancel()
                     let latency = Date().timeIntervalSince(requestStart)
 
@@ -212,12 +226,11 @@ final class ProxyServer {
                         self?.logAndRespondError(
                             clientConnection: clientConnection, requestStart: requestStart,
                             route: route, parsed: parsed, latency: latency,
-                            message: "Empty upstream response"
+                            message: error.map { "Upstream error: \($0.localizedDescription)" } ?? "Empty upstream response"
                         )
                         return
                     }
 
-                    // Parse status code from response for logging
                     let statusCode = self?.parseStatusCode(from: allData) ?? 200
 
                     AppState.shared.proxyLogStore.append(ProxyLog(
@@ -228,14 +241,12 @@ final class ProxyServer {
                     ))
                     DispatchQueue.main.async { self?.requestCount += 1 }
 
-                    // Forward raw HTTP response to client
                     clientConnection.send(content: allData, completion: .contentProcessed { _ in
                         clientConnection.cancel()
                     })
                     return
                 }
 
-                // More data to read
                 readMore()
             }
         }
@@ -290,7 +301,8 @@ final class ProxyServer {
     }
 
     private func sendErrorResponse(connection: NWConnection, statusCode: Int, message: String) {
-        let body = "{\"error\":\"\(message)\"}".data(using: .utf8)!
+        let json: [String: String] = ["error": message]
+        let body = (try? JSONSerialization.data(withJSONObject: json)) ?? Data("{}".utf8)
         let headers: [AnyHashable: Any] = ["Content-Type": "application/json"]
         sendResponse(connection: connection, statusCode: statusCode, headers: headers, body: body)
     }
