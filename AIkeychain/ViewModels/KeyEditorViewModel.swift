@@ -3,7 +3,7 @@ import Observation
 
 @Observable
 final class KeyEditorViewModel {
-    var selectedService: ServiceType = .anthropic
+    var selectedService: ServiceType?
     var envVarName: String = ""
     var tokenValue: String = ""
     var showToken: Bool = false
@@ -11,10 +11,11 @@ final class KeyEditorViewModel {
     var showSaveSuccess: Bool = false
     var showDeleteConfirm: Bool = false
     var errorMessage: String?
-    var selectedCategorySelection: CategorySelection = .builtin(.ai)
+    var selectedCategorySelection: CategorySelection?
 
     let editingKey: APIKey?
     private let keychainService: KeychainServiceProtocol
+    private let customStore: CustomKeyStore
 
     var isEditing: Bool { editingKey != nil }
 
@@ -24,7 +25,7 @@ final class KeyEditorViewModel {
 
     var prefixWarning: String? {
         guard !tokenValue.isEmpty,
-              let prefix = selectedService.tokenPrefix,
+              let prefix = selectedService?.tokenPrefix,
               !tokenValue.hasPrefix(prefix) else {
             return nil
         }
@@ -32,13 +33,18 @@ final class KeyEditorViewModel {
     }
 
     var canSave: Bool {
-        !tokenValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        selectedService != nil
+        && selectedCategorySelection != nil
+        && !tokenValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         && !envVarName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    init(editingKey: APIKey? = nil, keychainService: KeychainServiceProtocol = KeychainService.shared) {
+    init(editingKey: APIKey? = nil,
+         keychainService: KeychainServiceProtocol = KeychainService.shared,
+         customStore: CustomKeyStore = .shared) {
         self.editingKey = editingKey
         self.keychainService = keychainService
+        self.customStore = customStore
 
         if let key = editingKey {
             selectedService = key.service ?? .anthropic
@@ -53,51 +59,66 @@ final class KeyEditorViewModel {
 
             tokenValue = (try? keychainService.retrieve(for: key.envVarName)) ?? ""
         } else {
-            selectedService = .anthropic
-            envVarName = ServiceType.anthropic.envVarName
-            selectedCategorySelection = .builtin(.ai)
+            // 新規: 未選択状態で開始
+            selectedService = nil
+            envVarName = ""
+            selectedCategorySelection = nil
         }
     }
 
     func onServiceChange() {
-        if !isEditing {
-            envVarName = selectedService.envVarName
-            selectedCategorySelection = .builtin(selectedService.category)
+        if !isEditing, let service = selectedService {
+            envVarName = service.envVarName
+            selectedCategorySelection = .builtin(service.category)
         }
     }
 
     func save() throws {
         let trimmedValue = tokenValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedValue.isEmpty else { return }
+        let trimmedEnvVar = envVarName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedValue.isEmpty, !trimmedEnvVar.isEmpty else { return }
 
         isSaving = true
         errorMessage = nil
 
         do {
-            try keychainService.save(value: trimmedValue, for: envVarName)
+            try keychainService.save(value: trimmedValue, for: trimmedEnvVar)
 
-            // Save category override if different from default
-            if let key = editingKey, key.service != nil {
-                let defaultCategory = key.service!.category
-                let overrideValue: String? = {
-                    switch selectedCategorySelection {
-                    case .builtin(let cat) where cat == defaultCategory:
-                        return nil  // デフォルトに戻す → 上書き削除
-                    case .builtin(let cat):
-                        return "builtin:\(cat.rawValue)"
-                    case .custom(let id):
-                        return "custom:\(id.uuidString)"
-                    case .all, .activity:
-                        return nil
-                    }
-                }()
-                CustomKeyStore.shared.setCategoryOverride(envVarName: envVarName, value: overrideValue)
-            } else if let customKey = editingKey?.customKey {
-                // カスタムキーのカテゴリ変更
-                if case .custom(let id) = selectedCategorySelection {
+            if let key = editingKey {
+                // 既存キーの編集
+                if key.service != nil {
+                    let defaultCategory = key.service!.category
+                    let overrideValue: String? = {
+                        switch selectedCategorySelection {
+                        case .builtin(let cat) where cat == defaultCategory:
+                            return nil  // デフォルトに戻す → 上書き削除
+                        case .builtin(let cat):
+                            return "builtin:\(cat.rawValue)"
+                        case .custom(let id):
+                            return "custom:\(id.uuidString)"
+                        case .all, .activity, .none:
+                            return nil
+                        }
+                    }()
+                    customStore.setCategoryOverride(envVarName: trimmedEnvVar, value: overrideValue)
+                } else if let customKey = key.customKey {
+                    // カスタムキーのカテゴリ変更
                     var updated = customKey
-                    updated.categoryId = id
-                    CustomKeyStore.shared.updateKey(updated)
+                    updated.categoryId = resolveCategoryId()
+                    customStore.updateKey(updated)
+                }
+            } else {
+                // 新規キー: envVarName がプリセットに一致しない場合は CustomKey として保存
+                let matchesPreset = ServiceType.allCases.contains { $0.envVarName == trimmedEnvVar }
+                if !matchesPreset {
+                    let customKey = CustomKey(
+                        envVarName: trimmedEnvVar,
+                        displayName: selectedService?.displayName ?? trimmedEnvVar,
+                        categoryId: resolveCategoryId(),
+                        tokenPrefix: selectedService?.tokenPrefix,
+                        setupURLString: selectedService?.setupURL?.absoluteString
+                    )
+                    customStore.addKey(customKey)
                 }
             }
 
@@ -113,6 +134,19 @@ final class KeyEditorViewModel {
         guard let key = editingKey else { return }
         try keychainService.delete(for: key.envVarName)
         // カテゴリ上書きも削除
-        CustomKeyStore.shared.setCategoryOverride(envVarName: key.envVarName, value: nil)
+        customStore.setCategoryOverride(envVarName: key.envVarName, value: nil)
+    }
+
+    // MARK: - Private
+
+    private func resolveCategoryId() -> UUID {
+        switch selectedCategorySelection {
+        case .builtin(let cat):
+            return cat.stableId
+        case .custom(let id):
+            return id
+        case .all, .activity, .none:
+            return KeyCategory.ai.stableId
+        }
     }
 }

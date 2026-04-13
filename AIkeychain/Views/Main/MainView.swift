@@ -13,24 +13,35 @@ struct MainView: View {
 
     @ViewBuilder
     private var modeStatusLabel: some View {
-        let isProxy = appState.isProxyMode
+        let mode = appState.keyManagementMode
         let isRunning = appState.proxyServer.isRunning
-        let bgColor: Color = isProxy
-            ? (isRunning ? Color.green.opacity(0.12) : Color.red.opacity(0.12))
-            : Color.gray.opacity(0.1)
-        let borderColor: Color = isProxy
-            ? (isRunning ? Color.green.opacity(0.3) : Color.red.opacity(0.3))
-            : Color.gray.opacity(0.2)
+
+        let bgColor: Color = switch mode {
+        case .proxy: isRunning ? Color.green.opacity(0.12) : Color.red.opacity(0.12)
+        case .secretReference: AppColors.cloudBlue.opacity(0.1)
+        case .standard: Color.gray.opacity(0.1)
+        }
+        let borderColor: Color = switch mode {
+        case .proxy: isRunning ? Color.green.opacity(0.3) : Color.red.opacity(0.3)
+        case .secretReference: AppColors.cloudBlue.opacity(0.25)
+        case .standard: Color.gray.opacity(0.2)
+        }
 
         HStack(spacing: 5) {
-            if isProxy {
+            switch mode {
+            case .proxy:
                 Circle()
                     .fill(isRunning ? Color.green : Color.red)
                     .frame(width: 7, height: 7)
                 Text("Proxy")
                     .font(.system(size: 11, weight: .medium))
-            } else {
-                Image(systemName: "shield.slash")
+            case .secretReference:
+                Image(systemName: "link.badge.plus")
+                    .font(.system(size: 11))
+                Text("Secret Ref")
+                    .font(.system(size: 11, weight: .medium))
+            case .standard:
+                Image(systemName: "key.fill")
                     .font(.system(size: 11))
                 Text("Standard")
                     .font(.system(size: 11, weight: .medium))
@@ -52,7 +63,7 @@ struct MainView: View {
                 KeyListView(viewModel: viewModel)
             }
         }
-        .searchable(text: $viewModel.searchText, prompt: "Search keys...")
+        .searchable(text: $viewModel.searchText, prompt: L10n.t("main_search"))
         .toolbar {
             // Proxy status button (prominent)
             ToolbarItem(placement: .navigation) {
@@ -61,38 +72,57 @@ struct MainView: View {
                 } label: {
                     modeStatusLabel
                 }
-                .help(appState.isProxyMode ? "Proxy Mode — Click to change" : "Standard Mode — Click to enable Proxy")
+                .help(L10n.t("main_mode_hint"))
             }
 
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showingShare = true
                 } label: {
-                    Label("Transfer", systemImage: "lock.shield")
+                    Label(L10n.t("main_transfer"), systemImage: "lock.shield")
                 }
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button("User Manual") {
+                    Button(L10n.t("main_user_manual")) {
                         showingHelp = true
                     }
-                    Button("Change Mode...") {
+                    Button(L10n.t("main_change_mode")) {
                         showingModeSelect = true
                     }
                     if appState.isProxyMode {
-                        Button("Recovery Guide...") {
+                        Button(L10n.t("main_recovery")) {
                             showingRecovery = true
                         }
-                        Button("Shell Cleanup...") {
+                        Button(L10n.t("main_shell_cleanup")) {
                             showingCleanup = true
                         }
                     }
                     Divider()
-                    Button("Show Tutorial") {
+
+                    // Language switcher
+                    Menu {
+                        ForEach(AppLanguage.allCases) { lang in
+                            Button {
+                                appState.appLanguage = lang
+                            } label: {
+                                HStack {
+                                    Text("\(lang.flag) \(lang.displayName)")
+                                    if appState.appLanguage == lang {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(L10n.t("menubar_language"), systemImage: "globe")
+                    }
+
+                    Button(L10n.t("main_show_tutorial")) {
                         showingOnboarding = true
                     }
                 } label: {
-                    Label("Help", systemImage: "questionmark.circle")
+                    Label(L10n.t("main_help"), systemImage: "questionmark.circle")
                 }
             }
         }
@@ -125,6 +155,7 @@ struct MainView: View {
             RecoveryView()
         }
         .frame(minWidth: 750, minHeight: 500)
+        .id(appState.appLanguage)
         .onReceive(NotificationCenter.default.publisher(for: .showOnboarding)) { _ in
             showingOnboarding = true
         }

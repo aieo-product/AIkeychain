@@ -1,0 +1,161 @@
+#!/bin/bash
+# akc — AI KeyChain Secret Reference resolver
+# Resolves keychain:// references in environment variables and runs the given command.
+#
+# Usage:
+#   akc run -- <command> [args...]
+#   akc run --dry-run
+#
+# Environment variables with values matching "keychain://<KEY_NAME>" are resolved
+# via macOS Keychain (security find-generic-password) and injected into the
+# child process environment. The parent process env is never modified.
+
+set -euo pipefail
+
+VERSION="1.0.0"
+
+usage() {
+    cat <<'USAGE'
+akc — AI KeyChain Secret Reference resolver
+
+Usage:
+  akc run [--dry-run] -- <command> [args...]
+  akc version
+  akc help
+
+Commands:
+  run        Resolve keychain:// references and execute a command
+  version    Show version
+  help       Show this help
+
+Options:
+  --dry-run  Show which variables would be resolved (values are masked)
+
+Examples:
+  akc run -- python my_script.py
+  akc run -- claude
+  akc run --dry-run
+USAGE
+}
+
+resolve_keychain() {
+    local key_name="$1"
+    security find-generic-password -s "$key_name" -a "$USER" -w 2>/dev/null
+}
+
+mask_value() {
+    local val="$1"
+    local len=${#val}
+    if [ "$len" -le 8 ]; then
+        echo "****"
+    else
+        echo "${val:0:4}...${val:$((len-4)):4}"
+    fi
+}
+
+cmd_run() {
+    local dry_run=false
+    local has_separator=false
+
+    # Parse options before --
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run)
+                dry_run=true
+                shift
+                ;;
+            --)
+                has_separator=true
+                shift
+                break
+                ;;
+            *)
+                echo "akc: unknown option: $1" >&2
+                echo "Usage: akc run [--dry-run] -- <command> [args...]" >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    if ! $dry_run && ! $has_separator; then
+        echo "akc: missing '--' separator before command" >&2
+        echo "Usage: akc run [--dry-run] -- <command> [args...]" >&2
+        exit 1
+    fi
+
+    # Find and resolve keychain:// references
+    local resolved_count=0
+    local failed_count=0
+    local -a export_cmds=()
+
+    while IFS='=' read -r var_name var_value; do
+        # Skip if not a keychain:// reference
+        case "$var_value" in
+            keychain://*)
+                local key_name="${var_value#keychain://}"
+                local resolved
+                resolved=$(resolve_keychain "$key_name") || true
+
+                if [ -n "$resolved" ]; then
+                    resolved_count=$((resolved_count + 1))
+                    if $dry_run; then
+                        local masked
+                        masked=$(mask_value "$resolved")
+                        echo "  ✅ $var_name = $masked (from keychain://$key_name)"
+                    else
+                        export_cmds+=("$var_name=$resolved")
+                    fi
+                else
+                    failed_count=$((failed_count + 1))
+                    echo "  ❌ $var_name — keychain://$key_name not found in Keychain" >&2
+                fi
+                ;;
+        esac
+    done < <(env)
+
+    if $dry_run; then
+        echo ""
+        echo "Resolved: $resolved_count, Failed: $failed_count"
+        if [ "$failed_count" -gt 0 ]; then
+            echo "Register missing keys in AI KeyChain or macOS Keychain."
+        fi
+        return 0
+    fi
+
+    if [ "$failed_count" -gt 0 ]; then
+        echo "akc: $failed_count keychain reference(s) could not be resolved" >&2
+        echo "akc: run 'akc run --dry-run' to see details" >&2
+        exit 1
+    fi
+
+    if [ $# -eq 0 ]; then
+        echo "akc: no command specified after '--'" >&2
+        exit 1
+    fi
+
+    # Execute command with resolved environment
+    if [ ${#export_cmds[@]} -eq 0 ]; then
+        exec "$@"
+    else
+        exec env "${export_cmds[@]}" "$@"
+    fi
+}
+
+# Main dispatch
+case "${1:-help}" in
+    run)
+        shift
+        cmd_run "$@"
+        ;;
+    version)
+        echo "akc $VERSION"
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        echo "akc: unknown command: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+esac
