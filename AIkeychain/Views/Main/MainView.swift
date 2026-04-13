@@ -155,6 +155,7 @@ struct MainView: View {
             RecoveryView()
         }
         .frame(minWidth: 750, minHeight: 500)
+        .id(appState.appLanguage)
         .onReceive(NotificationCenter.default.publisher(for: .showOnboarding)) { _ in
             showingOnboarding = true
         }
