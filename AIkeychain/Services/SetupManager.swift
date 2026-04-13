@@ -57,36 +57,17 @@ enum SetupManager {
 
     // MARK: - .zshrc Hook (ユーザーが1回だけ実行)
 
-    private static let markerBegin = "# >>> AI KeyChain >>>"
-    private static let markerEnd   = "# <<< AI KeyChain <<<"
-
-    /// .zshrc に AI KeyChain ブロックが設定済みか確認
+    /// .zshrc に source 行が設定済みか確認
     static func isConfigured() -> Bool {
         guard let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8) else {
             return false
         }
-        return content.contains(markerBegin) || content.contains(".aikeychain_proxy")
+        return content.contains(".aikeychain_proxy")
     }
 
-    /// レガシー形式かどうか（マーカーなしの旧バージョン）
-    private static var hasLegacyFormat: Bool {
-        guard let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8) else { return false }
-        return content.contains(".aikeychain_proxy") && !content.contains(markerBegin)
-    }
-
-    /// .zshrc にフックを追記（BEGIN/END マーカーで囲む）
-    /// レガシー形式が存在する場合は先に削除してからマーカー形式で再追加
+    /// .zshrc にフックを追記
     static func configure() throws {
-        // レガシー形式 → マーカー形式にアップグレード
-        if hasLegacyFormat {
-            try unconfigure()
-        }
-
-        // マーカー形式が既に存在する場合はスキップ
-        if let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8),
-           content.contains(markerBegin) {
-            return
-        }
+        guard !isConfigured() else { return }
 
         var content = (try? String(contentsOfFile: zshrcPath, encoding: .utf8)) ?? ""
 
@@ -94,9 +75,9 @@ enum SetupManager {
             content += "\n"
         }
 
-        content += "\n\(markerBegin)\n"
+        content += "\n# AI KeyChain — proxy env is auto-managed (exists only while proxy runs)\n"
         content += zshrcSourceLine
-        content += "\n\(markerEnd)\n"
+        content += "\n"
 
         try content.write(toFile: zshrcPath, atomically: true, encoding: .utf8)
     }
@@ -159,39 +140,25 @@ enum SetupManager {
         }
     }
 
-    /// .zshrc から AI KeyChain 管理ブロック全体を削除（マーカー間 + レガシー行）
+    /// .zshrc から source 行を削除
     static func unconfigure() throws {
         guard isConfigured() else { return }
 
-        let content = try String(contentsOfFile: zshrcPath, encoding: .utf8)
+        var content = try String(contentsOfFile: zshrcPath, encoding: .utf8)
+
+        // source 行とコメント行を削除
         let lines = content.components(separatedBy: "\n")
+        let filtered = lines.filter { line in
+            !line.contains(".aikeychain_proxy") &&
+            !line.contains("AI KeyChain — proxy env")
+        }
+        content = filtered.joined(separator: "\n")
 
-        var result: [String] = []
-        var inBlock = false
-
-        for line in lines {
-            if line.trimmingCharacters(in: .whitespaces) == markerBegin {
-                inBlock = true
-                continue
-            }
-            if line.trimmingCharacters(in: .whitespaces) == markerEnd {
-                inBlock = false
-                continue
-            }
-            if !inBlock {
-                // レガシー形式のフォールバック削除
-                if line.contains(".aikeychain_proxy") || line.contains("AI KeyChain — proxy env") {
-                    continue
-                }
-                result.append(line)
-            }
+        // 連続する空行を整理
+        while content.contains("\n\n\n") {
+            content = content.replacingOccurrences(of: "\n\n\n", with: "\n\n")
         }
 
-        var output = result.joined(separator: "\n")
-        while output.contains("\n\n\n") {
-            output = output.replacingOccurrences(of: "\n\n\n", with: "\n\n")
-        }
-
-        try output.write(toFile: zshrcPath, atomically: true, encoding: .utf8)
+        try content.write(toFile: zshrcPath, atomically: true, encoding: .utf8)
     }
 }
