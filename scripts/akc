@@ -46,11 +46,7 @@ resolve_keychain() {
 mask_value() {
     local val="$1"
     local len=${#val}
-    if [ "$len" -le 8 ]; then
-        echo "****"
-    else
-        echo "${val:0:4}...${val:$((len-4)):4}"
-    fi
+    echo "****** (${len} chars)"
 }
 
 cmd_run() {

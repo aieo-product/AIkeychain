@@ -34,14 +34,17 @@ enum SetupManager {
     // MARK: - Proxy Env File (起動/停止で自動管理)
 
     /// プロキシ起動時に設定ファイルを生成
-    static func activateProxy(port: UInt16) throws {
-        let content = """
+    static func activateProxy(port: UInt16, sessionToken: String = "") throws {
+        var content = """
         # AI KeyChain Proxy — this file is auto-managed
         # Deleted when proxy stops. Do not edit manually.
         export ANTHROPIC_BASE_URL=http://localhost:\(port)
         export OPENAI_BASE_URL=http://localhost:\(port)
         export XAI_BASE_URL=http://localhost:\(port)
         """
+        if !sessionToken.isEmpty {
+            content += "\nexport AIKEYCHAIN_SESSION_TOKEN=\(sessionToken)"
+        }
         try content.write(toFile: proxyEnvPath, atomically: true, encoding: .utf8)
     }
 
@@ -57,15 +60,19 @@ enum SetupManager {
 
     // MARK: - .zshrc Hook (ユーザーが1回だけ実行)
 
-    /// .zshrc に source 行が設定済みか確認
+    /// .zshrc に AI KeyChain ブロックが設定済みか確認
     static func isConfigured() -> Bool {
         guard let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8) else {
             return false
         }
-        return content.contains(".aikeychain_proxy")
+        // マーカー方式 or レガシー方式のどちらかが存在すれば true
+        return content.contains(markerBegin) || content.contains(".aikeychain_proxy")
     }
 
-    /// .zshrc にフックを追記
+    private static let markerBegin = "# >>> AI KeyChain >>>"
+    private static let markerEnd   = "# <<< AI KeyChain <<<"
+
+    /// .zshrc にフックを追記（BEGIN/END マーカーで囲む）
     static func configure() throws {
         guard !isConfigured() else { return }
 
@@ -75,9 +82,9 @@ enum SetupManager {
             content += "\n"
         }
 
-        content += "\n# AI KeyChain — proxy env is auto-managed (exists only while proxy runs)\n"
+        content += "\n\(markerBegin)\n"
         content += zshrcSourceLine
-        content += "\n"
+        content += "\n\(markerEnd)\n"
 
         try content.write(toFile: zshrcPath, atomically: true, encoding: .utf8)
     }
@@ -140,25 +147,39 @@ enum SetupManager {
         }
     }
 
-    /// .zshrc から source 行を削除
+    /// .zshrc から AI KeyChain 管理ブロック全体を削除（マーカー間を範囲削除）
     static func unconfigure() throws {
         guard isConfigured() else { return }
 
-        var content = try String(contentsOfFile: zshrcPath, encoding: .utf8)
-
-        // source 行とコメント行を削除
+        let content = try String(contentsOfFile: zshrcPath, encoding: .utf8)
         let lines = content.components(separatedBy: "\n")
-        let filtered = lines.filter { line in
-            !line.contains(".aikeychain_proxy") &&
-            !line.contains("AI KeyChain — proxy env")
-        }
-        content = filtered.joined(separator: "\n")
 
-        // 連続する空行を整理
-        while content.contains("\n\n\n") {
-            content = content.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        var result: [String] = []
+        var inBlock = false
+
+        for line in lines {
+            if line.trimmingCharacters(in: .whitespaces) == markerBegin {
+                inBlock = true
+                continue
+            }
+            if line.trimmingCharacters(in: .whitespaces) == markerEnd {
+                inBlock = false
+                continue
+            }
+            if !inBlock {
+                // レガシー形式のフォールバック削除（マーカーなしの旧バージョン対応）
+                if line.contains(".aikeychain_proxy") || line.contains("AI KeyChain — proxy env") {
+                    continue
+                }
+                result.append(line)
+            }
         }
 
-        try content.write(toFile: zshrcPath, atomically: true, encoding: .utf8)
+        var output = result.joined(separator: "\n")
+        while output.contains("\n\n\n") {
+            output = output.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        }
+
+        try output.write(toFile: zshrcPath, atomically: true, encoding: .utf8)
     }
 }

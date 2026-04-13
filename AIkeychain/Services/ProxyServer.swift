@@ -13,6 +13,10 @@ final class ProxyServer {
     var requestCount: Int = 0
     var lastError: String?
 
+    /// セッションごとのランダム認証トークン（プロキシ起動時に生成）
+    private(set) var sessionToken: String = ""
+    static let tokenHeaderName = "X-AIKeyChain-Token"
+
     private var listener: NWListener?
     private let keychainService: KeychainServiceProtocol
     private let queue = DispatchQueue(label: "com.aieo.aikeychain.proxy", qos: .userInitiated)
@@ -23,6 +27,9 @@ final class ProxyServer {
 
     func start() throws {
         guard !isRunning else { return }
+
+        // セッショントークンを生成
+        sessionToken = UUID().uuidString
 
         let params = NWParameters.tcp
         params.acceptLocalOnly = true // localhost のみ
@@ -70,15 +77,55 @@ final class ProxyServer {
 
     private func handleConnection(_ connection: NWConnection) {
         connection.start(queue: queue)
+        accumulateRequest(connection: connection, buffer: Data())
+    }
 
+    /// TCP 分割対応: ヘッダ完了 + Content-Length 分のボディが揃うまで蓄積
+    private func accumulateRequest(connection: NWConnection, buffer: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-            guard let self, let data else {
-                connection.cancel()
+            guard let self else { connection.cancel(); return }
+
+            var accumulated = buffer
+            if let data { accumulated.append(data) }
+
+            if isComplete || error != nil {
+                if !accumulated.isEmpty {
+                    self.processRequest(data: accumulated, connection: connection)
+                } else {
+                    connection.cancel()
+                }
                 return
             }
 
-            self.processRequest(data: data, connection: connection)
+            // ヘッダ完了チェック
+            if let headerEnd = accumulated.range(of: Data("\r\n\r\n".utf8)) {
+                let headerData = accumulated[accumulated.startIndex..<headerEnd.lowerBound]
+                if let headerStr = String(data: headerData, encoding: .utf8) {
+                    // Content-Length があればボディも揃うまで待つ
+                    let contentLength = self.parseContentLength(from: headerStr)
+                    let bodyStartIndex = headerEnd.upperBound
+                    let bodyReceived = accumulated[bodyStartIndex...].count
+
+                    if bodyReceived >= contentLength {
+                        self.processRequest(data: accumulated, connection: connection)
+                        return
+                    }
+                }
+            }
+
+            // まだ不完全 → 続きを読む
+            self.accumulateRequest(connection: connection, buffer: accumulated)
         }
+    }
+
+    private func parseContentLength(from headers: String) -> Int {
+        for line in headers.components(separatedBy: "\r\n") {
+            let parts = line.split(separator: ":", maxSplits: 1)
+            if parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
+                return Int(parts[1].trimmingCharacters(in: .whitespaces)) ?? 0
+            }
+        }
+        return 0
     }
 
     private func processRequest(data: Data, connection: NWConnection) {
@@ -92,6 +139,15 @@ final class ProxyServer {
             sendErrorResponse(connection: connection, statusCode: 400, message: "Failed to parse HTTP request")
             return
         }
+
+        // セッショントークン認証
+        if let token = parsed.headers.first(where: { $0.name.lowercased() == Self.tokenHeaderName.lowercased() })?.value {
+            if token != sessionToken {
+                sendErrorResponse(connection: connection, statusCode: 403, message: "Invalid session token")
+                return
+            }
+        }
+        // トークンなしのリクエストは後方互換のため許容（v1.7.0 で必須化予定）
 
         // Find route for this host
         guard let route = ProxyRoute.route(for: parsed.host) else {
@@ -194,53 +250,55 @@ final class ProxyServer {
     }
 
     private func receiveUpstreamResponse(upstream: NWConnection, clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest) {
-        // Receive all data from upstream
-        var allData = Data()
+        // ストリーミング転送: チャンク到着時にクライアントへ逐次転送
+        var statusCode: Int?
+        var firstChunk = true
 
-        func readMore() {
+        func streamMore() {
             upstream.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-                if let data {
-                    allData.append(data)
+                if let data, !data.isEmpty {
+                    // 最初のチャンクからステータスコードを抽出
+                    if firstChunk {
+                        statusCode = self?.parseStatusCode(from: data)
+                        firstChunk = false
+                    }
+
+                    // クライアントへ即座に転送（バッファリングなし）
+                    clientConnection.send(content: data, completion: .contentProcessed { sendError in
+                        if sendError != nil {
+                            upstream.cancel()
+                            clientConnection.cancel()
+                        }
+                    })
                 }
 
                 if isComplete || error != nil {
-                    // All data received - forward to client
+                    // 完了 — ログ記録してクリーンアップ
                     upstream.cancel()
                     let latency = Date().timeIntervalSince(requestStart)
 
-                    if allData.isEmpty {
-                        self?.logAndRespondError(
-                            clientConnection: clientConnection, requestStart: requestStart,
-                            route: route, parsed: parsed, latency: latency,
-                            message: "Empty upstream response"
-                        )
-                        return
-                    }
-
-                    // Parse status code from response for logging
-                    let statusCode = self?.parseStatusCode(from: allData) ?? 200
-
+                    let code = statusCode ?? 200
                     AppState.shared.proxyLogStore.append(ProxyLog(
                         timestamp: requestStart, service: route.host,
                         method: parsed.method, path: parsed.path,
-                        statusCode: statusCode, latency: latency,
-                        isError: statusCode >= 400
+                        statusCode: code, latency: latency,
+                        isError: code >= 400
                     ))
                     DispatchQueue.main.async { self?.requestCount += 1 }
 
-                    // Forward raw HTTP response to client
-                    clientConnection.send(content: allData, completion: .contentProcessed { _ in
+                    // クライアント接続を閉じる
+                    clientConnection.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in
                         clientConnection.cancel()
                     })
                     return
                 }
 
-                // More data to read
-                readMore()
+                // 続きを読み取り
+                streamMore()
             }
         }
 
-        readMore()
+        streamMore()
     }
 
     private func parseStatusCode(from responseData: Data) -> Int {
@@ -290,7 +348,8 @@ final class ProxyServer {
     }
 
     private func sendErrorResponse(connection: NWConnection, statusCode: Int, message: String) {
-        let body = "{\"error\":\"\(message)\"}".data(using: .utf8)!
+        let json: [String: String] = ["error": message]
+        let body = (try? JSONSerialization.data(withJSONObject: json)) ?? Data("{}".utf8)
         let headers: [AnyHashable: Any] = ["Content-Type": "application/json"]
         sendResponse(connection: connection, statusCode: statusCode, headers: headers, body: body)
     }

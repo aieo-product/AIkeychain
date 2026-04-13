@@ -116,7 +116,7 @@ final class AppState {
         SetupManager.deactivateProxy()
         do {
             try proxyServer.start()
-            try? SetupManager.activateProxy(port: proxyPort)
+            try? SetupManager.activateProxy(port: proxyPort, sessionToken: proxyServer.sessionToken)
         } catch {
             proxyServer.lastError = error.localizedDescription
         }
