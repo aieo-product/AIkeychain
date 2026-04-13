@@ -46,14 +46,13 @@ final class AppState {
         }
     }
 
-    /// アプリ内表示言語（UserDefaults で永続化）
-    var appLanguage: AppLanguage {
-        get {
-            let raw = UserDefaults.standard.string(forKey: Self.languageKey) ?? ""
-            return AppLanguage(rawValue: raw) ?? .ja
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: Self.languageKey)
+    /// アプリ内表示言語（stored property — @Observable で変更を追跡、UserDefaults にも永続化）
+    var appLanguage: AppLanguage = {
+        let raw = UserDefaults.standard.string(forKey: AppState.languageKey) ?? ""
+        return AppLanguage(rawValue: raw) ?? .ja
+    }() {
+        didSet {
+            UserDefaults.standard.set(appLanguage.rawValue, forKey: Self.languageKey)
         }
     }
 
