@@ -56,6 +56,7 @@ struct MainView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView(viewModel: viewModel)
+                .id(appState.appLanguage)
         } detail: {
             if viewModel.selectedCategory == .activity {
                 ActivityView()
@@ -155,7 +156,6 @@ struct MainView: View {
             RecoveryView()
         }
         .frame(minWidth: 750, minHeight: 500)
-        .id(appState.appLanguage)
         .onReceive(NotificationCenter.default.publisher(for: .showOnboarding)) { _ in
             showingOnboarding = true
         }

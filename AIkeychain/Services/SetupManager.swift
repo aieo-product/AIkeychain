@@ -34,14 +34,17 @@ enum SetupManager {
     // MARK: - Proxy Env File (起動/停止で自動管理)
 
     /// プロキシ起動時に設定ファイルを生成
-    static func activateProxy(port: UInt16) throws {
-        let content = """
+    static func activateProxy(port: UInt16, sessionToken: String = "") throws {
+        var content = """
         # AI KeyChain Proxy — this file is auto-managed
         # Deleted when proxy stops. Do not edit manually.
         export ANTHROPIC_BASE_URL=http://localhost:\(port)
         export OPENAI_BASE_URL=http://localhost:\(port)
         export XAI_BASE_URL=http://localhost:\(port)
         """
+        if !sessionToken.isEmpty {
+            content += "\nexport AIKEYCHAIN_SESSION_TOKEN=\(sessionToken)"
+        }
         try content.write(toFile: proxyEnvPath, atomically: true, encoding: .utf8)
     }
 
