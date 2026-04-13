@@ -97,11 +97,34 @@ iconutil -c icns "$ICONSET" -o "$APP_DIR/Resources/AppIcon.icns"
 
 ### 5. Ad-hoc コード署名
 
-Developer ID がない場合の署名（「壊れているため開けません」エラーを防止）:
+Developer ID がない場合の署名（「壊れているため開けません」エラーを防止）。
+**Proxy モードの outbound TLS 接続には network entitlements が必須。**
 
 ```bash
-codesign --force --deep --sign - "build/AI KeyChain.app"
+# network entitlements を作成（初回のみ）
+cat > /tmp/aikeychain.entitlements << 'ENTITLEMENTS'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+</dict>
+</plist>
+ENTITLEMENTS
+
+# entitlements 付きで署名
+codesign --force --deep --sign - \
+  --entitlements /tmp/aikeychain.entitlements \
+  "build/AI KeyChain.app"
 ```
+
+::: warning entitlements なしの場合
+`--entitlements` を省略すると Proxy モードの upstream TLS 接続がブロックされ、
+API 呼び出しがタイムアウトします（Standard / Secret Reference モードは影響なし）。
+:::
 
 ### 6. グラフィカル DMG 作成
 

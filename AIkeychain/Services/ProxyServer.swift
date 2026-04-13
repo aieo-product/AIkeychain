@@ -207,52 +207,46 @@ final class ProxyServer {
     }
 
     private func receiveUpstreamResponse(upstream: NWConnection, clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest) {
-        // Stream chunks from upstream to client as they arrive
-        var statusCode: Int?
-        var hasSentData = false
+        // Receive all data from upstream then forward to client
+        // Note: NWConnection の send は中間チャンクをフラッシュしないため、
+        // ストリーミング転送ではなくバッファリング方式を使用
+        var allData = Data()
 
         func readMore() {
             upstream.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-                if let data, !data.isEmpty {
-                    // Parse status code from first chunk
-                    if statusCode == nil {
-                        statusCode = self?.parseStatusCode(from: data)
-                    }
-                    // Stream chunk directly to client
-                    hasSentData = true
-                    clientConnection.send(content: data, completion: .contentProcessed { _ in })
+                if let data {
+                    allData.append(data)
                 }
 
                 if isComplete || error != nil {
                     upstream.cancel()
                     let latency = Date().timeIntervalSince(requestStart)
 
-                    if !hasSentData {
+                    if allData.isEmpty {
                         self?.logAndRespondError(
                             clientConnection: clientConnection, requestStart: requestStart,
                             route: route, parsed: parsed, latency: latency,
-                            message: "Empty upstream response"
+                            message: error.map { "Upstream error: \($0.localizedDescription)" } ?? "Empty upstream response"
                         )
                         return
                     }
 
-                    let finalStatus = statusCode ?? 200
+                    let statusCode = self?.parseStatusCode(from: allData) ?? 200
+
                     AppState.shared.proxyLogStore.append(ProxyLog(
                         timestamp: requestStart, service: route.host,
                         method: parsed.method, path: parsed.path,
-                        statusCode: finalStatus, latency: latency,
-                        isError: finalStatus >= 400
+                        statusCode: statusCode, latency: latency,
+                        isError: statusCode >= 400
                     ))
                     DispatchQueue.main.async { self?.requestCount += 1 }
 
-                    // Close client connection after final chunk
-                    clientConnection.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in
+                    clientConnection.send(content: allData, completion: .contentProcessed { _ in
                         clientConnection.cancel()
                     })
                     return
                 }
 
-                // More data to read
                 readMore()
             }
         }
