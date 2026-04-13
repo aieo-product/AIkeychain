@@ -17,7 +17,7 @@ struct CategoryManagerView: View {
                 VStack(alignment: .leading) {
                     Text("Manage Categories")
                         .font(AppFonts.sectionTitle)
-                    Text("カテゴリの追加・編集・削除")
+                    Text(L10n.s(ja: "カテゴリの追加・編集・削除", en: "Add, edit, and delete categories"))
                         .font(AppFonts.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -83,7 +83,7 @@ struct CategoryManagerView: View {
                     }
 
                     if customStore.categories.isEmpty {
-                        Text("カスタムカテゴリはまだありません")
+                        Text(L10n.s(ja: "カスタムカテゴリはまだありません", en: "No custom categories yet"))
                             .font(.system(size: 12))
                             .foregroundStyle(.tertiary)
                     }

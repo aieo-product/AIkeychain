@@ -20,7 +20,7 @@ struct ShareKeysView: View {
                 VStack(alignment: .leading) {
                     Text("Transfer Keys")
                         .font(AppFonts.sectionTitle)
-                    Text("公開鍵暗号方式でデバイス間を安全に移行")
+                    Text(L10n.s(ja: "公開鍵暗号方式でデバイス間を安全に移行", en: "Securely transfer between devices using public key cryptography"))
                         .font(AppFonts.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -39,7 +39,7 @@ struct ShareKeysView: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 10))
                     .foregroundStyle(.orange)
-                Text("この機能はデバイス間の移行用です。個人 API キーの第三者への共有は各サービスの利用規約に違反する可能性があります。組織キーをご利用ください。")
+                Text(L10n.s(ja: "この機能はデバイス間の移行用です。個人 API キーの第三者への共有は各サービスの利用規約に違反する可能性があります。組織キーをご利用ください。", en: "This feature is for device-to-device migration. Sharing personal API keys with third parties may violate service terms of use. Please use organization keys."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
@@ -89,7 +89,7 @@ private struct KeyPairManagementTab: View {
                         .foregroundStyle(AppColors.configured)
                         .font(.system(size: 15, weight: .medium))
 
-                    Text("公開鍵を共有相手に渡してください。")
+                    Text(L10n.s(ja: "公開鍵を共有相手に渡してください。", en: "Share your public key with the recipient."))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
 
@@ -120,7 +120,7 @@ private struct KeyPairManagementTab: View {
                         }
                     }
                 } else {
-                    Text("キーペアがありません。\n共有を受けるにはまず鍵を生成してください。")
+                    Text(L10n.s(ja: "キーペアがありません。\n共有を受けるにはまず鍵を生成してください。", en: "No key pair found.\nGenerate a key pair first to receive shared keys."))
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -142,9 +142,9 @@ private struct KeyPairManagementTab: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("How it works")
                         .font(.system(size: 12, weight: .semibold))
-                    FlowStep(num: "1", text: "移行先デバイスで鍵ペアを生成し、公開鍵 (.aikeychain-pub) を移行元に渡す")
-                    FlowStep(num: "2", text: "移行元デバイスで公開鍵を使いキーを暗号化し、.aikeychain ファイルを渡す")
-                    FlowStep(num: "3", text: "移行先デバイスで秘密鍵を使い復号し、Keychain に登録する")
+                    FlowStep(num: "1", text: L10n.s(ja: "移行先デバイスで鍵ペアを生成し、公開鍵 (.aikeychain-pub) を移行元に渡す", en: "Generate a key pair on the destination device and send the public key (.aikeychain-pub) to the source"))
+                    FlowStep(num: "2", text: L10n.s(ja: "移行元デバイスで公開鍵を使いキーを暗号化し、.aikeychain ファイルを渡す", en: "Encrypt keys using the public key on the source device and send the .aikeychain file"))
+                    FlowStep(num: "3", text: L10n.s(ja: "移行先デバイスで秘密鍵を使い復号し、Keychain に登録する", en: "Decrypt with the private key on the destination device and register in Keychain"))
                 }
                 .padding(12)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -211,7 +211,7 @@ private struct SendTab: View {
                     Image(systemName: "person.badge.key.fill")
                         .font(.system(size: 40))
                         .foregroundStyle(AppColors.cloudBlue)
-                    Text("移行先デバイスの公開鍵を読み込んでください")
+                    Text(L10n.s(ja: "移行先デバイスの公開鍵を読み込んでください", en: "Load the destination device's public key"))
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
 
@@ -232,10 +232,10 @@ private struct SendTab: View {
                     Image(systemName: "key.viewfinder")
                         .font(.system(size: 40))
                         .foregroundStyle(AppColors.aiPurple)
-                    Text("Keychain からキーを読み込みます")
+                    Text(L10n.s(ja: "Keychain からキーを読み込みます", en: "Load keys from Keychain"))
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
-                    Text("Keychain の承認ダイアログが表示されます。\n「常に許可」を選ぶと次回以降ダイアログが出ません。")
+                    Text(L10n.s(ja: "Keychain の承認ダイアログが表示されます。\n「常に許可」を選ぶと次回以降ダイアログが出ません。", en: "A Keychain authorization dialog will appear.\nChoose \"Always Allow\" to skip the dialog next time."))
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
@@ -250,7 +250,7 @@ private struct SendTab: View {
                 VStack(spacing: 12) {
                     Spacer()
                     ProgressView()
-                    Text("Keychain からキーを読み込み中...")
+                    Text(L10n.s(ja: "Keychain からキーを読み込み中...", en: "Loading keys from Keychain..."))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -274,7 +274,7 @@ private struct SendTab: View {
                     .padding(.top, 8)
 
                     HStack {
-                        Text("転送するキーを選択:")
+                        Text(L10n.s(ja: "転送するキーを選択:", en: "Select keys to transfer:"))
                             .font(.system(size: 12, weight: .medium))
                         Spacer()
                         Button("Select All") {
@@ -424,7 +424,7 @@ private struct ReceiveTab: View {
                         .foregroundStyle(AppColors.commGreen)
 
                     if KeyShareService.hasKeyPair() {
-                        Text("暗号化された .aikeychain ファイルを\n自分の秘密鍵で復号します")
+                        Text(L10n.s(ja: "暗号化された .aikeychain ファイルを\n自分の秘密鍵で復号します", en: "Decrypt the encrypted .aikeychain file\nusing your private key"))
                             .font(.system(size: 14))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -434,7 +434,7 @@ private struct ReceiveTab: View {
                         }
                         .buttonStyle(.borderedProminent)
                     } else {
-                        Text("鍵ペアが必要です。\n「My Keys」タブで生成してください。")
+                        Text(L10n.s(ja: "鍵ペアが必要です。\n「My Keys」タブで生成してください。", en: "A key pair is required.\nGenerate one in the \"My Keys\" tab."))
                             .font(.system(size: 14))
                             .foregroundStyle(.orange)
                             .multilineTextAlignment(.center)
@@ -498,7 +498,7 @@ private struct ReceiveTab: View {
                         .foregroundStyle(AppColors.configured)
                     Text("\(importCount) keys imported!")
                         .font(.system(size: 16, weight: .semibold))
-                    Text("Keychain に保存されました")
+                    Text(L10n.s(ja: "Keychain に保存されました", en: "Saved to Keychain"))
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
 
