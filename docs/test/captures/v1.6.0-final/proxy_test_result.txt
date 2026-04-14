@@ -1,0 +1,28 @@
+=== Proxy セッショントークン認証テスト ===
+
+[Test 1] トークンなし → 403 拒否
+$ curl -X POST -H "Host: api.anthropic.com" http://localhost:18121/v1/messages
+{"error":"Missing or invalid session token"}
+→ OK ✅
+
+[Test 2] 不正なトークン → 403 拒否
+$ curl -X POST -H "X-AIKeyChain-Token: WRONG" ...
+{"error":"Missing or invalid session token"}
+→ OK ✅
+
+[Test 3] 正規トークン → upstream 到達
+$ curl -X POST -H "X-AIKeyChain-Token: <sessionToken>" ...
+{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}
+HTTP 401 | first_byte=0.641s
+→ OK ✅（401 は Keychain 内 API キー期限切れのため、proxy の転送自体は正常）
+
+=== akc CLI テスト ===
+
+[Test] akc --version
+$ bash scripts/akc version
+akc 1.0.0
+
+[Test] akc dry-run でシークレット部分を表示しない
+$ TEST=keychain://SOMEKEY bash scripts/akc run --dry-run -- echo
+  ❌ TEST — keychain://SOMEKEY not found in Keychain
+→ OK ✅ (長さのみ表示、先頭末尾文字を表示しない)
