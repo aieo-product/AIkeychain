@@ -21,8 +21,31 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         CODE_SIGN_ENTITLEMENTS: AIkeychain/Resources/AIkeychain.entitlements
         ENABLE_APP_SANDBOX: false
-        INFOPLIST_FILE: AIkeychain/Resources/Info.plist
         GENERATE_INFOPLIST_FILE: true
         INFOPLIST_KEY_CFBundleDisplayName: "AI KeyChain"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.developer-tools"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  AIkeychainTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/AIkeychainTests
+    dependencies:
+      - target: AIkeychain
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aieo.aikeychainTests
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: true
+
+schemes:
+  AIkeychain:
+    build:
+      targets:
+        AIkeychain: all
+        AIkeychainTests: [test]
+    test:
+      targets:
+        - AIkeychainTests

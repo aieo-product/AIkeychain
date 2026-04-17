@@ -35,7 +35,7 @@ struct ZshrcExporterSecretRefTests {
 
     @Test("Env format includes service name comments")
     func envComments() {
-        let keys = [makeKey(service: .openai)]
+        let keys = [makeKey(service: .openAI)]
         let output = ZshrcExporter.export(keys: keys, format: .env)
         #expect(output.contains("# OpenAI") || output.contains("# "))
         #expect(output.contains("OPENAI_API_KEY=<VALUE>"))
@@ -54,7 +54,7 @@ struct ZshrcExporterSecretRefTests {
     func groupedByCategory() {
         let keys = [
             makeKey(service: .anthropic),
-            makeKey(service: .openai),
+            makeKey(service: .openAI),
             makeKey(service: .github),
         ]
         let output = ZshrcExporter.export(keys: keys, format: .secretRef)
