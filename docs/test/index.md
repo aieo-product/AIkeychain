@@ -6,7 +6,26 @@ outline: [2, 3]
 
 AI KeyChain の動作確認テスト結果を掲載しています。
 
-## v1.6.0 (最新)
+## v1.6.0 最終リリース確認 (最新)
+
+- [試験仕様書・結果](/test/v1.6.0-final)
+- GitHub Issue: [#64](https://github.com/aieo-product/AIkeychain/issues/64), [#84](https://github.com/aieo-product/AIkeychain/issues/84)
+
+| 項目 | 内容 |
+|------|------|
+| 試験日 | 2026-04-14 〜 2026-04-20 |
+| UI 試験 | 14 件 全 PASS |
+| Proxy 試験 | 7 件 全 PASS（200 OK × 3 含む） |
+| Xcode ユニットテスト | 67 / 67 PASS |
+| 判定 | **ALL PASS** |
+
+### 実施内容
+- UI キャプチャ 14 枚 (個人情報マスク済み)
+- Proxy 正常系・異常系 網羅試験 (200 OK / 403 / 502 / 400)
+- Activity ログ修正 (#84) 前後のエビデンス比較
+- Codex コードレビュー (正常系 + 異常系)
+
+## v1.6.0 初期試験
 
 - [試験仕様書・結果](/test/v1.6.0)
 - GitHub Issue: [#72](https://github.com/aieo-product/AIkeychain/issues/72)
