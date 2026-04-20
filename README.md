@@ -30,15 +30,19 @@
 
 AI developers juggle dozens of API keys. Most store them in `.env` or `.zshrc` in plaintext — visible via `env` command, leaked in logs, and exposed to every process.
 
-**AI KeyChain** stores your keys in macOS Keychain (encrypted, hardware-backed) and offers two modes to use them:
+**AI KeyChain** stores your keys in macOS Keychain (encrypted, hardware-backed) and offers three modes to use them:
 
-| | Standard Mode | Proxy Mode |
-|---|---|---|
-| Storage | macOS Keychain | macOS Keychain |
-| How keys reach tools | `export` in `.zshrc` | Local proxy injects auth headers |
-| Keys visible in `env`? | Yes | **No** |
-| Requires app running? | No | Yes |
-| Best for | Simplicity | Security-critical environments |
+| | Standard | Secret Reference | Proxy |
+|---|---|---|---|
+| Storage | macOS Keychain | macOS Keychain | macOS Keychain |
+| How keys reach tools | `export` in `.zshrc` | `keychain://` reference + `akc run` | Local proxy injects auth headers |
+| Keys in `env` (parent) | Key values | Reference path only | No keys |
+| Keys in child process memory | Yes | Yes (injected by `akc run`) | **No** |
+| Process-dump leakage | Risk | Risk | **Safe** |
+| Requires app always-on | No | No | Yes |
+| Direct SDK exec | OK | Needs `akc run` | OK |
+| Security level | ★☆☆ | ★★☆ | ★★★ |
+| Best for | Simplicity | 1Password-style workflow (`op://` equivalent) | Security-critical environments |
 
 ## Installation
 
@@ -66,7 +70,7 @@ swift build -c release
 ## Features
 
 - **macOS Keychain integration** — Keys are encrypted at rest using the Secure Enclave
-- **Two management modes** — Choose Standard (simple) or Proxy (env-safe) at first launch
+- **Three management modes** — Choose Standard (simple), Secret Reference (1Password-style), or Proxy (env-safe) at first launch
 - **Local auth proxy** — Intercepts API requests and injects credentials from Keychain
 - **Guided onboarding** — Step-by-step setup with animated mode comparison
 - **Menu bar resident** — Proxy status always visible, one-click control
@@ -155,17 +159,21 @@ The author assumes no responsibility for any damages resulting from the use of t
 
 AI 開発では多数の API キーを扱います。多くの開発者はこれらを `.env` や `.zshrc` に平文で保存しており、`env` コマンドで丸見え、ログに漏洩、全プロセスからアクセス可能な状態です。
 
-**AI KeyChain** は API キーを macOS Keychain（暗号化・ハードウェア保護）に保管し、2つのモードで利用できます。
+**AI KeyChain** は API キーを macOS Keychain（暗号化・ハードウェア保護）に保管し、3つのモードで利用できます。
 
 ### モード比較
 
-| | Standard モード | Proxy モード |
-|---|---|---|
-| 保管場所 | macOS Keychain | macOS Keychain |
-| キーの取り出し方 | `.zshrc` で `export` | ローカルプロキシが認証ヘッダを注入 |
-| `env` にキーが見える？ | はい | **いいえ** |
-| アプリ常時起動が必要？ | いいえ | はい |
-| 向いている用途 | シンプルに使いたい | セキュリティ重視の環境 |
+| | Standard | Secret Reference | Proxy |
+|---|---|---|---|
+| 保管場所 | macOS Keychain | macOS Keychain | macOS Keychain |
+| キーの取り出し方 | `.zshrc` で `export` | `keychain://` 参照 + `akc run` | ローカルプロキシが認証ヘッダを注入 |
+| 親プロセスの `env` | キー値あり | パスのみ | キーなし |
+| 子プロセスのメモリ | キーあり | キーあり（`akc run` で注入） | **キーなし** |
+| プロセスダンプ漏洩 | リスクあり | リスクあり | **リスクなし** |
+| アプリ常時起動 | 不要 | 不要 | 必要 |
+| SDK 直接実行 | 可能 | `akc run` 必要 | 可能 |
+| セキュリティレベル | ★☆☆ | ★★☆ | ★★★ |
+| 向いている用途 | シンプルに使いたい | 1Password 方式（`op://` 同等） | セキュリティ重視の環境 |
 
 ### インストール
 
@@ -193,7 +201,7 @@ swift build -c release
 ### 主な機能
 
 - **macOS Keychain 統合** — Secure Enclave によるハードウェアレベルの暗号化
-- **2つの管理モード** — 初回起動時に Standard（安定）か Proxy（高セキュリティ）を選択
+- **3つの管理モード** — 初回起動時に Standard（シンプル）/ Secret Reference（1Password 方式）/ Proxy（高セキュリティ）から選択
 - **ローカル認証プロキシ** — API リクエストを中継し、Keychain からキーを読み取ってヘッダに注入
 - **ガイド付きオンボーディング** — アニメーション付きのモード比較で直感的にセットアップ
 - **メニューバー常駐** — プロキシ状態を常に確認、ワンクリックで制御
