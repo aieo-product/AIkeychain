@@ -87,13 +87,26 @@ final class ProxyServer {
     }
 
     private func processRequest(data: Data, connection: NWConnection) {
+        // 受信したリクエストはすべて requestCount に計上
+        DispatchQueue.main.async { [weak self] in self?.requestCount += 1 }
+
         guard let requestString = String(data: data, encoding: .utf8) else {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: "(invalid)",
+                method: "?", path: "?",
+                statusCode: 400, latency: 0, isError: true
+            ))
             sendErrorResponse(connection: connection, statusCode: 400, message: "Invalid request")
             return
         }
 
         // Parse HTTP request
         guard let parsed = HTTPRequestParser.parse(requestString, body: data) else {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: "(unparseable)",
+                method: "?", path: "?",
+                statusCode: 400, latency: 0, isError: true
+            ))
             sendErrorResponse(connection: connection, statusCode: 400, message: "Failed to parse HTTP request")
             return
         }
@@ -101,6 +114,11 @@ final class ProxyServer {
         // セッショントークン認証（必須）
         let tokenHeader = parsed.headers.first(where: { $0.name.lowercased() == Self.tokenHeaderName.lowercased() })?.value
         guard tokenHeader == sessionToken, !sessionToken.isEmpty else {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: parsed.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: 403, latency: 0, isError: true
+            ))
             sendErrorResponse(connection: connection, statusCode: 403, message: "Missing or invalid session token")
             return
         }
@@ -239,7 +257,7 @@ final class ProxyServer {
                         statusCode: statusCode, latency: latency,
                         isError: statusCode >= 400
                     ))
-                    DispatchQueue.main.async { self?.requestCount += 1 }
+                    // requestCount は processRequest で既にインクリメント済み
 
                     clientConnection.send(content: allData, completion: .contentProcessed { _ in
                         clientConnection.cancel()
