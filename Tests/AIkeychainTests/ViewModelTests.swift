@@ -6,21 +6,28 @@ struct KeyListViewModelTests {
 
     private func makeSUT() -> (KeyListViewModel, MockKeychainService) {
         let mock = MockKeychainService()
+        // CustomKeyStore.shared はグローバル状態なので、カスタムキーが残っていると
+        // vm.keys.count がプリセット数 + カスタム数になる。テストではカスタム数も考慮する。
         let vm = KeyListViewModel(keychainService: mock)
         return (vm, mock)
+    }
+
+    /// プリセット + カスタム合計数（現在のグローバル状態に依存）
+    private var expectedKeyCount: Int {
+        ServiceType.allCases.count + CustomKeyStore.shared.keys.count
     }
 
     @Test("Loads all service types as keys")
     func loadKeys() {
         let (vm, _) = makeSUT()
-        #expect(vm.keys.count == ServiceType.allCases.count)
+        #expect(vm.keys.count == expectedKeyCount)
     }
 
     @Test("All keys start as unconfigured")
     func allUnconfigured() {
         let (vm, _) = makeSUT()
         #expect(vm.configuredCount == 0)
-        #expect(vm.pendingCount == ServiceType.allCases.count)
+        #expect(vm.pendingCount == expectedKeyCount)
     }
 
     @Test("Configured count updates after save")
