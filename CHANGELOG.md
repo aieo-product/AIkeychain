@@ -40,7 +40,7 @@ All notable changes to AI KeyChain are documented in this file.
 ### Tooling
 - Test harness: 200 OK and error-path coverage for proxy (#84)
 
-## [1.5.1] - 2026-03-30
+## [1.5.1] - 2026-03-31
 
 First public release on GitHub.
 
