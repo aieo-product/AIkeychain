@@ -1,7 +1,5 @@
 # UI/UX デザイン
 
-> GitHub Issue: [#3 UI/UXデザイン](https://github.com/aieo-product/AIkeychain/issues/3) → [#53 設計書更新](https://github.com/aieo-product/AIkeychain/issues/53)
-
 ## 画面一覧
 
 ### メインウィンドウ
@@ -9,16 +7,17 @@
 | 画面 | ファイル | 種別 | 説明 |
 |------|---------|------|------|
 | MainView | Main/MainView.swift | Root | NavigationSplitView (Sidebar + Detail) |
-| SidebarView | Main/SidebarView.swift | Sidebar | カテゴリナビゲーション + キー数バッジ |
+| SidebarView | Main/SidebarView.swift | Sidebar | カテゴリ + Activity ナビゲーション + キー数バッジ |
 | KeyListView | Main/KeyListView.swift | Detail | キーグリッド + 検索 + インポート |
 | KeyRowView | Main/KeyRowView.swift | Cell | サービスアイコン + 名前 + ステータス |
+| ActivityView | ActivityView.swift | Detail | プロキシリクエストログのリアルタイム表示 |
 
 ### エディタ・シート
 
 | 画面 | ファイル | 種別 | 説明 |
 |------|---------|------|------|
 | KeyEditorView | Editor/KeyEditorView.swift | Sheet | キー追加・編集フォーム |
-| ExportView | Export/ExportView.swift | Sheet | .zshrc / .env エクスポート |
+| ExportView | Export/ExportView.swift | Sheet | .zshrc / Secret Reference / .env エクスポート |
 | ShareKeysView | ShareKeysView.swift | Sheet | P-256 暗号化キー転送 (3 タブ) |
 | EnvImportView | EnvImportView.swift | Sheet | 4 ステップ env インポートウィザード |
 | CategoryManagerView | CategoryManagerView.swift | Sheet | カスタムカテゴリ CRUD |
@@ -27,7 +26,7 @@
 
 | 画面 | ファイル | 種別 | 説明 |
 |------|---------|------|------|
-| ModeSelectView | ModeSelectView.swift | Sheet | Standard / Proxy モード選択カード |
+| ModeSelectView | ModeSelectView.swift | Sheet | Standard / Secret Reference / Proxy のカード選択 |
 | CleanupView | CleanupView.swift | Sheet | .zshrc クリーンアップガイド |
 | RecoveryView | RecoveryView.swift | Sheet | プロキシ復旧ガイド (3 手段) |
 | HelpView | HelpView.swift | Sheet | ユーザーマニュアル |
@@ -36,14 +35,13 @@
 
 | 画面 | ファイル | 種別 | 説明 |
 |------|---------|------|------|
-| OnboardingView | Onboarding/OnboardingView.swift | Sheet | 5 ステップウィザードコンテナ |
-| SetupView | Onboarding/SetupView.swift | Step | シェル設定ガイド |
+| OnboardingView | Onboarding/OnboardingView.swift | Sheet | 6 ステップウィザードコンテナ (言語選択を含む) |
 
 ### メニューバー
 
 | 画面 | ファイル | 種別 | 説明 |
 |------|---------|------|------|
-| MenuBarView | MenuBarView.swift | MenuBarExtra | プロキシ状態・モード切替・ポート変更 |
+| MenuBarView | MenuBarView.swift | MenuBarExtra | プロキシ状態・モード切替・ポート変更・累計リクエスト数 |
 
 ## 画面フロー
 
@@ -56,7 +54,8 @@ graph TB
     Check -- No --> Main
 
     subgraph Onboarding["オンボーディング (Sheet)"]
-        Welcome["Welcome"] --> ModeSelect["モード選択"]
+        Language["言語選択"] --> Welcome["Welcome"]
+        Welcome --> ModeSelect["モード選択<br/>Standard / Secret Reference / Proxy"]
         ModeSelect --> RegisterKeys["キー登録案内"]
         RegisterKeys --> SetupShell["シェル設定"]
         SetupShell --> Completion["完了"]
@@ -66,7 +65,8 @@ graph TB
 
     subgraph Main["メイン画面"]
         direction TB
-        Sidebar["SidebarView<br/>カテゴリ一覧"] --> KeyList["KeyListView<br/>キーグリッド"]
+        Sidebar["SidebarView<br/>カテゴリ + Activity"] --> KeyList["KeyListView<br/>キーグリッド"]
+        Sidebar --> Activity["ActivityView<br/>プロキシログ"]
     end
 
     Main --> Editor["KeyEditorView<br/>追加・編集"]
@@ -92,24 +92,25 @@ graph TB
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ ツールバー: [Proxy ● Active] [Transfer] [Help ▾]        │
+│ ツールバー: [Mode ● Status] [Transfer] [Help ▾]         │
 ├──────────────┬──────────────────────────────────────────┤
-│ Sidebar      │ KeyList                                   │
+│ Sidebar      │ KeyList / ActivityView                    │
 │              │                                           │
-│ All Keys (20)│ AI API                    3 keys          │
-│              │ ┌─────────────────────────────────────┐  │
-│ AI API    (4)│ │ 🧠 Anthropic (Claude)    ✅        │  │
-│ AI Web    (5)│ │    ANTHROPIC_API_KEY                │  │
-│ Code&Git  (2)│ ├─────────────────────────────────────┤  │
-│ Cloud     (3)│ │ 🤖 OpenAI (GPT)         ⚠️        │  │
-│ Comm      (2)│ │    OPENAI_API_KEY                   │  │
-│ DevTools  (1)│ ├─────────────────────────────────────┤  │
-│              │ │ ...                                  │  │
-│ ─────────── │ └─────────────────────────────────────┘  │
+│ All Keys     │ AI API                    3 keys          │
+│ Activity     │ ┌─────────────────────────────────────┐  │
+│              │ │ 🧠 Anthropic (Claude)    ✅        │  │
+│ AI API    (4)│ │    ANTHROPIC_API_KEY                │  │
+│ AI Web    (5)│ ├─────────────────────────────────────┤  │
+│ Code&Git  (2)│ │ 🤖 OpenAI               ⚠️        │  │
+│ Cloud     (3)│ │    OPENAI_API_KEY                   │  │
+│ Comm      (2)│ ├─────────────────────────────────────┤  │
+│ DevTools  (1)│ │ ...                                  │  │
+│              │ └─────────────────────────────────────┘  │
+│ ─────────── │                                           │
 │ Custom Cat   │                                           │
 │              │                                           │
 │ [Manage]     │                                           │
-│ ✅ 12  ⚠️ 8 │ [Import .env]              [+ Add Key]   │
+│ ✅ 12  ⚠️ 5 │ [Import .env]              [+ Add Key]   │
 └──────────────┴──────────────────────────────────────────┘
 ```
 
@@ -125,6 +126,23 @@ graph TB
 | セットアップリンク | "Get Token" ボタンで発行ページを開く |
 | 削除ボタン | 編集時のみ表示 (赤色) |
 | 保存ボタン | "Keychain に保存" |
+
+## Activity 画面
+
+プロキシモード時にリクエストの状況を可視化する。
+
+| 要素 | 内容 |
+|------|------|
+| サマリヘッダ | `Today: N requests` / `Errors: N` (赤 / 緑で状態色分け) |
+| ログ一覧 | 時刻 / サービス名 / メソッド / パス / ステータスコード / レイテンシ |
+| エラー強調 | `isError = true` のログは行全体を赤系で表示 |
+| Clear ボタン | メモリ内ログを全消去 |
+
+::: warning ログの取扱い
+- ディスクには一切書き出されない（メモリ上のみ）
+- トークン値・リクエストボディは記録しない
+- アプリ再起動でログは消える
+:::
 
 ## メニューバー UI
 
@@ -157,7 +175,8 @@ graph TB
 | モード | アイコン | 特徴 |
 |--------|---------|------|
 | **Standard** | 🔑 key.fill | Keychain 直接参照、シンプル、常駐不要 |
-| **Proxy** | 🛡️ shield.lefthalf.filled | 環境変数にキーが露出しない、アプリ常駐必要 |
+| **Secret Reference** | 🔗 link | `keychain://` 参照を `akc run` が解決、親 env にキー値を露出させない |
+| **Proxy** | 🛡️ shield.lefthalf.filled | 環境変数にキー値を一切露出させない、アプリ常駐必要 |
 
 Proxy モード選択時は **同意シート** を表示:
 - プロキシの常時起動が必要な旨の警告
@@ -181,6 +200,21 @@ Proxy モード選択時は **同意シート** を表示:
 | 3 | インポート対象のプレビュー |
 | 4 | Keychain インポート結果表示 |
 
+## ExportView (3 形式)
+
+| 形式 | 用途 |
+|------|------|
+| `.zshrc (Keychain reference)` | Standard モード用。`security find-generic-password ...` の export 行を生成 |
+| `.zshrc (Secret Reference)` | Secret Reference モード用。`export KEY="keychain://KEY"` を生成 |
+| `.env (plaintext)` | 値は `<VALUE>` プレースホルダで出力（平文書き出し回避） |
+
+## ローカライズ (ja / en)
+
+- 表示言語は `AppState.appLanguage` (`ja` / `en`) で切替
+- 文字列は `L10n.t("key")` 経由で取得
+- 言語選択はオンボーディング初回ステップ、または設定画面から変更可
+- `MainView` などは `.id(appState.appLanguage)` で言語切替時に再描画
+
 ## カラーパレット
 
 ### カテゴリカラー
@@ -200,6 +234,7 @@ Proxy モード選択時は **同意シート** を表示:
 |-----------|--------|-----|
 | 設定済み | Emerald | `#10B981` |
 | 未設定 | Amber | `#F59E0B` |
+| エラー | Red | `#DC2626` |
 
 ### アクセントグラデーション
 

@@ -25,13 +25,33 @@ npm run docs:dev
 
 ## Xcode プロジェクト
 
+`project.yml` から XcodeGen でプロジェクトを生成する構成。
+
 ```bash
+xcodegen generate
 open AIkeychain.xcodeproj
 ```
 
-::: info
-Xcode プロジェクトは [Issue #4](https://github.com/aieo-product/AIkeychain/issues/4) で作成予定です。
-:::
+## Swift Package Manager によるビルド
+
+```bash
+swift build -c release
+```
+
+## `akc` CLI (Secret Reference 解決)
+
+`scripts/akc` が `keychain://KEY_NAME` 形式の環境変数を実行時に解決する Bash スクリプト。
+Secret Reference モードで利用する。
+
+```bash
+# 解決対象を確認 (値はマスク)
+./scripts/akc run --dry-run
+
+# コマンドを実行
+./scripts/akc run -- claude
+```
+
+PATH に通すには `~/.local/bin` などにコピー / シンボリックリンクを作成する。
 
 ## ブランチ戦略
 
@@ -41,3 +61,4 @@ Xcode プロジェクトは [Issue #4](https://github.com/aieo-product/AIkeychai
 | `feature/xxx` | 機能開発 |
 | `fix/xxx` | バグ修正 |
 | `docs/xxx` | ドキュメント |
+| `test/xxx` | テスト・検証 |

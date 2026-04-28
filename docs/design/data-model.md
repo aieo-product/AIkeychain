@@ -1,11 +1,12 @@
 # データモデル設計
 
-> GitHub Issue: [#2 データモデル設計](https://github.com/aieo-product/AIkeychain/issues/2) → [#53 設計書更新](https://github.com/aieo-product/AIkeychain/issues/53)
-
 ## モデル関連図
 
 ```mermaid
 erDiagram
+    AppState ||--|| KeyManagementMode : "選択"
+    AppState ||--|| AppLanguage : "選択"
+    AppState ||--|| ProxyLogStore : "owns"
     APIKey ||--o| ServiceType : "preset"
     APIKey ||--o| CustomKey : "custom"
     ServiceType ||--|| KeyCategory : "belongs to"
@@ -13,6 +14,15 @@ erDiagram
     CustomKeyStore ||--|{ CustomKey : "manages"
     CustomKeyStore ||--|{ CustomCategory : "manages"
     ProxyRoute ||--|| ServiceType : "routes"
+    ProxyLogStore ||--|{ ProxyLog : "appends"
+
+    KeyManagementMode {
+        String rawValue "standard | secretReference | proxy"
+    }
+
+    AppLanguage {
+        String rawValue "ja | en"
+    }
 
     APIKey {
         UUID id
@@ -60,11 +70,51 @@ erDiagram
         String headerName
         String headerValuePrefix
     }
+
+    ProxyLog {
+        UUID id
+        Date timestamp
+        String service
+        String method
+        String path
+        Int statusCode
+        TimeInterval latency
+        Bool isError
+    }
 ```
+
+## KeyManagementMode
+
+ユーザーが選択するキー管理モード。`UserDefaults` キー `key_management_mode` に永続化される。
+
+```swift
+enum KeyManagementMode: String {
+    case standard          // .zshrc で security 直接参照
+    case secretReference   // keychain:// 参照を akc run で実行時解決
+    case proxy             // ローカルプロキシで認証ヘッダ注入
+}
+```
+
+| Mode | displayName | アプリ常駐 | 親 env への露出 | 子 env への露出 |
+|------|-------------|:----:|:----:|:----:|
+| `.standard` | "Standard" | 不要 | キー値 | キー値 |
+| `.secretReference` | "Secret Reference" | 不要 | 参照パス | キー値 (`akc run` 実行時のみ) |
+| `.proxy` | "Proxy" | 必要 | `*_BASE_URL` のみ | なし |
+
+## AppLanguage
+
+```swift
+enum AppLanguage: String, CaseIterable {
+    case ja
+    case en
+}
+```
+
+`UserDefaults` キー `app_language` に永続化される。`L10n.t(_:)` 経由で UI 文言を切り替える。
 
 ## ServiceType
 
-20 サービスを 6 カテゴリに分類。
+17 サービスを 6 カテゴリに分類。
 
 ### プロパティ
 
@@ -86,7 +136,7 @@ erDiagram
 | Service | displayName | envVarName | tokenPrefix | category |
 |---------|------------|------------|-------------|----------|
 | anthropic | Anthropic (Claude) | ANTHROPIC_API_KEY | `sk-ant-` | ai |
-| openAI | OpenAI (GPT) | OPENAI_API_KEY | `sk-` | ai |
+| openAI | OpenAI | OPENAI_API_KEY | `sk-` | ai |
 | xAI | xAI (Grok) | XAI_API_KEY | `xai-` | ai |
 | higgsfield | Higgsfield | HIGGSFIELD_API_KEY | - | ai |
 
@@ -94,11 +144,11 @@ erDiagram
 
 | Service | displayName | envVarName | loginURL |
 |---------|------------|------------|----------|
-| anthropicWeb | Anthropic Web | ANTHROPIC_WEB_AUTH | claude.ai |
+| anthropicWeb | Anthropic Console | ANTHROPIC_WEB_AUTH | claude.ai |
 | openAIWeb | OpenAI Platform | OPENAI_WEB_AUTH | platform.openai.com |
-| googleAIStudio | Google AI Studio | GOOGLE_AI_STUDIO_AUTH | aistudio.google.com |
-| huggingFace | Hugging Face | HUGGINGFACE_AUTH | huggingface.co |
-| replicateWeb | Replicate | REPLICATE_AUTH | replicate.com |
+| googleAIStudio | Google AI Studio | GOOGLE_AI_WEB_AUTH | aistudio.google.com |
+| huggingFace | Hugging Face | HUGGINGFACE_TOKEN | huggingface.co |
+| replicateWeb | Replicate | REPLICATE_API_TOKEN | replicate.com |
 
 #### Code & Git
 
@@ -236,24 +286,58 @@ struct ProxyRoute {
 | api.openai.com | OPENAI_API_KEY | Authorization | Bearer |
 | api.x.ai | XAI_API_KEY | Authorization | Bearer |
 
-## OnboardingStep
+## ProxyLog / ProxyLogStore
 
-5 段階のオンボーディングウィザード。
+プロキシを通過したリクエストの可視化用ログ。**ディスクには永続化せず、メモリ上のみで保持** する（セキュリティ要件）。
 
 ```swift
-enum OnboardingStep: Int, CaseIterable {
-    case welcome = 0
-    case modeSelect       // Standard / Proxy 選択
-    case registerKeys     // キー登録案内 (スキップ可)
-    case setupShell       // シェル設定 (スキップ可)
-    case completion
+struct ProxyLog: Identifiable {
+    let id: UUID
+    let timestamp: Date
+    let service: String       // "api.anthropic.com" など (host 値)
+    let method: String        // GET / POST など
+    let path: String          // /v1/messages など
+    let statusCode: Int
+    let latency: TimeInterval
+    let isError: Bool
+}
+
+@Observable
+final class ProxyLogStore {
+    var logs: [ProxyLog] = []
+    var todayCount: Int { ... }
+    var todayErrorCount: Int { ... }
+    func append(_ log: ProxyLog)
+    func clear()
 }
 ```
 
-| Step | title | canSkip |
-|------|-------|---------|
-| welcome | "AI KeyChain へようこそ" | false |
-| modeSelect | "モード選択" | false |
-| registerKeys | "キー登録" | true |
-| setupShell | "シェル設定" | true |
-| completion | "セットアップ完了" | false |
+::: warning 設計ポイント
+- **トークン値・リクエストボディは含めない**（漏洩リスク回避）
+- **アプリ終了で消える**（ディスクログなし）
+- Activity 画面・メニューバーから参照
+:::
+
+## OnboardingStep
+
+6 段階のオンボーディングウィザード。
+
+```swift
+enum OnboardingStep: Int, CaseIterable {
+    case language = 0     // 表示言語選択 (ja / en)
+    case welcome          // ウェルカム
+    case modeSelect       // Standard / Secret Reference / Proxy 選択
+    case registerKeys     // キー登録案内 (スキップ可)
+    case setupShell       // シェル設定 (スキップ可)
+    case completion       // 完了
+}
+```
+
+| Step | systemImage | canSkip |
+|------|-------------|---------|
+| language | globe | false |
+| welcome | key.fill | false |
+| modeSelect | switch.2 | false |
+| registerKeys | plus.circle | true |
+| setupShell | terminal | true |
+| completion | checkmark.seal.fill | false |

@@ -1,61 +1,59 @@
-# ロードマップ
+# リリース履歴
 
-## Phase 概要
+リリース済みバージョンの主な変更点。詳細は [`CHANGELOG.md`](https://github.com/aieo-product/AIkeychain/blob/main/CHANGELOG.md) を参照。
 
-```
-Phase 1          Phase 2          Phase 3          Phase 4
-設計・基盤       コア機能         UI/オンボーディング  テスト・リリース
-───────────▶   ───────────▶   ───────────▶   ───────────▶
-```
+## v1.6.0 — Secret Reference モード対応
 
-## Phase 1: 設計・基盤構築
+### 追加
+- **Secret Reference モード** — `keychain://KEY_NAME` 参照を `akc run` が実行時に解決し、親 env にキー値を露出させない
+- **`akc` CLI** (`scripts/akc`) — `--dry-run` で対象キーをマスク表示
+- **Activity 画面** — プロキシ通過リクエストのリアルタイム表示 (時刻 / ホスト / メソッド / パス / ステータス / レイテンシ)
+- **`ProxyLogStore`** — メモリ上のみで保持されるリクエストログ (ディスク永続化なし)
+- **セッショントークン認証** — `X-AIKeyChain-Token` ヘッダで localhost 同居プロセスからの不正利用を防止
+- **アプリ表示言語切替 (ja / en)** — オンボーディング初回ステップで選択、`L10n` テーブル経由で全画面を切替
+- **オンボーディングに言語選択ステップを追加** — 6 ステップ構成
 
-| Issue | タイトル | ステータス |
-|-------|---------|-----------|
-| [#1](https://github.com/aieo-product/AIkeychain/issues/1) | アーキテクチャ設計書 | :construction: |
-| [#2](https://github.com/aieo-product/AIkeychain/issues/2) | データモデル設計 | :construction: |
-| [#3](https://github.com/aieo-product/AIkeychain/issues/3) | UI/UXデザイン | :construction: |
-| [#15](https://github.com/aieo-product/AIkeychain/issues/15) | セキュリティ設計書 | :construction: |
-| [#4](https://github.com/aieo-product/AIkeychain/issues/4) | Xcodeプロジェクト初期セットアップ | :white_circle: |
+### 変更
+- ExportView に **Secret Reference 形式** を追加 (`.zshrc / Secret Reference / .env` の 3 形式)
+- ModeSelectView を 3 モード (Standard / Secret Reference / Proxy) のカード選択に再構成
 
-## Phase 2: コア機能実装
+## v1.1.0 — モード選択と復旧 UX
 
-| Issue | タイトル | ステータス |
-|-------|---------|-----------|
-| [#5](https://github.com/aieo-product/AIkeychain/issues/5) | KeychainService - Keychain CRUD | :white_circle: |
-| [#6](https://github.com/aieo-product/AIkeychain/issues/6) | Theme定義 | :white_circle: |
-| [#7](https://github.com/aieo-product/AIkeychain/issues/7) | メイン画面 - キー一覧 | :white_circle: |
-| [#8](https://github.com/aieo-product/AIkeychain/issues/8) | キー編集画面 | :white_circle: |
-| [#10](https://github.com/aieo-product/AIkeychain/issues/10) | Export機能 | :white_circle: |
+### 追加
+- Standard / Proxy モード選択
+- Proxy モード同意画面
+- Recovery Guide / Shell Cleanup ツール
+- プロキシ設定ファイルのライフサイクル管理 (`~/.aikeychain_proxy`)
+- 強制終了時のフォールバック (`.zshrc` フックでヘルスチェック → 古い設定を自動削除)
+- ポート設定 UI、ポート永続化
+- アニメーション付きオンボーディング モード比較
+- DMG インストーラ (背景画像つき)
+- アドホックコード署名
 
-## Phase 3: UI/オンボーディング
+### 変更
+- デフォルトポート 9999 → 18121
+- `.zshrc` への自動書き込み廃止 (ライフサイクルファイル経由に統一)
 
-| Issue | タイトル | ステータス |
-|-------|---------|-----------|
-| [#9](https://github.com/aieo-product/AIkeychain/issues/9) | オンボーディング - チュートリアル | :white_circle: |
-| [#11](https://github.com/aieo-product/AIkeychain/issues/11) | ContentView ルーター | :white_circle: |
-| [#18](https://github.com/aieo-product/AIkeychain/issues/18) | アプリアイコン作成 | :white_circle: |
+### 修正
+- プロキシ未稼働時に残った `ANTHROPIC_BASE_URL` 起因の ECONNREFUSED
 
-## Phase 4: テスト・リリース
+## v1.0.0 — 初回リリース
 
-| Issue | タイトル | ステータス |
-|-------|---------|-----------|
-| [#12](https://github.com/aieo-product/AIkeychain/issues/12) | ユニットテスト・UIテスト | :white_circle: |
-| [#13](https://github.com/aieo-product/AIkeychain/issues/13) | ビルド・配布準備 (DMG) | :white_circle: |
-| [#16](https://github.com/aieo-product/AIkeychain/issues/16) | CI/CD GitHub Actions | :white_circle: |
+### 追加
+- macOS Keychain 統合 (Security.framework CRUD)
+- ローカル認証プロキシ (`NWListener`)
+- 主要 AI / Git / Cloud / Communication / Dev Tools サービス対応
+- メニューバー常駐
+- 5 ステップのオンボーディング
+- キーエディタ (プレフィックス検証)
+- カテゴリサイドバー
+- `.zshrc` / `.env` エクスポート
+- ヘルプ画面
+- Launch at Login (`SMAppService`)
 
-## その他
+## v0.1.0 — プロジェクトスキャフォールド
 
-| Issue | タイトル | ステータス |
-|-------|---------|-----------|
-| [#14](https://github.com/aieo-product/AIkeychain/issues/14) | 技術ブログ連載計画 | :white_circle: |
-| [#17](https://github.com/aieo-product/AIkeychain/issues/17) | 4/10 LT登壇資料準備 | :white_circle: |
-
-## マイルストーン
-
-| 日付 | マイルストーン |
-|------|-------------|
-| 3/23 | Phase 1-2 完了 (設計 + コア機能) |
-| 3/30 | Phase 3 完了 (UI/オンボーディング) |
-| 4/5 | Phase 4 完了 (テスト・リリース) |
-| **4/10** | **LT 登壇** |
+### 追加
+- Swift Package Manager + XcodeGen 構成
+- VitePress 設計ドキュメントサイト
+- Cloudflare Pages デプロイ

@@ -31,7 +31,7 @@ export default defineConfig({
           items: [
             { text: 'セットアップ', link: '/dev/' },
             { text: 'パッケージング', link: '/dev/packaging' },
-            { text: 'ロードマップ', link: '/dev/roadmap' },
+            { text: 'リリース履歴', link: '/dev/roadmap' },
           ]
         }
       ],
