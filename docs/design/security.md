@@ -1,7 +1,5 @@
 # セキュリティ設計
 
-> GitHub Issue: [#15 セキュリティ設計書](https://github.com/aieo-product/AIkeychain/issues/15) → [#53 設計書更新](https://github.com/aieo-product/AIkeychain/issues/53)
-
 ## 脅威モデル
 
 ```mermaid
@@ -14,16 +12,18 @@ graph TB
         T4["デバイス間転送<br/>(キーの平文送信)"]
         T5["メモリダンプ<br/>(スワップ, コアダンプ)"]
         T6["不正アプリ<br/>(Keychain アクセス)"]
+        T7["同居プロセスからの不正利用<br/>(localhost プロキシ悪用)"]
     end
 
     subgraph Defenses["AI KeyChain 防御策"]
         direction LR
-        D1["Proxy モード<br/>(環境変数にキー露出なし)"]
+        D1["Proxy / Secret Reference モード<br/>(親 env にキー値露出なし)"]
         D2["Keychain 専用保存<br/>(ファイル書き出しなし)"]
         D3["localhost 限定バインド<br/>(外部接続拒否)"]
         D4["P-256 ECDH + AES-GCM<br/>(暗号化転送)"]
         D5["都度取得・最小保持<br/>(メモリ露出最小化)"]
         D6["アクセスグループ制限<br/>(ThisDeviceOnly)"]
+        D7["セッショントークン認証<br/>(X-AIKeyChain-Token)"]
     end
 
     T1 -.->|対策| D1
@@ -32,6 +32,7 @@ graph TB
     T4 -.->|対策| D4
     T5 -.->|対策| D5
     T6 -.->|対策| D6
+    T7 -.->|対策| D7
 
     style Threats fill:#FEE2E2,stroke:#DC2626
     style Defenses fill:#D1FAE5,stroke:#059669
@@ -39,12 +40,13 @@ graph TB
 
 ## セキュリティレベル比較
 
-| 方式 | 環境変数露出 | ファイル露出 | ネットワーク | 利便性 |
-|------|:----------:|:----------:|:----------:|:-----:|
-| .env ファイル | ✅ 露出 | ✅ 露出 | - | ★★★ |
-| .zshrc export | ✅ 露出 | ✅ 露出 | - | ★★☆ |
-| **Standard モード** | ✅ 露出 | ❌ なし | - | ★★☆ |
-| **Proxy モード** | ❌ なし | ❌ なし | localhost のみ | ★★★ |
+| 方式 | 親 env キー値 | 子 env キー値 | ファイル露出 | ネットワーク | 利便性 |
+|------|:----:|:----:|:----:|:----:|:-----:|
+| .env ファイル | ✅ 露出 | ✅ 露出 | ✅ 露出 | - | ★★★ |
+| .zshrc 平文 export | ✅ 露出 | ✅ 露出 | ✅ 露出 | - | ★★☆ |
+| **Standard モード** | ✅ 露出 | ✅ 露出 | ❌ なし | - | ★★☆ |
+| **Secret Reference モード** | ❌ 参照のみ | ✅ 露出 (`akc run` 子プロセス内) | ❌ なし | - | ★★★ |
+| **Proxy モード** | ❌ なし (`*_BASE_URL` のみ) | ❌ なし | ❌ なし | localhost のみ | ★★★ |
 
 ## Keychain アクセス制御
 
@@ -77,6 +79,25 @@ let query: [String: Any] = [
 ]
 ```
 
+## Secret Reference モードのセキュリティ
+
+`akc run` (`scripts/akc`) が `keychain://KEY_NAME` 形式の環境変数を実行時に解決する。
+
+### 設計ポイント
+
+| 項目 | 内容 |
+|------|------|
+| 親プロセス env | `keychain://KEY_NAME` の参照文字列のみ。キー値は含まれない |
+| 解決タイミング | `akc run -- <command>` 実行時に `security find-generic-password` を呼び出す |
+| 子プロセス env | `akc` が `exec` で起動する子プロセス環境にのみ実値を注入 |
+| 親 env の変更 | しない（`akc` プロセスのみが実値を保持し終了で消える） |
+| ドライラン | `akc run --dry-run` で対象キーをマスク表示（値は出力しない） |
+
+::: tip Standard モードとの違い
+Standard モードでは `.zshrc` の `export ANTHROPIC_API_KEY=$(security ...)` が **シェル全体に値を export** するため、`env` コマンドや `/proc` で値が見える。
+Secret Reference モードでは親シェル env には参照文字列しか残らず、`akc run` で起動した子プロセスの中だけに値が存在する。
+:::
+
 ## Proxy サーバーセキュリティ
 
 ### localhost 限定バインド
@@ -84,27 +105,54 @@ let query: [String: Any] = [
 ```swift
 let params = NWParameters.tcp
 params.acceptLocalOnly = true  // 外部ネットワークからの接続を拒否
+params.requiredLocalEndpoint = NWEndpoint.hostPort(
+    host: .ipv4(.loopback),
+    port: NWEndpoint.Port(rawValue: port)!
+)
 
-let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+let listener = try NWListener(using: params)
 ```
 
-- `acceptLocalOnly = true` により、`127.0.0.1` からの接続のみ受付
+- `acceptLocalOnly = true` + `loopback` バインドにより、`127.0.0.1` からの接続のみ受付
 - 外部ネットワークからのリクエストは OS レベルで拒否される
 - ファイアウォール設定不要
+
+### セッショントークン認証
+
+localhost に同居する他プロセスからの不正利用を防止するため、プロキシは起動ごとに UUID トークンを生成する。
+
+| 項目 | 内容 |
+|------|------|
+| 生成タイミング | `ProxyServer.start()` 時に `UUID().uuidString` |
+| ヘッダ名 | `X-AIKeyChain-Token` |
+| クライアント側 | `~/.aikeychain_proxy` に `AIKEYCHAIN_SESSION_TOKEN` として export |
+| 検証 | 不一致 / 未提示の場合は HTTP 403 で拒否 |
+| ライフサイクル | プロキシ停止時にメモリ・設定ファイルから消去 |
 
 ### リクエスト処理の安全性
 
 | チェック | 内容 |
 |---------|------|
-| ホスト検証 | `ProxyRoute.route(for:)` に一致するホストのみ転送 |
-| ルート未定義 | 404 を返却 (任意のホストへの転送を防止) |
-| Keychain 失敗 | 500 を返却 (キーなしで上流に送信しない) |
+| セッショントークン | `X-AIKeyChain-Token` 不一致は 403 |
+| ホスト検証 | `ProxyRoute.route(for:)` に一致するホストのみ転送、未定義は 502 |
+| Keychain 失敗 | 401 を返却 (キーなしで上流に送信しない) |
 | HTTPS 強制 | 上流への転送は常に `https://` |
 
 ### プロキシ設定ファイルのライフサイクル
 
 ```
 ~/.aikeychain_proxy  ← プロキシ起動時に生成、停止時に削除
+```
+
+ファイル内容:
+
+```bash
+# AI KeyChain Proxy — this file is auto-managed
+# Deleted when proxy stops. Do not edit manually.
+export ANTHROPIC_BASE_URL=http://localhost:18121
+export OPENAI_BASE_URL=http://localhost:18121
+export XAI_BASE_URL=http://localhost:18121
+export AIKEYCHAIN_SESSION_TOKEN=<UUID>
 ```
 
 `.zshrc` のフックはプロキシのヘルスチェックを行い、応答がない場合は設定ファイルを自動削除:
@@ -125,6 +173,12 @@ fi
 プロキシ未稼働時に `BASE_URL` 環境変数が残ると、全ての AI API 呼び出しが失敗する。
 ヘルスチェック + 自動削除でこの問題を防止している。
 :::
+
+### ProxyLog のセキュリティ要件
+
+- **ディスクへの書き出しを行わない**（`ProxyLogStore` はメモリ上の `[ProxyLog]` のみ）
+- **トークン値・リクエストボディを記録しない**（メソッド / パス / ステータス / レイテンシ のみ）
+- アプリ終了でログは消える
 
 ## デバイス間キー転送の暗号化
 
@@ -250,9 +304,12 @@ func copyToClipboard(_ value: String) {
 - [x] クリップボード 30 秒自動クリア
 - [x] Keychain アクセスグループ制限
 - [x] ThisDeviceOnly で iCloud 同期無効
-- [x] Proxy: localhost 限定バインド (acceptLocalOnly)
+- [x] Proxy: localhost 限定バインド (acceptLocalOnly + loopback)
+- [x] Proxy: セッショントークン認証 (X-AIKeyChain-Token)
 - [x] Proxy: HTTPS 強制 (上流転送)
 - [x] Proxy: ヘルスチェック付き設定ファイルライフサイクル
+- [x] Proxy: ログをメモリ上のみで保持 (ディスクなし、ボディ未記録)
+- [x] Secret Reference: 親 env にキー値を露出させず子プロセスのみに注入
 - [x] 転送: P-256 ECDH + AES-256-GCM 暗号化
 - [x] 転送: エフェメラルキーによる前方秘匿性
 - [x] Export 時の平文警告表示
