@@ -1,0 +1,86 @@
+========================================================================
+Secret Reference Mode — End-to-End Verification
+Date: 2026-04-21 16:38:07 JST
+akc: scripts/akc (akc 1.0.0)
+macOS: 26.2 / arm64
+========================================================================
+
+## Test setup
+  security add-generic-password -s AIKC_TEST_DUMMY -a $USER -w test-value-12345 -U
+
+========================================================================
+## SR-E2E-1: dry-run with registered key (masked output)
+========================================================================
+  ✅ AIKC_TEST_DUMMY = ****** (16 chars) (from keychain://AIKC_TEST_DUMMY)
+
+Resolved: 1, Failed: 0
+
+========================================================================
+## SR-E2E-2: actual run — inject resolved value into child env
+========================================================================
+$ AIKC_TEST_DUMMY="keychain://AIKC_TEST_DUMMY" akc run -- bash -c echo "$AIKC_TEST_DUMMY"
+child sees: test-value-12345
+
+========================================================================
+## SR-E2E-3: parent env is NOT modified (child-only injection)
+========================================================================
+parent AIKC_TEST_DUMMY (should be empty): '<unset>'
+
+========================================================================
+## SR-E2E-4: printenv inside child — confirms env table injection
+========================================================================
+$ AIKC_TEST_DUMMY="keychain://AIKC_TEST_DUMMY" akc run -- printenv AIKC_TEST_DUMMY
+test-value-12345
+
+========================================================================
+## SR-E2E-5: unregistered key → error with exit 1
+========================================================================
+  ❌ AIKC_TEST_NONEXISTENT — keychain://AIKC_TEST_NONEXISTENT not found in Keychain
+akc: 1 keychain reference(s) could not be resolved
+akc: run 'akc run --dry-run' to see details
+(exited with code: 1)
+
+========================================================================
+## SR-E2E-6: non-keychain vars pass through unchanged
+========================================================================
+keychain: test-value-12345
+normal:   plain-value
+
+========================================================================
+## SR-E2E-7: byte-exact resolved value (no trailing chars)
+========================================================================
+Registered 3-char value 'abc'. Expecting wc -c == 3 and od -c shows only 'a b c'.
+$ akc run -- bash -c printf "%s" "$AIKC_TEST_DUMMY" | wc -c
+       3
+$ akc run -- bash -c printf "%s" "$AIKC_TEST_DUMMY" | od -c
+0000000    a   b   c                                                    
+0000003
+
+========================================================================
+## Cleanup
+========================================================================
+keychain: "/Users/takehiro/Library/Keychains/login.keychain-db"
+version: 512
+class: "genp"
+attributes:
+    0x00000007 <blob>="AIKC_TEST_DUMMY"
+    0x00000008 <blob>=<NULL>
+    "acct"<blob>="takehiro"
+    "cdat"<timedate>=0x32303236303432313037333734385A00  "20260421073748Z\000"
+    "crtr"<uint32>=<NULL>
+    "cusi"<sint32>=<NULL>
+    "desc"<blob>=<NULL>
+    "gena"<blob>=<NULL>
+    "icmt"<blob>=<NULL>
+    "invi"<sint32>=<NULL>
+    "mdat"<timedate>=0x32303236303432313037333830375A00  "20260421073807Z\000"
+    "nega"<sint32>=<NULL>
+    "prot"<blob>=<NULL>
+    "scrp"<sint32>=<NULL>
+    "svce"<blob>="AIKC_TEST_DUMMY"
+    "type"<uint32>=<NULL>
+Keychain entry AIKC_TEST_DUMMY deleted.
+
+========================================================================
+RESULT: ALL 7 SCENARIOS PASS
+========================================================================
