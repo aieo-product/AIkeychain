@@ -41,7 +41,7 @@
 
 | 画面 | ファイル | 種別 | 説明 |
 |------|---------|------|------|
-| MenuBarView | MenuBarView.swift | MenuBarExtra | プロキシ状態・モード切替・ポート変更・Activity サマリ |
+| MenuBarView | MenuBarView.swift | MenuBarExtra | プロキシ状態・モード切替・ポート変更・累計リクエスト数 |
 
 ## 画面フロー
 
@@ -153,8 +153,7 @@ graph TB
 │ Mode: 🛡️ Proxy           │
 │ Status: 🟢 Running       │
 │ Port: 18121               │
-│ Today: 42 requests        │
-│ Errors: 0                 │
+│ Requests: 42              │
 ├──────────────────────────┤
 │ Change Mode...            │
 │ Stop Proxy                │

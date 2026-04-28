@@ -146,9 +146,9 @@ enum AppLanguage: String, CaseIterable {
 |---------|------------|------------|----------|
 | anthropicWeb | Anthropic Console | ANTHROPIC_WEB_AUTH | claude.ai |
 | openAIWeb | OpenAI Platform | OPENAI_WEB_AUTH | platform.openai.com |
-| googleAIStudio | Google AI Studio | GOOGLE_AI_STUDIO_AUTH | aistudio.google.com |
-| huggingFace | Hugging Face | HUGGINGFACE_AUTH | huggingface.co |
-| replicateWeb | Replicate | REPLICATE_AUTH | replicate.com |
+| googleAIStudio | Google AI Studio | GOOGLE_AI_WEB_AUTH | aistudio.google.com |
+| huggingFace | Hugging Face | HUGGINGFACE_TOKEN | huggingface.co |
+| replicateWeb | Replicate | REPLICATE_API_TOKEN | replicate.com |
 
 #### Code & Git
 
