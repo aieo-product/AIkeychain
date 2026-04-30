@@ -2,6 +2,71 @@
 
 All notable changes to AI KeyChain are documented in this file.
 
+## [1.6.0] - 2026-04-21
+
+### Added
+- **Secret Reference mode** — Third key management mode (`keychain://KEY_NAME` references in `.zshrc` resolved at runtime by `akc run`). Equivalent to 1Password's `op://` workflow; never exposes key values in parent shell env (#58)
+- **`akc` CLI** (`scripts/akc`) — Bash resolver that scans env for `keychain://` references and injects resolved values into a child process via `exec`. Supports `--dry-run` to mask values (#58)
+- **Activity log monitor** — `ActivityView` displays per-request history of proxy traffic (timestamp, host, method, path, status, latency) in real time. Today's request / error counts surfaced (#22, #55)
+- **`ProxyLogStore`** — In-memory ring of `ProxyLog` entries; never persisted to disk; tokens and request bodies are not recorded
+- **English UI (i18n)** — All hardcoded Japanese strings replaced with `L10n.t(...)` lookups (81+ sites); language toggle (`AppLanguage.ja` / `.en`) added to onboarding and to a toolbar menu in the main window (#67)
+- **3-mode onboarding** — `OnboardingStep.language` step prepended (now 6 steps); `ModeSelectView` rebuilt to compare three cards with expandable detail and animated diagrams (#61, #62, #66)
+- **3-mode comparison page** — Documentation + in-app help describing how keys reach tools and where they appear (env vs. memory vs. neither) (#66)
+- **Session token authentication on proxy** — Proxy generates a per-session UUID at start; clients must present it via `X-AIKeyChain-Token`. Token written to `~/.aikeychain_proxy` as `AIKEYCHAIN_SESSION_TOKEN`. Prevents abuse from co-resident localhost processes
+- **Xcode test target** — Unit tests added to project bundle and runnable from Xcode (#84)
+
+### Changed
+- **README** — Adds three-mode comparison table (English / Japanese)
+- **Proxy response forwarding** — Switched to a buffered model to fix streaming / partial-response error handling
+- **`MenuBar` / `MainView` / `RecoveryView`** — Replaced binary `isProxyMode` checks with full 3-mode awareness so Standard / Secret Reference / Proxy each render correctly
+- **`ZshrcExporter`** — Adds `Secret Reference` export format alongside `.zshrc` and `.env`
+- **Mode comparison UI** — Expanded tap targets on mode cards and comparison links
+
+### Fixed
+- New-key form: initial service / category selection and save behavior (#68, #69, #70)
+- `ModeSelectView`: comparison detail caused unscrollable sheet; corrupted icons (#66 follow-up)
+- Language switch: change was not reflected immediately in some screens
+- `envVarName` validation in editor; removed dead code paths (#73)
+
+### Security
+- **Codex-driven security pass** (#74–#79): mandatory session token enforcement, prevention of upstream secret leakage on parser errors, hardened streaming error responses, plus tightened entitlements documentation
+- **esbuild upgrade** to 0.25.0+ via `npm overrides` (vendor advisory)
+- Evidence screenshots scrubbed of personal information (cropped / removed / re-captured)
+
+### Documentation
+- v1.6.0 test specification + final verification evidence (26/26 ALL PASS) — published at `/test/v1.6.0-final` (#72, #84)
+- Packaging guide includes entitlements walkthrough
+
+### Tooling
+- Test harness: 200 OK and error-path coverage for proxy (#84)
+
+## [1.5.1] - 2026-03-31
+
+First public release on GitHub.
+
+### Added
+- **4-step env import wizard** — Paste `env` output, auto-scan recognized keys, preview, and bulk-import to Keychain (#35, #38, #39, #40, #45, #46, #47)
+- **Custom keys & custom categories** — User-defined env var names and categories with editable icons / colors; per-key category overrides for preset services (#36, #41, #42, #43)
+- **AI Web auth tracking** — Track web-login services (Anthropic Console, OpenAI Platform, Google AI Studio, Hugging Face, Replicate) alongside API keys
+- **Edit-screen category change** — Move a key between categories from the editor
+- **Encrypted device-to-device key transfer** — `KeyShareService` uses P-256 ECDH + HKDF-SHA256 + AES-256-GCM with ephemeral keys (forward secrecy). `ShareKeysView` provides a 3-tab UI (My Keys / Send / Receive) (#48, #49, #51, #52)
+- **Header proxy status badge** — Toolbar surfaces proxy state in the main window; MenuBar interactions improved (#44, #52)
+- **Terms-of-service acknowledgment for key transfer** — User confirms personal-use intent before exporting keys
+- **VitePress design site + Cloudflare Pages / GitHub Pages deployment**
+- **Auto-release GitHub Actions workflow** + packaging guide
+- **CodeQL static analysis workflow**
+- **Community health files** (CONTRIBUTING / CODE_OF_CONDUCT / SECURITY)
+- **License + disclaimer** — MIT with explicit "AS IS" disclaimer covering API key leakage, charges, and data loss
+- **v1.5.1 test specification + proxy integration test evidence** (#28, #23)
+
+### Changed
+- **Architecture documentation** rewritten to match the shipped implementation (#53)
+- **Repository public-release preparation** — README / CHANGELOG / LICENSE / cleanup pass (#37)
+
+### Security
+- **esbuild dependency upgrade** to address a moderate-severity advisory (npm `overrides`)
+- Evidence captures sanitized to exclude any token values
+
 ## [1.1.0] - 2026-03-25
 
 ### Added
