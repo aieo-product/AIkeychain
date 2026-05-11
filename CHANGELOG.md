@@ -2,6 +2,11 @@
 
 All notable changes to AI KeyChain are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **`akc` CLI** — `keychain://KEY_NAME` references registered via the AI KeyChain GUI (stored under `service=com.aieo.aikeychain` / `account=<KEY_NAME>`) could not be resolved by `akc run`; only manually-registered keys (`service=<KEY_NAME>` / `account=$USER`) were looked up. `resolve_keychain` now checks the GUI scheme first and falls back to the manual scheme, so Secret Reference mode works end-to-end with keys added through the app
+
 ## [1.6.0] - 2026-04-21
 
 ### Added
