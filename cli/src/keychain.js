@@ -6,10 +6,12 @@
 // not consistent ($USER or the service name) — pinning -a can grab a stale
 // duplicate entry and return an invalid value.
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const pExecFile = promisify(execFile);
+
+export const KEY_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
 export const GUI_SERVICE = 'com.aieo.aikeychain';
 // Manual entries are identified by env-var-shaped service names (e.g. GITHUB_TOKEN).
@@ -62,21 +64,55 @@ export async function keyExists(name) {
   return { name, app, manual, exists: app || manual };
 }
 
+/** Run a command through `security -i`, which reads commands from stdin. */
+function securityInteractive(commandLine) {
+  return new Promise((resolve) => {
+    const child = spawn('security', ['-i'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => (stdout += chunk));
+    child.stderr.on('data', (chunk) => (stderr += chunk));
+    child.on('error', (err) => resolve({ ok: false, stdout, stderr: String(err) }));
+    child.on('close', (code) => resolve({ ok: code === 0, stdout, stderr }));
+    child.stdin.write(`${commandLine}\n`);
+    child.stdin.end();
+  });
+}
+
 /**
  * Store a key. Defaults to the AI KeyChain GUI store so the entry shows up in
  * the app. `-U` updates in place to avoid acct-mismatched duplicates.
- * Limitation: `security add-generic-password` only accepts the value via -w,
- * so the secret is briefly visible in the `security` child's argv to other
- * processes of the same user. The security CLI has no stdin mode; avoiding
- * this would require a native Keychain API helper.
+ *
+ * The secret never appears in any process's argv (issue #94): the command is
+ * fed to `security -i` via stdin, and the value is hex-encoded with -X so no
+ * quoting of the interactive command line is needed.
  */
 export async function setKey(name, value, { manual = false } = {}) {
   if (!name) throw new KeychainError('key name is required');
+  if (!KEY_NAME_PATTERN.test(name)) {
+    throw new KeychainError('key name must match [A-Za-z0-9_.-]+');
+  }
   if (!value) throw new KeychainError('refusing to store an empty value');
+  // Control characters would store fine but `find-generic-password -w` falls
+  // back to hex output for them, breaking round-trips — reject up front.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(value)) {
+    throw new KeychainError('value must not contain control characters (newlines, tabs, NUL)');
+  }
   const service = manual ? name : GUI_SERVICE;
-  const r = await security(['add-generic-password', '-U', '-s', service, '-a', name, '-w', value]);
+  const hex = Buffer.from(value, 'utf8').toString('hex');
+  const r = await securityInteractive(
+    `add-generic-password -U -s "${service}" -a "${name}" -X ${hex}`
+  );
   if (!r.ok) {
     throw new KeychainError(`failed to save "${name}": ${r.stderr.trim() || 'unknown error'}`);
+  }
+  // Read-back verification: -U on a mismatched-ACL item can fail silently in
+  // odd keychain states, so confirm the entry is actually findable.
+  const exists = await keyExists(name);
+  const stored = manual ? exists.manual : exists.app;
+  if (!stored) {
+    throw new KeychainError(`save reported success but "${name}" is not findable — check Keychain state`);
   }
   return { service, account: name };
 }

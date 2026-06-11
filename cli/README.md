@@ -30,7 +30,9 @@ akc run --dry-run
 akc list                  # key names only — never prints values
 akc check GITHUB_TOKEN    # exists? in which store?
 akc get GITHUB_TOKEN      # prints keychain://GITHUB_TOKEN (use --reveal for the raw value)
-akc set GITHUB_TOKEN      # hidden prompt (or pipe via stdin); overwrites in place, no duplicates
+akc set GITHUB_TOKEN      # hidden prompt (or pipe via stdin); the value never
+                          # appears in any process's argv — fed to `security -i`
+                          # via stdin as hex. Overwrites in place, no duplicates
 akc delete GITHUB_TOKEN
 
 # Diagnose your setup (env + ~/.zshrc), including the -a "$USER" pitfall

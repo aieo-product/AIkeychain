@@ -20,7 +20,7 @@ npx aikeychain <command>
 | `akc list` | キー名一覧（値は一切表示しない） |
 | `akc check <KEY>` | キーの存在・格納先（app / manual）確認 |
 | `akc get <KEY>` | `keychain://<KEY>` 参照を出力（`--reveal` で生値） |
-| `akc set <KEY>` | キー登録・更新（隠し入力 or stdin。`-U` 相当の上書きで重複防止） |
+| `akc set <KEY>` | キー登録・更新（隠し入力 or stdin。値は `security -i` に stdin + hex で渡すため**どのプロセスの argv にも露出しない**。`-U` 相当の上書きで重複防止） |
 | `akc delete <KEY>` | キー削除 |
 | `akc doctor` | env / `~/.zshrc` の参照診断（`-a "$USER"` 落とし穴の検出含む） |
 | `akc guide` | AI エージェント向け使い方ガイド表示 |
