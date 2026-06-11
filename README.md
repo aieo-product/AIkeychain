@@ -103,6 +103,30 @@ Terminal               AI KeyChain Proxy          API Server
 
 The proxy runs on `localhost` only. Keys never leave the Keychain into environment variables.
 
+## CLI & MCP Server (npm)
+
+The [`aikeychain`](cli/) npm package provides a standalone CLI (`akc`) and an MCP server — no GUI app required:
+
+```bash
+npm install -g aikeychain    # or: npx aikeychain
+
+# Secret Reference workflow
+export OPENAI_API_KEY=keychain://OPENAI_API_KEY
+akc run -- claude            # real value injected into the child process only
+
+akc list                     # key names (never prints values)
+akc set GITHUB_TOKEN         # hidden prompt, overwrites in place
+akc doctor                   # diagnose env + ~/.zshrc references
+```
+
+Let AI agents (Claude Code, Codex, ...) use AI KeyChain correctly via MCP:
+
+```bash
+claude mcp add aikeychain -- npx -y aikeychain mcp
+```
+
+The MCP tools (`usage_guide`, `list_keys`, `check_key`, `get_secret_reference`, `set_secret`, `delete_secret`, `doctor`) **never return raw secret values to the model** — agents get `keychain://` references and run workloads through `akc run`. See [cli/README.md](cli/README.md) for details.
+
 ## Supported Services
 
 | Category | Services |
@@ -225,6 +249,29 @@ Terminal               AI KeyChain Proxy          API Server
 ```
 
 プロキシは `localhost` のみで動作。キーが環境変数に露出することはありません。
+
+### CLI & MCP サーバー（npm）
+
+GUI アプリなしでも使える CLI（`akc`）と MCP サーバーを npm パッケージ [`aikeychain`](cli/) として提供しています。
+
+```bash
+npm install -g aikeychain    # または npx aikeychain
+
+export OPENAI_API_KEY=keychain://OPENAI_API_KEY
+akc run -- claude            # 実際の値は子プロセスにのみ注入
+
+akc list                     # キー名一覧（値は表示しない）
+akc set GITHUB_TOKEN         # 隠し入力で登録（重複エントリを作らず上書き）
+akc doctor                   # env / ~/.zshrc の参照を診断
+```
+
+AI エージェント（Claude Code / Codex 等）から正しく使わせるには MCP サーバーを登録します：
+
+```bash
+claude mcp add aikeychain -- npx -y aikeychain mcp
+```
+
+MCP ツールは**シークレットの生値をモデルに返さない**設計です（`keychain://` 参照 + `akc run` 注入で完結）。詳細は [cli/README.md](cli/README.md) を参照。
 
 ### 対応サービス
 

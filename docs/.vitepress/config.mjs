@@ -40,6 +40,7 @@ export default defineConfig({
           text: 'ユーザーガイド',
           items: [
             { text: 'はじめに', link: '/guide/' },
+            { text: 'CLI & MCP サーバー', link: '/guide/cli-mcp' },
           ]
         }
       ],

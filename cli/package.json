@@ -1,0 +1,44 @@
+{
+  "name": "aikeychain",
+  "version": "0.1.0",
+  "description": "AI KeyChain CLI & MCP server — resolve keychain:// secret references from macOS Keychain and let AI agents use them safely",
+  "type": "module",
+  "bin": {
+    "akc": "bin/akc.js",
+    "aikeychain": "bin/akc.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aieo-product/AIkeychain.git",
+    "directory": "cli"
+  },
+  "keywords": [
+    "keychain",
+    "secrets",
+    "api-keys",
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "macos"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/aieo-product/AIkeychain/issues"
+  },
+  "homepage": "https://github.com/aieo-product/AIkeychain#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.0"
+  }
+}

@@ -1,0 +1,61 @@
+// Canonical "how to use AI KeyChain correctly" guide, exposed to AI agents via
+// the `usage_guide` MCP tool and `akc guide`. This is the single place where
+// the rules live so every model/session gets the same instructions.
+
+export const USAGE_GUIDE = `# AI KeyChain — usage guide for AI agents and humans
+
+AI KeyChain stores API keys/tokens in the macOS Keychain (encrypted at rest).
+Secrets must NEVER be written to .env files, shell scripts, code, or commits.
+
+## The golden rules
+
+1. NEVER write a secret value into a file (.env, .zshrc, source code, logs).
+2. To use secrets in a process, prefer keychain:// references + \`akc run\`:
+   - Set env vars to a reference, not a value:  export OPENAI_API_KEY=keychain://OPENAI_API_KEY
+   - Launch tools through akc:                  akc run -- <command>
+   - akc resolves the references from the macOS Keychain and injects the real
+     values ONLY into the child process. The parent shell never sees them.
+3. When reading a key manually with the security CLI, look it up by SERVICE
+   NAME ONLY — do NOT pin the account with -a "$USER":
+     security find-generic-password -s "ENV_VAR_NAME" -w
+   Account attributes are inconsistent across entries; pinning -a can return a
+   stale/invalid duplicate (AIkeychain issue #91).
+4. To save/update a key, overwrite with -U so no duplicate entries are created:
+     security add-generic-password -s "KEY_NAME" -a "KEY_NAME" -w "<value>" -U
+   (or use \`akc set KEY_NAME\`, which prompts for the value without exposing it
+   in shell history or process arguments.)
+
+## Where keys live
+
+| Store | service attribute | account attribute |
+|---|---|---|
+| AI KeyChain GUI store | com.aieo.aikeychain | <KEY_NAME> |
+| Manually-registered keys | <KEY_NAME> | (varies — do not rely on it) |
+
+\`akc\` looks up the GUI store first, then falls back to service-only lookup.
+
+## CLI quick reference
+
+  akc run -- <command>        run a command with keychain:// refs resolved
+  akc run --dry-run           show which env vars would resolve (values masked)
+  akc list                    list known key names (never prints values)
+  akc check <KEY>             check whether a key exists and where
+  akc set <KEY>               store/update a key (value via hidden prompt or stdin)
+  akc delete <KEY>            delete a key
+  akc doctor                  diagnose env + ~/.zshrc keychain references
+  akc mcp                     start the MCP server (stdio)
+
+## MCP setup (Claude Code)
+
+  claude mcp add aikeychain -- npx -y aikeychain mcp
+
+The MCP tools intentionally never return raw secret values to the model.
+Get a keychain:// reference with get_secret_reference, then run the actual
+workload through \`akc run\` so values stay out of the model context.
+
+## Three modes of AI KeyChain (GUI app)
+
+- Standard:        keys exported in .zshrc via security find-generic-password
+- Secret Reference: keychain:// refs + akc run (recommended for AI agents)
+- Proxy:           local proxy injects auth headers; keys never enter env
+`;
