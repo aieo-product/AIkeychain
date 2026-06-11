@@ -68,11 +68,14 @@ export function buildServer() {
     },
     async ({ name }) => {
       const exists = await keyExists(name);
+      const exportable = /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
       return json({
         reference: `keychain://${name}`,
         exists: exists.exists,
         stores: { app: exists.app, manual: exists.manual },
-        usage: `export ${name}=keychain://${name} && akc run -- <command>`,
+        usage: exportable
+          ? `export ${name}=keychain://${name} && akc run -- <command>`
+          : `env '${name}=keychain://${name}' akc run -- <command>`,
       });
     }
   );

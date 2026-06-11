@@ -22,8 +22,9 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
    stale/invalid duplicate (AIkeychain issue #91).
 4. To save/update a key, overwrite with -U so no duplicate entries are created:
      security add-generic-password -s "KEY_NAME" -a "KEY_NAME" -w "<value>" -U
-   (or use \`akc set KEY_NAME\`, which prompts for the value without exposing it
-   in shell history or process arguments.)
+   (or use \`akc set KEY_NAME\`, which prompts for the value so it never enters
+   your shell history. Note: macOS \`security\` only accepts values via argv, so
+   the value is briefly visible to same-user processes while it saves.)
 
 ## Where keys live
 

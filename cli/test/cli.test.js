@@ -1,5 +1,5 @@
 // CLI integration tests. A stub `security` command is placed first on PATH so
-// these run without touching the real Keychain (and on any OS in CI).
+// these run without touching the real Keychain.
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -116,6 +116,17 @@ test('run --dry-run masks values and reports counts', async () => {
 test('run propagates the child exit code', async () => {
   const r = await runAkc(['run', '--', process.execPath, '-e', 'process.exit(3)']);
   assert.equal(r.code, 3);
+});
+
+test('run maps a signal-terminated child to 128+signum', async () => {
+  const r = await runAkc([
+    'run',
+    '--',
+    process.execPath,
+    '-e',
+    'process.kill(process.pid, "SIGTERM"); setTimeout(() => {}, 5000)',
+  ]);
+  assert.equal(r.code, 143); // 128 + SIGTERM(15)
 });
 
 test('check reports store and missing keys', async () => {

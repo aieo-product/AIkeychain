@@ -65,6 +65,10 @@ export async function keyExists(name) {
 /**
  * Store a key. Defaults to the AI KeyChain GUI store so the entry shows up in
  * the app. `-U` updates in place to avoid acct-mismatched duplicates.
+ * Limitation: `security add-generic-password` only accepts the value via -w,
+ * so the secret is briefly visible in the `security` child's argv to other
+ * processes of the same user. The security CLI has no stdin mode; avoiding
+ * this would require a native Keychain API helper.
  */
 export async function setKey(name, value, { manual = false } = {}) {
   if (!name) throw new KeychainError('key name is required');

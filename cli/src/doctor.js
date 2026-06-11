@@ -21,8 +21,11 @@ export function scanShellConfig(text) {
     const svc = find[1].match(/-s\s+"?([A-Za-z0-9_.-]+)"?/);
     if (svc) keys.add(svc[1]);
     if (/-a\s+"\$USER"|-a\s+\$USER/.test(find[1])) {
+      // Report the service name only — never echo the raw shell line, which
+      // could contain inline secrets or other sensitive content.
       warnings.push(
-        `uses -a "$USER" — account attributes are inconsistent; look up by service only (issue #91): ${line.trim()}`
+        `${svc ? svc[1] : '(unknown key)'}: lookup uses -a "$USER" — account attributes are ` +
+          'inconsistent; look up by service only (issue #91)'
       );
     }
   }

@@ -4,6 +4,7 @@
 // Behavior is compatible with scripts/akc (bash).
 
 import { spawn } from 'node:child_process';
+import { constants as osConstants } from 'node:os';
 import { resolveKey, maskValue } from './keychain.js';
 
 export const REF_PREFIX = 'keychain://';
@@ -95,13 +96,23 @@ export async function cmdRun(argv) {
     env: { ...process.env, ...resolved },
   });
 
+  // Unlike the bash version (which execs), a wrapper process remains: forward
+  // termination signals to the child and reproduce conventional exit codes.
+  const forwarded = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+  const forward = (sig) => child.kill(sig);
+
   return new Promise((resolve) => {
+    const done = (code) => {
+      for (const sig of forwarded) process.off(sig, forward);
+      resolve(code);
+    };
+    for (const sig of forwarded) process.on(sig, forward);
     child.on('error', (err) => {
       process.stderr.write(`akc: failed to run ${command[0]}: ${err.message}\n`);
-      resolve(127);
+      done(127);
     });
     child.on('exit', (code, signal) => {
-      resolve(code ?? (signal ? 1 : 0));
+      done(signal ? 128 + (osConstants.signals[signal] ?? 1) : code ?? 0);
     });
   });
 }
