@@ -14,16 +14,23 @@ const AKC = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'akc.js')
 
 let stubDir;
 
-// The stub knows one GUI-store key (GOOD_KEY), one manual key (MANUAL_KEY),
-// and accepts interactive (-i) add-generic-password for NEW_KEY — but only
-// when the value arrives via stdin as -X hex (never as argv).
+// The stub knows one GUI-store key (GOOD_KEY) and one manual key (MANUAL_KEY).
+// Interactive (-i) add-generic-password is accepted only with -X hex via stdin
+// (never argv): NEW_KEY round-trips through a state file so read-back
+// verification sees the value actually written; ECHO_KEY simulates a failure
+// whose stderr leaks the full command line including the hex value.
 const STUB = `#!/bin/bash
+state_dir="$(cd "$(dirname "$0")" && pwd)"
 cmd="$1"; shift
 if [ "$cmd" = "-i" ]; then
   read -r line
   case "$line" in
     add-generic-password*-a\\ \\"NEW_KEY\\"*-X\\ *)
+      printf '%s' "\${line##* }" | xxd -r -p > "$state_dir/state-NEW_KEY"
       exit 0 ;;
+    add-generic-password*-a\\ \\"ECHO_KEY\\"*-X\\ *)
+      echo "security: SecKeychainItemCreateFromContent failed: $line" >&2
+      exit 1 ;;
     *)
       echo "stub -i: unexpected command: $line" >&2; exit 1 ;;
   esac
@@ -42,8 +49,8 @@ case "$cmd" in
     if [ "$svc" = "com.aieo.aikeychain" ] && [ "$acct" = "GOOD_KEY" ]; then
       $want_value && echo "stub-good-value"; exit 0
     fi
-    if [ "$svc" = "com.aieo.aikeychain" ] && [ "$acct" = "NEW_KEY" ]; then
-      $want_value && echo "stub-new-value"; exit 0
+    if [ "$svc" = "com.aieo.aikeychain" ] && [ "$acct" = "NEW_KEY" ] && [ -f "$state_dir/state-NEW_KEY" ]; then
+      $want_value && { cat "$state_dir/state-NEW_KEY"; echo; }; exit 0
     fi
     if [ "$svc" = "MANUAL_KEY" ]; then
       $want_value && echo "stub-manual-value"; exit 0
@@ -179,6 +186,24 @@ test('set stores a piped value via security -i stdin, never argv', async () => {
   assert.equal(r.code, 0);
   assert.match(r.stdout, /✅ Saved NEW_KEY/);
   assert.doesNotMatch(r.stdout, /piped-secret/);
+});
+
+test('set failure stderr never leaks the value, even when security echoes the command', async () => {
+  const value = 'echo-secret-value';
+  const hex = Buffer.from(value, 'utf8').toString('hex');
+  const r = await pExecFile(
+    'bash',
+    ['-c', `printf '%s' "${value}" | ${process.execPath} ${AKC} set ECHO_KEY`],
+    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+  ).then(
+    () => ({ code: 0, stdout: '', stderr: '' }),
+    (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
+  );
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /failed to save/);
+  assert.doesNotMatch(r.stderr, new RegExp(value));
+  assert.doesNotMatch(r.stderr, new RegExp(hex, 'i'));
+  assert.match(r.stderr, /<redacted>/);
 });
 
 test('set rejects invalid names and control characters before touching security', async () => {

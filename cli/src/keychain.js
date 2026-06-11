@@ -64,6 +64,11 @@ export async function keyExists(name) {
   return { name, app, manual, exists: app || manual };
 }
 
+/** Redact hex-encoded secret material from text destined for errors/logs. */
+export function redactSecrets(text) {
+  return text.replace(/-X\s+[0-9a-fA-F]+/g, '-X <redacted>');
+}
+
 /** Run a command through `security -i`, which reads commands from stdin. */
 function securityInteractive(commandLine) {
   return new Promise((resolve) => {
@@ -105,14 +110,19 @@ export async function setKey(name, value, { manual = false } = {}) {
     `add-generic-password -U -s "${service}" -a "${name}" -X ${hex}`
   );
   if (!r.ok) {
-    throw new KeychainError(`failed to save "${name}": ${r.stderr.trim() || 'unknown error'}`);
+    // `security -i` stderr could in principle echo the command line (which
+    // carries the hex value) — redact before it reaches CLI stderr / MCP.
+    throw new KeychainError(`failed to save "${name}": ${redactSecrets(r.stderr.trim()) || 'unknown error'}`);
   }
-  // Read-back verification: -U on a mismatched-ACL item can fail silently in
-  // odd keychain states, so confirm the entry is actually findable.
-  const exists = await keyExists(name);
-  const stored = manual ? exists.manual : exists.app;
-  if (!stored) {
-    throw new KeychainError(`save reported success but "${name}" is not findable — check Keychain state`);
+  // Read-back verification against the exact target item: -U can report
+  // success in odd keychain states while leaving a stale value behind.
+  // (`find -w` prints hex for non-ASCII payloads, so accept that form too.)
+  const readBack = await security(['find-generic-password', '-s', service, '-a', name, '-w']);
+  const got = readBack.ok ? stripTrailingNewline(readBack.stdout) : null;
+  if (got !== value && got?.toLowerCase() !== hex) {
+    throw new KeychainError(
+      `save reported success but reading "${name}" back returned a different value — check Keychain state`
+    );
   }
   return { service, account: name };
 }
