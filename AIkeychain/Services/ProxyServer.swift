@@ -106,7 +106,9 @@ final class ProxyServer {
     private final class InactivityTimer {
         private let queue: DispatchQueue
         private let interval: TimeInterval
-        private let onFire: () -> Void
+        // onFire は timer 自身を捕捉するため、stop() で nil にして
+        // timer → onFire → timer の循環参照（リクエスト単位のリーク）を断つ。
+        private var onFire: (() -> Void)?
         private let lock = NSLock()
         private var stopped = false
         private var didFire = false
@@ -135,14 +137,17 @@ final class ProxyServer {
             lock.lock()
             if stopped || didFire || gen != generation { lock.unlock(); return }
             didFire = true
+            let callback = onFire
+            onFire = nil
             lock.unlock()
-            onFire()
+            callback?()
         }
 
         func stop() {
             lock.lock(); defer { lock.unlock() }
             stopped = true
             generation += 1 // 予約済みの fire を無効化
+            onFire = nil     // 循環参照を断つ
         }
     }
 
@@ -378,6 +383,18 @@ final class ProxyServer {
                 statusCode: 400, latency: 0, isError: true
             ))
             sendErrorResponse(connection: connection, statusCode: 400, message: "Failed to parse HTTP request")
+            return
+        }
+
+        // Transfer-Encoding は未対応（フレーミングは Content-Length のみ）。
+        // chunked を素通しするとリクエストスマグリングの余地になるため拒否する。
+        if parsed.headers.contains(where: { $0.name.lowercased() == "transfer-encoding" }) {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: parsed.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: 400, latency: 0, isError: true
+            ))
+            sendErrorResponse(connection: connection, statusCode: 400, message: "Transfer-Encoding is not supported")
             return
         }
 

@@ -600,6 +600,23 @@ struct ProxyStreamingTests {
         let resp = String(data: client.recv(timeout: 3), encoding: .utf8) ?? ""
         #expect(resp.contains("400"))
     }
+
+    @Test("Transfer-Encoding request is rejected with 400 (smuggling defense)")
+    func transferEncodingRejected() throws {
+        let proxyPort = port()
+        let server = ProxyServer(keychainService: MockKeychainService(), inboundTimeout: 10)
+        server.port = proxyPort
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        let client = try #require(RawClient(port: proxyPort))
+        defer { client.disconnect() }
+        client.send("POST /v1/messages HTTP/1.1\r\nHost: api.anthropic.com\r\n\(ProxyServer.tokenHeaderName): \(server.sessionToken)\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n")
+        let resp = String(data: client.recv(timeout: 3), encoding: .utf8) ?? ""
+        #expect(resp.contains("400"))
+        #expect(resp.contains("Transfer-Encoding"))
+    }
 }
 
 @Suite("Header Injection Security Tests")
