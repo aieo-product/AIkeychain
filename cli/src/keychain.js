@@ -179,6 +179,40 @@ export async function listKeys() {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Detect ambiguous duplicate entries: env-var-shaped service names that have
+ * more than one generic-password item with distinct `acct` values. For such a
+ * service, `security find-generic-password -s NAME -w` returns an unspecified
+ * one of them — the root cause of issue #91 ("registered but invalid token").
+ *
+ * Secret values are never read; only the `acct` attribute (from dump-keychain)
+ * is reported so the user can identify and remove the stale entry.
+ *
+ * Returns [{ service, accounts: [...] }] sorted by service, accounts sorted.
+ */
+export function findAmbiguousDuplicates(records) {
+  const byService = new Map();
+  for (const { service, account } of records) {
+    if (!service || service === GUI_SERVICE) continue;
+    if (!MANUAL_NAME_PATTERN.test(service)) continue;
+    if (!byService.has(service)) byService.set(service, new Set());
+    byService.get(service).add(account ?? '');
+  }
+  return [...byService.entries()]
+    .filter(([, accts]) => accts.size > 1)
+    .map(([service, accts]) => ({ service, accounts: [...accts].sort() }))
+    .sort((a, b) => a.service.localeCompare(b.service));
+}
+
+/** Convenience wrapper around the live keychain dump (names/accts only). */
+export async function listAmbiguousDuplicates() {
+  const r = await security(['dump-keychain']);
+  if (!r.ok) {
+    throw new KeychainError(`failed to enumerate keychain items: ${r.stderr.trim()}`);
+  }
+  return findAmbiguousDuplicates(parseDump(r.stdout));
+}
+
 export function maskValue(value) {
   return `****** (${value.length} chars)`;
 }

@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDump, maskValue, MANUAL_NAME_PATTERN, GUI_SERVICE } from '../src/keychain.js';
+import {
+  parseDump,
+  maskValue,
+  findAmbiguousDuplicates,
+  MANUAL_NAME_PATTERN,
+  GUI_SERVICE,
+} from '../src/keychain.js';
 import { collectRefs } from '../src/run.js';
 import { scanShellConfig } from '../src/doctor.js';
 
@@ -47,6 +53,32 @@ test('MANUAL_NAME_PATTERN accepts env-var names and rejects bundle ids', () => {
 
 test('maskValue never includes the value', () => {
   assert.equal(maskValue('super-secret'), '****** (12 chars)');
+});
+
+test('findAmbiguousDuplicates flags same-service multi-acct entries (issue #91)', () => {
+  // The exact #91 scenario: CLOUDFLARE_API_TOKEN exists twice with different accts.
+  const records = [
+    { service: 'CLOUDFLARE_API_TOKEN', account: 'takehiro' },
+    { service: 'CLOUDFLARE_API_TOKEN', account: 'CLOUDFLARE_API_TOKEN' },
+    { service: 'GITHUB_TOKEN', account: 'GITHUB_TOKEN' }, // single → fine
+    { service: GUI_SERVICE, account: 'ANTHROPIC_API_KEY' }, // GUI store → ignored
+    { service: GUI_SERVICE, account: 'OPENAI_API_KEY' },
+    { service: 'com.apple.foo', account: 'a' }, // non-env-var service → ignored
+    { service: 'com.apple.foo', account: 'b' },
+  ];
+  const dups = findAmbiguousDuplicates(records);
+  assert.equal(dups.length, 1);
+  assert.equal(dups[0].service, 'CLOUDFLARE_API_TOKEN');
+  assert.deepEqual(dups[0].accounts, ['CLOUDFLARE_API_TOKEN', 'takehiro']);
+});
+
+test('findAmbiguousDuplicates returns empty when every service is unique', () => {
+  const records = [
+    { service: 'GITHUB_TOKEN', account: 'GITHUB_TOKEN' },
+    { service: 'QIITA_TOKEN', account: 'takehiro' },
+    { service: GUI_SERVICE, account: 'GITHUB_TOKEN' }, // app+manual for same key is not a same-service dup
+  ];
+  assert.deepEqual(findAmbiguousDuplicates(records), []);
 });
 
 test('collectRefs picks only keychain:// values', () => {

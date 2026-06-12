@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { collectRefs, resolveRefs } from './run.js';
-import { listKeys, resolveKey, KeychainError } from './keychain.js';
+import { listKeys, resolveKey, listAmbiguousDuplicates, KeychainError } from './keychain.js';
 
 /** Extract keychain://KEY and `security find-generic-password -s "KEY"` keys from shell config text. */
 export function scanShellConfig(text) {
@@ -57,6 +57,30 @@ export async function runDoctor({ env = process.env, zshrcPath } = {}) {
     } else {
       throw err;
     }
+  }
+
+  // Ambiguous duplicate entries (issue #91): same service name, multiple accts.
+  try {
+    const dups = await listAmbiguousDuplicates();
+    if (dups.length === 0) {
+      check('duplicate entries', true, 'no ambiguous duplicate keychain entries');
+    } else {
+      check(
+        'duplicate entries',
+        false,
+        `${dups.length} service(s) have duplicate entries — \`security -s NAME -w\` is ambiguous:\n` +
+          dups
+            .map(
+              (d) =>
+                `       - ${d.service}: acct=[${d.accounts.map((a) => `"${a}"`).join(', ')}]` +
+                ` → remove the stale one: security delete-generic-password -s "${d.service}" -a "<acct>"`
+            )
+            .join('\n')
+      );
+    }
+  } catch (err) {
+    if (!(err instanceof KeychainError)) throw err;
+    // keychain access already reported above; skip duplicate scan on failure
   }
 
   // Environment keychain:// references
