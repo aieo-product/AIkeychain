@@ -35,7 +35,8 @@ akc set GITHUB_TOKEN      # hidden prompt (or pipe via stdin); the value never
                           # via stdin as hex. Overwrites in place, no duplicates
 akc delete GITHUB_TOKEN
 
-# Diagnose your setup (env + ~/.zshrc), including the -a "$USER" pitfall
+# Diagnose your setup (env + ~/.zshrc), the -a "$USER" pitfall, and
+# ambiguous duplicate keychain entries (same service name, multiple accounts)
 akc doctor
 
 # Print the usage guide for AI agents

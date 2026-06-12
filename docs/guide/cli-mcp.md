@@ -22,7 +22,7 @@ npx aikeychain <command>
 | `akc get <KEY>` | `keychain://<KEY>` 参照を出力（`--reveal` で生値） |
 | `akc set <KEY>` | キー登録・更新（隠し入力 or stdin。値は `security -i` に stdin + hex で渡すため**どのプロセスの argv にも露出しない**。`-U` 相当の上書きで重複防止） |
 | `akc delete <KEY>` | キー削除 |
-| `akc doctor` | env / `~/.zshrc` の参照診断（`-a "$USER"` 落とし穴の検出含む） |
+| `akc doctor` | env / `~/.zshrc` の参照診断（`-a "$USER"` 落とし穴 + 同一サービス名の**重複エントリ検出**を含む。値は読まない） |
 | `akc guide` | AI エージェント向け使い方ガイド表示 |
 | `akc mcp` | MCP サーバー起動（stdio） |
 
