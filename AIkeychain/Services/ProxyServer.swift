@@ -19,11 +19,87 @@ final class ProxyServer {
 
     private var listener: NWListener?
     private let keychainService: KeychainServiceProtocol
+    /// listener 専用（接続受理は軽量・直列で十分）
     private let queue = DispatchQueue(label: "com.aieo.aikeychain.proxy", qos: .userInitiated)
+    /// 接続ごとの処理は並列キューで行う。1 本の遅い/ブロックしたリクエストが
+    /// 他のリクエスト（403/502 など即応すべき経路を含む）を巻き込まないようにする。
+    private let processingQueue = DispatchQueue(
+        label: "com.aieo.aikeychain.proxy.processing", qos: .userInitiated, attributes: .concurrent)
 
-    init(keychainService: KeychainServiceProtocol = KeychainService.shared) {
+    /// Keychain 読み取りのタイムアウト（consent UI 抑止が効かないレガシー ACL でも有限時間で打ち切る保険）
+    private let keychainTimeout: TimeInterval
+    /// 上流接続・受信のタイムアウト
+    private let upstreamTimeout: TimeInterval
+    /// Keychain が consent/タイムアウトで利用不能になった後、再試行を抑止する期間。
+    /// タイムアウトしても背後の `SecItemCopyMatching` スレッドは即座には解放されないため、
+    /// このサーキットブレーカーが無いと連続リクエストでスレッドが滞留・枯渇し得る。
+    private let keychainCooldown: TimeInterval
+    /// クライアントが接続後リクエストを送らない場合に接続を破棄するまでの猶予（slowloris 対策）。
+    private let inboundTimeout: TimeInterval
+
+    private let breakerLock = NSLock()
+    private var keychainUnavailableUntil: Date?
+
+    init(keychainService: KeychainServiceProtocol = KeychainService.shared,
+         keychainTimeout: TimeInterval = 3,
+         upstreamTimeout: TimeInterval = 30,
+         keychainCooldown: TimeInterval = 10,
+         maxConcurrentKeychainReads: Int = 4,
+         inboundTimeout: TimeInterval = 15) {
         self.keychainService = keychainService
+        self.keychainTimeout = keychainTimeout
+        self.upstreamTimeout = upstreamTimeout
+        self.keychainCooldown = keychainCooldown
+        self.inboundTimeout = inboundTimeout
+        self.keychainAdmission = DispatchSemaphore(value: max(1, maxConcurrentKeychainReads))
     }
+
+    /// サーキットブレーカー: クールダウン中なら true（読み取りを試みない）。
+    private func keychainInCooldown() -> Bool {
+        breakerLock.lock(); defer { breakerLock.unlock() }
+        guard let until = keychainUnavailableUntil else { return false }
+        if Date() >= until {
+            keychainUnavailableUntil = nil
+            return false
+        }
+        return true
+    }
+
+    private func tripKeychainBreaker() {
+        breakerLock.lock(); defer { breakerLock.unlock() }
+        keychainUnavailableUntil = Date().addingTimeInterval(keychainCooldown)
+    }
+
+    private func resetKeychainBreaker() {
+        breakerLock.lock(); defer { breakerLock.unlock() }
+        keychainUnavailableUntil = nil
+    }
+
+    /// クライアントへの応答が一度だけ行われることを保証する（タイムアウトと正常完了の競合対策）。
+    private final class OneShot {
+        private let lock = NSLock()
+        private var fired = false
+        func consume() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            if fired { return false }
+            fired = true
+            return true
+        }
+    }
+
+    private enum KeyReadResult {
+        case success(String)
+        case notFound
+        case interactionRequired
+        case timedOut
+        case busy
+        case error(String)
+    }
+
+    /// 同時に走る Keychain 読み取り数の上限。ブロックした読み取りの背後スレッドは
+    /// タイムアウト後も滞留するため、サーキットブレーカーが開く前（最初の
+    /// keychainTimeout 窓）の同時バーストでもスレッドが無制限に増えないよう上限化する。
+    private let keychainAdmission: DispatchSemaphore
 
     func start() throws {
         guard !isRunning else { return }
@@ -74,9 +150,15 @@ final class ProxyServer {
     // MARK: - Connection Handling
 
     private func handleConnection(_ connection: NWConnection) {
-        connection.start(queue: queue)
+        // 並列キューで処理することで、1 接続のブロックが他をブロックしない。
+        connection.start(queue: processingQueue)
 
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+        // 接続後にリクエストを送ってこないクライアントで接続が滞留しないよう破棄する。
+        let idleTimeout = DispatchWorkItem { connection.cancel() }
+        processingQueue.asyncAfter(deadline: .now() + inboundTimeout, execute: idleTimeout)
+
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, _ in
+            idleTimeout.cancel()
             guard let self, let data else {
                 connection.cancel()
                 return
@@ -84,6 +166,49 @@ final class ProxyServer {
 
             self.processRequest(data: data, connection: connection)
         }
+    }
+
+    /// Keychain 読み取りを非対話・タイムアウト付きで実行する。
+    /// 非対話読み取りでも万一ブロックした場合に備え、別キューで実行して
+    /// `keychainTimeout` で打ち切る（処理スレッドを占有させない）。
+    /// 同時実行数は `keychainAdmission` で上限化し、ブロックした読み取りスレッドが
+    /// バーストで無制限に増えるのを防ぐ。
+    private func readKeyWithTimeout(account: String) -> KeyReadResult {
+        // 空きが無ければ（=上限数の読み取りが既にブロック中なら）即座に busy で返す。
+        guard keychainAdmission.wait(timeout: .now()) == .success else {
+            return .busy
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        let lock = NSLock()
+        var outcome: KeyReadResult = .timedOut
+
+        DispatchQueue.global(qos: .userInitiated).async { [keychainService, keychainAdmission] in
+            // permit は SecItemCopyMatching が実際に返るまで保持する
+            // （readKeyWithTimeout のタイムアウト時点ではなく）。これにより
+            // 「ブロック中スレッド数 ≤ 上限」が保証される。
+            defer { keychainAdmission.signal() }
+            var local: KeyReadResult
+            do {
+                if let value = try keychainService.retrieveNoninteractive(for: account), !value.isEmpty {
+                    local = .success(value)
+                } else {
+                    local = .notFound
+                }
+            } catch KeychainError.interactionRequired {
+                local = .interactionRequired
+            } catch {
+                local = .error(error.localizedDescription)
+            }
+            lock.lock(); outcome = local; lock.unlock()
+            semaphore.signal()
+        }
+
+        if semaphore.wait(timeout: .now() + keychainTimeout) == .timedOut {
+            return .timedOut
+        }
+        lock.lock(); defer { lock.unlock() }
+        return outcome
     }
 
     private func processRequest(data: Data, connection: NWConnection) {
@@ -134,19 +259,57 @@ final class ProxyServer {
             return
         }
 
-        // Read API key from Keychain
-        guard let apiKey = try? keychainService.retrieve(for: route.keychainAccount), !apiKey.isEmpty else {
-            AppState.shared.proxyLogStore.append(ProxyLog(
-                timestamp: Date(), service: route.host,
-                method: parsed.method, path: parsed.path,
-                statusCode: 401, latency: 0, isError: true
-            ))
-            sendErrorResponse(connection: connection, statusCode: 401, message: "API key not found in Keychain for \(route.keychainAccount)")
+        // Circuit breaker: if a recent read was consent-blocked/timed out, fail
+        // fast without dispatching another read (whose backing SecItemCopyMatching
+        // thread would otherwise pile up while the prompt remains unanswered).
+        if keychainInCooldown() {
+            respondReadFailure(connection: connection, route: route, parsed: parsed,
+                               statusCode: 503, message: "Keychain temporarily unavailable (consent/unlock required). Open AI KeyChain and approve access, then retry.")
+            return
+        }
+
+        // Read API key from Keychain — non-interactive and time-bounded so an
+        // unattended proxy can never hang on a SecurityAgent consent prompt.
+        let apiKey: String
+        switch readKeyWithTimeout(account: route.keychainAccount) {
+        case .success(let value):
+            resetKeychainBreaker()
+            apiKey = value
+        case .notFound:
+            respondReadFailure(connection: connection, route: route, parsed: parsed,
+                               statusCode: 401, message: "API key not found in Keychain for \(route.keychainAccount)")
+            return
+        case .interactionRequired:
+            tripKeychainBreaker()
+            respondReadFailure(connection: connection, route: route, parsed: parsed,
+                               statusCode: 503, message: "Keychain access for \(route.keychainAccount) requires user consent/unlock. Open AI KeyChain and approve access, then retry.")
+            return
+        case .timedOut:
+            tripKeychainBreaker()
+            respondReadFailure(connection: connection, route: route, parsed: parsed,
+                               statusCode: 504, message: "Keychain read for \(route.keychainAccount) timed out after \(Int(keychainTimeout))s")
+            return
+        case .busy:
+            respondReadFailure(connection: connection, route: route, parsed: parsed,
+                               statusCode: 503, message: "Keychain busy (too many concurrent reads blocked). Retry shortly.")
+            return
+        case .error(let detail):
+            respondReadFailure(connection: connection, route: route, parsed: parsed,
+                               statusCode: 502, message: "Keychain read error for \(route.keychainAccount): \(detail)")
             return
         }
 
         // Forward request with injected auth header
         forwardRequest(parsed: parsed, route: route, apiKey: apiKey, clientConnection: connection)
+    }
+
+    private func respondReadFailure(connection: NWConnection, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest, statusCode: Int, message: String) {
+        AppState.shared.proxyLogStore.append(ProxyLog(
+            timestamp: Date(), service: route.host,
+            method: parsed.method, path: parsed.path,
+            statusCode: statusCode, latency: 0, isError: true
+        ))
+        sendErrorResponse(connection: connection, statusCode: statusCode, message: message)
     }
 
     // MARK: - Upstream Forwarding (NWConnection-based)
@@ -187,15 +350,33 @@ final class ProxyServer {
             using: tlsParams
         )
 
+        // Guarantee exactly one client response even if the watchdog and a real
+        // completion race each other.
+        let responseGuard = OneShot()
+
+        // Watchdog: never let a stuck upstream hang the client forever.
+        let watchdog = DispatchWorkItem { [weak self] in
+            guard let self, responseGuard.consume() else { return }
+            upstreamConnection.cancel()
+            self.logAndSend(
+                clientConnection: clientConnection, requestStart: requestStart,
+                route: route, parsed: parsed,
+                message: "Upstream timed out after \(Int(self.upstreamTimeout))s"
+            )
+        }
+        processingQueue.asyncAfter(deadline: .now() + upstreamTimeout, execute: watchdog)
+
         upstreamConnection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
                 // Connection established - send the request
                 upstreamConnection.send(content: requestData, completion: .contentProcessed { sendError in
                     if let sendError {
-                        self?.logAndRespondError(
+                        watchdog.cancel()
+                        guard responseGuard.consume() else { return }
+                        self?.logAndSend(
                             clientConnection: clientConnection, requestStart: requestStart,
-                            route: route, parsed: parsed, latency: Date().timeIntervalSince(requestStart),
+                            route: route, parsed: parsed,
                             message: "Upstream send error: \(sendError.localizedDescription)"
                         )
                         upstreamConnection.cancel()
@@ -204,14 +385,17 @@ final class ProxyServer {
                     // Receive upstream response
                     self?.receiveUpstreamResponse(
                         upstream: upstreamConnection, clientConnection: clientConnection,
-                        requestStart: requestStart, route: route, parsed: parsed
+                        requestStart: requestStart, route: route, parsed: parsed,
+                        watchdog: watchdog, responseGuard: responseGuard
                     )
                 })
 
             case .failed(let error):
-                self?.logAndRespondError(
+                watchdog.cancel()
+                guard responseGuard.consume() else { return }
+                self?.logAndSend(
                     clientConnection: clientConnection, requestStart: requestStart,
-                    route: route, parsed: parsed, latency: Date().timeIntervalSince(requestStart),
+                    route: route, parsed: parsed,
                     message: "Upstream connection failed: \(error.localizedDescription)"
                 )
                 upstreamConnection.cancel()
@@ -221,10 +405,10 @@ final class ProxyServer {
             }
         }
 
-        upstreamConnection.start(queue: queue)
+        upstreamConnection.start(queue: processingQueue)
     }
 
-    private func receiveUpstreamResponse(upstream: NWConnection, clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest) {
+    private func receiveUpstreamResponse(upstream: NWConnection, clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest, watchdog: DispatchWorkItem, responseGuard: OneShot) {
         // Receive all data from upstream then forward to client
         // Note: NWConnection の send は中間チャンクをフラッシュしないため、
         // ストリーミング転送ではなくバッファリング方式を使用
@@ -238,12 +422,14 @@ final class ProxyServer {
 
                 if isComplete || error != nil {
                     upstream.cancel()
+                    watchdog.cancel()
+                    guard responseGuard.consume() else { return }
                     let latency = Date().timeIntervalSince(requestStart)
 
                     if allData.isEmpty {
-                        self?.logAndRespondError(
+                        self?.logAndSend(
                             clientConnection: clientConnection, requestStart: requestStart,
-                            route: route, parsed: parsed, latency: latency,
+                            route: route, parsed: parsed,
                             message: error.map { "Upstream error: \($0.localizedDescription)" } ?? "Empty upstream response"
                         )
                         return
@@ -283,11 +469,11 @@ final class ProxyServer {
         return 200
     }
 
-    private func logAndRespondError(clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest, latency: TimeInterval, message: String) {
+    private func logAndSend(clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest, message: String) {
         AppState.shared.proxyLogStore.append(ProxyLog(
             timestamp: requestStart, service: route.host,
             method: parsed.method, path: parsed.path,
-            statusCode: 502, latency: latency, isError: true
+            statusCode: 502, latency: Date().timeIntervalSince(requestStart), isError: true
         ))
         sendErrorResponse(connection: clientConnection, statusCode: 502, message: message)
     }

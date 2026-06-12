@@ -34,6 +34,19 @@ struct ProxyRouteTests {
         let route = ProxyRoute.route(for: "example.com")
         #expect(route == nil)
     }
+
+    @Test("Host with port still matches (port stripped)")
+    func hostWithPort() {
+        #expect(ProxyRoute.route(for: "api.anthropic.com:443") != nil)
+    }
+
+    @Test("Look-alike host does NOT match (exact match, not contains)")
+    func lookAlikeHostRejected() {
+        // issue #96: substring matching let attacker-controlled hosts match.
+        #expect(ProxyRoute.route(for: "api.anthropic.com.attacker.test") == nil)
+        #expect(ProxyRoute.route(for: "evil-api.anthropic.com") == nil)
+        #expect(ProxyRoute.route(for: "notapi.openai.com") == nil)
+    }
 }
 
 @Suite("HTTPRequestParser Tests")
@@ -120,6 +133,249 @@ struct ProxyServerTests {
         try server.start() // Should be no-op
         Thread.sleep(forTimeInterval: 0.3)
         server.stop()
+    }
+}
+
+/// Keychain double whose non-interactive read blocks for a long time —
+/// simulates the SecurityAgent consent prompt that caused the issue #96 hang.
+final class BlockingKeychainService: KeychainServiceProtocol {
+    let blockFor: TimeInterval
+    init(blockFor: TimeInterval) { self.blockFor = blockFor }
+    func save(value: String, for account: String) throws {}
+    func retrieve(for account: String) throws -> String? { nil }
+    func retrieveNoninteractive(for account: String) throws -> String? {
+        Thread.sleep(forTimeInterval: blockFor)
+        return "should-not-be-used"
+    }
+    func delete(for account: String) throws {}
+    func exists(for account: String) -> Bool { false }
+}
+
+/// Keychain double that reports the read needs user interaction.
+final class InteractionRequiredKeychainService: KeychainServiceProtocol {
+    func save(value: String, for account: String) throws {}
+    func retrieve(for account: String) throws -> String? { nil }
+    func retrieveNoninteractive(for account: String) throws -> String? {
+        throw KeychainError.interactionRequired
+    }
+    func delete(for account: String) throws {}
+    func exists(for account: String) -> Bool { false }
+}
+
+/// Minimal raw-TCP HTTP client for talking to the local proxy in tests.
+/// Returns (statusCode, elapsedSeconds). statusCode == -1 on connection failure.
+enum TestHTTPClient {
+    static func request(port: UInt16, host: String, token: String?, timeout: TimeInterval) -> (status: Int, elapsed: TimeInterval) {
+        let start = Date()
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return (-1, 0) }
+        defer { close(fd) }
+
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let connectResult = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                Foundation.connect(fd, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard connectResult == 0 else { return (-1, Date().timeIntervalSince(start)) }
+
+        var req = "GET /v1/models HTTP/1.1\r\nHost: \(host)\r\n"
+        if let token { req += "\(ProxyServer.tokenHeaderName): \(token)\r\n" }
+        req += "Connection: close\r\n\r\n"
+        _ = req.withCString { send(fd, $0, strlen($0), 0) }
+
+        // bound read with a recv timeout
+        var tv = timeval(tv_sec: Int(timeout), tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var buf = [UInt8](repeating: 0, count: 4096)
+        let n = recv(fd, &buf, buf.count, 0)
+        let elapsed = Date().timeIntervalSince(start)
+        guard n > 0, let resp = String(bytes: buf[0..<n], encoding: .utf8), resp.hasPrefix("HTTP/") else {
+            return (-1, elapsed)
+        }
+        let parts = resp.split(separator: " ", maxSplits: 2)
+        let status = parts.count >= 2 ? (Int(parts[1]) ?? -1) : -1
+        return (status, elapsed)
+    }
+}
+
+@Suite("Proxy Hang Regression Tests (issue #96)")
+struct ProxyHangRegressionTests {
+
+    /// Pick a high port unlikely to collide.
+    private func testPort() -> UInt16 { UInt16.random(in: 19000...19900) }
+
+    @Test("A blocked keychain read does NOT wedge other requests")
+    func blockedReadDoesNotWedgeOthers() throws {
+        let port = testPort()
+        // keychain read blocks 10s, but our keychain timeout is 1s.
+        let server = ProxyServer(
+            keychainService: BlockingKeychainService(blockFor: 10),
+            keychainTimeout: 1, upstreamTimeout: 5)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+        let token = server.sessionToken
+
+        // Fire a request that hits the (blocking) keychain read in the background.
+        let blocker = Thread {
+            _ = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 12)
+        }
+        blocker.start()
+        Thread.sleep(forTimeInterval: 0.3) // let it reach the keychain read
+
+        // Meanwhile, a no-token request must be rejected (403) essentially instantly,
+        // proving the proxy is not wedged behind the blocked keychain read.
+        let result = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: nil, timeout: 3)
+        #expect(result.status == 403)
+        #expect(result.elapsed < 1.5)
+    }
+
+    @Test("A blocked keychain read returns a timeout error, never hangs forever")
+    func blockedReadTimesOut() throws {
+        let port = testPort()
+        let server = ProxyServer(
+            keychainService: BlockingKeychainService(blockFor: 30),
+            keychainTimeout: 1, upstreamTimeout: 5)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        let result = TestHTTPClient.request(
+            port: port, host: "api.anthropic.com", token: server.sessionToken, timeout: 8)
+        // 504 Gateway Timeout, returned well before the 30s block would elapse.
+        #expect(result.status == 504)
+        #expect(result.elapsed < 4)
+    }
+
+    @Test("Keychain consent-required read returns 503 quickly, no hang")
+    func interactionRequiredReturns503() throws {
+        let port = testPort()
+        let server = ProxyServer(
+            keychainService: InteractionRequiredKeychainService(),
+            keychainTimeout: 2, upstreamTimeout: 5)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        let result = TestHTTPClient.request(
+            port: port, host: "api.anthropic.com", token: server.sessionToken, timeout: 5)
+        #expect(result.status == 503)
+        #expect(result.elapsed < 2)
+    }
+
+    @Test("Circuit breaker: after a timeout, subsequent reads fail fast without re-blocking")
+    func circuitBreakerShortCircuits() throws {
+        let port = testPort()
+        // 10s block, 1s read timeout, 5s cooldown. First request times out (≈1s);
+        // the next request during cooldown must return 503 almost instantly
+        // (it must NOT spend another ~1s waiting on a fresh blocked read).
+        let server = ProxyServer(
+            keychainService: BlockingKeychainService(blockFor: 10),
+            keychainTimeout: 1, upstreamTimeout: 5, keychainCooldown: 5)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+        let token = server.sessionToken
+
+        let first = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 5)
+        #expect(first.status == 504)
+
+        let second = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 5)
+        #expect(second.status == 503)
+        #expect(second.elapsed < 0.5) // short-circuited, not a fresh 1s block
+    }
+
+    @Test("Admission cap: concurrent burst during the first timeout window is bounded (fast 503)")
+    func admissionCapBoundsConcurrentBurst() throws {
+        let port = testPort()
+        // Only 1 concurrent keychain read allowed; reads block 10s; read timeout 3s.
+        // The first request occupies the single permit (blocked). A second request
+        // arriving during the SAME timeout window — before the breaker has tripped —
+        // must NOT spawn another blocked read; it gets 503 busy almost instantly.
+        let server = ProxyServer(
+            keychainService: BlockingKeychainService(blockFor: 10),
+            keychainTimeout: 3, upstreamTimeout: 5, keychainCooldown: 10,
+            maxConcurrentKeychainReads: 1)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+        let token = server.sessionToken
+
+        let blocker = Thread {
+            _ = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 12)
+        }
+        blocker.start()
+        Thread.sleep(forTimeInterval: 0.3) // first request now holds the single permit
+
+        // Second request within the first read's 3s timeout window:
+        let second = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 5)
+        #expect(second.status == 503)
+        #expect(second.elapsed < 1.0) // fast-failed by admission cap, not a fresh 3s block
+    }
+
+    @Test("Idle client connection is dropped after the inbound timeout")
+    func idleConnectionDropped() throws {
+        let port = testPort()
+        let server = ProxyServer(
+            keychainService: MockKeychainService(),
+            keychainTimeout: 2, upstreamTimeout: 5, keychainCooldown: 10,
+            maxConcurrentKeychainReads: 4, inboundTimeout: 1)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        // Connect but never send a request; the server must close the connection.
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #expect(fd >= 0)
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let connected = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                Foundation.connect(fd, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        #expect(connected == 0)
+
+        // A blocking recv should return 0 (EOF) once the server cancels the idle connection.
+        var tv = timeval(tv_sec: 4, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var buf = [UInt8](repeating: 0, count: 16)
+        let start = Date()
+        let n = recv(fd, &buf, buf.count, 0)
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(n == 0)          // connection closed by server (EOF)
+        #expect(elapsed < 3.5)   // around inboundTimeout (1s), not the recv timeout (4s)
+    }
+
+    @Test("Unknown host is rejected instantly without touching the keychain")
+    func unknownHostInstant502() throws {
+        let port = testPort()
+        // Even with a blocking keychain, unknown-host must 502 immediately.
+        let server = ProxyServer(
+            keychainService: BlockingKeychainService(blockFor: 30),
+            keychainTimeout: 2, upstreamTimeout: 5)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        let result = TestHTTPClient.request(
+            port: port, host: "example.com", token: server.sessionToken, timeout: 3)
+        #expect(result.status == 502)
+        #expect(result.elapsed < 1.5)
     }
 }
 

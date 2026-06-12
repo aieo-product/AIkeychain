@@ -1,10 +1,12 @@
 import Foundation
 import Security
+import LocalAuthentication
 
 enum KeychainError: LocalizedError {
     case duplicateItem
     case itemNotFound
     case invalidData
+    case interactionRequired
     case unexpectedStatus(OSStatus)
 
     var errorDescription: String? {
@@ -12,6 +14,7 @@ enum KeychainError: LocalizedError {
         case .duplicateItem: "This key already exists in the Keychain."
         case .itemNotFound: "Key not found in the Keychain."
         case .invalidData: "Failed to encode/decode the key data."
+        case .interactionRequired: "Keychain access requires user interaction (consent or unlock), which is unavailable in this context."
         case .unexpectedStatus(let status): "Keychain error: \(status)"
         }
     }
@@ -20,6 +23,11 @@ enum KeychainError: LocalizedError {
 protocol KeychainServiceProtocol {
     func save(value: String, for account: String) throws
     func retrieve(for account: String) throws -> String?
+    /// Read without ever presenting authentication/consent UI.
+    /// Throws `KeychainError.interactionRequired` instead of blocking when macOS
+    /// would otherwise show a SecurityAgent prompt — required for an unattended
+    /// background proxy that must never hang on a keychain read.
+    func retrieveNoninteractive(for account: String) throws -> String?
     func delete(for account: String) throws
     func exists(for account: String) -> Bool
 }
@@ -91,6 +99,33 @@ final class KeychainService: KeychainServiceProtocol {
         return string
     }
 
+    func retrieveNoninteractive(for account: String) throws -> String? {
+        var query = baseQuery(for: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        // Fail fast instead of presenting (and blocking on) a consent/auth prompt.
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        query[kSecUseAuthenticationContext as String] = context
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecItemNotFound {
+            return nil
+        }
+        if status == errSecInteractionNotAllowed {
+            throw KeychainError.interactionRequired
+        }
+        guard status == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+        guard let data = result as? Data, let string = String(data: data, encoding: .utf8) else {
+            throw KeychainError.invalidData
+        }
+        return string
+    }
+
     func delete(for account: String) throws {
         let query = baseQuery(for: account)
         let status = SecItemDelete(query as CFDictionary)
@@ -119,6 +154,10 @@ final class MockKeychainService: KeychainServiceProtocol {
     }
 
     func retrieve(for account: String) throws -> String? {
+        store[account]
+    }
+
+    func retrieveNoninteractive(for account: String) throws -> String? {
         store[account]
     }
 
