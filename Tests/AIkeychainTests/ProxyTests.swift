@@ -293,6 +293,73 @@ struct ProxyHangRegressionTests {
         #expect(second.elapsed < 0.5) // short-circuited, not a fresh 1s block
     }
 
+    @Test("Admission cap: concurrent burst during the first timeout window is bounded (fast 503)")
+    func admissionCapBoundsConcurrentBurst() throws {
+        let port = testPort()
+        // Only 1 concurrent keychain read allowed; reads block 10s; read timeout 3s.
+        // The first request occupies the single permit (blocked). A second request
+        // arriving during the SAME timeout window — before the breaker has tripped —
+        // must NOT spawn another blocked read; it gets 503 busy almost instantly.
+        let server = ProxyServer(
+            keychainService: BlockingKeychainService(blockFor: 10),
+            keychainTimeout: 3, upstreamTimeout: 5, keychainCooldown: 10,
+            maxConcurrentKeychainReads: 1)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+        let token = server.sessionToken
+
+        let blocker = Thread {
+            _ = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 12)
+        }
+        blocker.start()
+        Thread.sleep(forTimeInterval: 0.3) // first request now holds the single permit
+
+        // Second request within the first read's 3s timeout window:
+        let second = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 5)
+        #expect(second.status == 503)
+        #expect(second.elapsed < 1.0) // fast-failed by admission cap, not a fresh 3s block
+    }
+
+    @Test("Idle client connection is dropped after the inbound timeout")
+    func idleConnectionDropped() throws {
+        let port = testPort()
+        let server = ProxyServer(
+            keychainService: MockKeychainService(),
+            keychainTimeout: 2, upstreamTimeout: 5, keychainCooldown: 10,
+            maxConcurrentKeychainReads: 4, inboundTimeout: 1)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        // Connect but never send a request; the server must close the connection.
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #expect(fd >= 0)
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let connected = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                Foundation.connect(fd, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        #expect(connected == 0)
+
+        // A blocking recv should return 0 (EOF) once the server cancels the idle connection.
+        var tv = timeval(tv_sec: 4, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var buf = [UInt8](repeating: 0, count: 16)
+        let start = Date()
+        let n = recv(fd, &buf, buf.count, 0)
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(n == 0)          // connection closed by server (EOF)
+        #expect(elapsed < 3.5)   // around inboundTimeout (1s), not the recv timeout (4s)
+    }
+
     @Test("Unknown host is rejected instantly without touching the keychain")
     func unknownHostInstant502() throws {
         let port = testPort()

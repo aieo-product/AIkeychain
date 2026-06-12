@@ -34,6 +34,8 @@ final class ProxyServer {
     /// タイムアウトしても背後の `SecItemCopyMatching` スレッドは即座には解放されないため、
     /// このサーキットブレーカーが無いと連続リクエストでスレッドが滞留・枯渇し得る。
     private let keychainCooldown: TimeInterval
+    /// クライアントが接続後リクエストを送らない場合に接続を破棄するまでの猶予（slowloris 対策）。
+    private let inboundTimeout: TimeInterval
 
     private let breakerLock = NSLock()
     private var keychainUnavailableUntil: Date?
@@ -41,11 +43,15 @@ final class ProxyServer {
     init(keychainService: KeychainServiceProtocol = KeychainService.shared,
          keychainTimeout: TimeInterval = 3,
          upstreamTimeout: TimeInterval = 30,
-         keychainCooldown: TimeInterval = 10) {
+         keychainCooldown: TimeInterval = 10,
+         maxConcurrentKeychainReads: Int = 4,
+         inboundTimeout: TimeInterval = 15) {
         self.keychainService = keychainService
         self.keychainTimeout = keychainTimeout
         self.upstreamTimeout = upstreamTimeout
         self.keychainCooldown = keychainCooldown
+        self.inboundTimeout = inboundTimeout
+        self.keychainAdmission = DispatchSemaphore(value: max(1, maxConcurrentKeychainReads))
     }
 
     /// サーキットブレーカー: クールダウン中なら true（読み取りを試みない）。
@@ -86,8 +92,14 @@ final class ProxyServer {
         case notFound
         case interactionRequired
         case timedOut
+        case busy
         case error(String)
     }
+
+    /// 同時に走る Keychain 読み取り数の上限。ブロックした読み取りの背後スレッドは
+    /// タイムアウト後も滞留するため、サーキットブレーカーが開く前（最初の
+    /// keychainTimeout 窓）の同時バーストでもスレッドが無制限に増えないよう上限化する。
+    private let keychainAdmission: DispatchSemaphore
 
     func start() throws {
         guard !isRunning else { return }
@@ -141,7 +153,12 @@ final class ProxyServer {
         // 並列キューで処理することで、1 接続のブロックが他をブロックしない。
         connection.start(queue: processingQueue)
 
+        // 接続後にリクエストを送ってこないクライアントで接続が滞留しないよう破棄する。
+        let idleTimeout = DispatchWorkItem { connection.cancel() }
+        processingQueue.asyncAfter(deadline: .now() + inboundTimeout, execute: idleTimeout)
+
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, _ in
+            idleTimeout.cancel()
             guard let self, let data else {
                 connection.cancel()
                 return
@@ -154,12 +171,23 @@ final class ProxyServer {
     /// Keychain 読み取りを非対話・タイムアウト付きで実行する。
     /// 非対話読み取りでも万一ブロックした場合に備え、別キューで実行して
     /// `keychainTimeout` で打ち切る（処理スレッドを占有させない）。
+    /// 同時実行数は `keychainAdmission` で上限化し、ブロックした読み取りスレッドが
+    /// バーストで無制限に増えるのを防ぐ。
     private func readKeyWithTimeout(account: String) -> KeyReadResult {
+        // 空きが無ければ（=上限数の読み取りが既にブロック中なら）即座に busy で返す。
+        guard keychainAdmission.wait(timeout: .now()) == .success else {
+            return .busy
+        }
+
         let semaphore = DispatchSemaphore(value: 0)
         let lock = NSLock()
         var outcome: KeyReadResult = .timedOut
 
-        DispatchQueue.global(qos: .userInitiated).async { [keychainService] in
+        DispatchQueue.global(qos: .userInitiated).async { [keychainService, keychainAdmission] in
+            // permit は SecItemCopyMatching が実際に返るまで保持する
+            // （readKeyWithTimeout のタイムアウト時点ではなく）。これにより
+            // 「ブロック中スレッド数 ≤ 上限」が保証される。
+            defer { keychainAdmission.signal() }
             var local: KeyReadResult
             do {
                 if let value = try keychainService.retrieveNoninteractive(for: account), !value.isEmpty {
@@ -260,6 +288,10 @@ final class ProxyServer {
             tripKeychainBreaker()
             respondReadFailure(connection: connection, route: route, parsed: parsed,
                                statusCode: 504, message: "Keychain read for \(route.keychainAccount) timed out after \(Int(keychainTimeout))s")
+            return
+        case .busy:
+            respondReadFailure(connection: connection, route: route, parsed: parsed,
+                               statusCode: 503, message: "Keychain busy (too many concurrent reads blocked). Retry shortly.")
             return
         case .error(let detail):
             respondReadFailure(connection: connection, route: route, parsed: parsed,
