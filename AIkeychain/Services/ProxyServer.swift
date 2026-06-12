@@ -36,22 +36,35 @@ final class ProxyServer {
     private let keychainCooldown: TimeInterval
     /// クライアントが接続後リクエストを送らない場合に接続を破棄するまでの猶予（slowloris 対策）。
     private let inboundTimeout: TimeInterval
+    /// 受信リクエスト全体（ヘッダ + ボディ）の最大サイズ。超過は 413 で拒否し、
+    /// 巨大ボディによるメモリ膨張を防ぐ。
+    private let maxRequestBytes: Int
 
     private let breakerLock = NSLock()
     private var keychainUnavailableUntil: Date?
+
+    /// 上流接続の生成（既定は TLS:443）。テストではローカルの平文サーバーへ
+    /// 差し替えてストリーミング/フレーミングを検証できるようにする。
+    private let makeUpstream: (_ host: String) -> NWConnection
 
     init(keychainService: KeychainServiceProtocol = KeychainService.shared,
          keychainTimeout: TimeInterval = 3,
          upstreamTimeout: TimeInterval = 30,
          keychainCooldown: TimeInterval = 10,
          maxConcurrentKeychainReads: Int = 4,
-         inboundTimeout: TimeInterval = 15) {
+         inboundTimeout: TimeInterval = 15,
+         maxRequestBytes: Int = 10 * 1024 * 1024,
+         makeUpstream: ((_ host: String) -> NWConnection)? = nil) {
         self.keychainService = keychainService
         self.keychainTimeout = keychainTimeout
         self.upstreamTimeout = upstreamTimeout
         self.keychainCooldown = keychainCooldown
         self.inboundTimeout = inboundTimeout
+        self.maxRequestBytes = max(8 * 1024, maxRequestBytes)
         self.keychainAdmission = DispatchSemaphore(value: max(1, maxConcurrentKeychainReads))
+        self.makeUpstream = makeUpstream ?? { host in
+            NWConnection(host: NWEndpoint.Host(host), port: .https, using: NWParameters.tls)
+        }
     }
 
     /// サーキットブレーカー: クールダウン中なら true（読み取りを試みない）。
@@ -84,6 +97,57 @@ final class ProxyServer {
             if fired { return false }
             fired = true
             return true
+        }
+    }
+
+    /// 非活動タイムアウト。`reschedule()` のたびに期限を延ばし、無通信が `interval`
+    /// 続いたら一度だけ `onFire` を呼ぶ。ストリーミング応答（SSE 等の長時間接続）を
+    /// 許容しつつ、上流の沈黙やクライアント停止で永久に滞留しないようにする。
+    private final class InactivityTimer {
+        private let queue: DispatchQueue
+        private let interval: TimeInterval
+        // onFire は timer 自身を捕捉するため、stop() で nil にして
+        // timer → onFire → timer の循環参照（リクエスト単位のリーク）を断つ。
+        private var onFire: (() -> Void)?
+        private let lock = NSLock()
+        private var stopped = false
+        private var didFire = false
+        /// 世代トークン。reschedule のたびに増やし、fire は自分の世代が最新の
+        /// ときだけ発火する。既にキューから取り出され実行に入った古い work item が
+        /// 「キャンセルされたはず」のまま発火してアクティブなストリームを誤って
+        /// 閉じる事故を防ぐ。
+        private var generation = 0
+
+        init(queue: DispatchQueue, interval: TimeInterval, onFire: @escaping () -> Void) {
+            self.queue = queue
+            self.interval = interval
+            self.onFire = onFire
+        }
+
+        func reschedule() {
+            lock.lock(); defer { lock.unlock() }
+            if stopped || didFire { return }
+            generation += 1
+            let gen = generation
+            let work = DispatchWorkItem { [weak self] in self?.fire(gen) }
+            queue.asyncAfter(deadline: .now() + interval, execute: work)
+        }
+
+        private func fire(_ gen: Int) {
+            lock.lock()
+            if stopped || didFire || gen != generation { lock.unlock(); return }
+            didFire = true
+            let callback = onFire
+            onFire = nil
+            lock.unlock()
+            callback?()
+        }
+
+        func stop() {
+            lock.lock(); defer { lock.unlock() }
+            stopped = true
+            generation += 1 // 予約済みの fire を無効化
+            onFire = nil     // 循環参照を断つ
         }
     }
 
@@ -157,15 +221,101 @@ final class ProxyServer {
         let idleTimeout = DispatchWorkItem { connection.cancel() }
         processingQueue.asyncAfter(deadline: .now() + inboundTimeout, execute: idleTimeout)
 
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, _ in
-            idleTimeout.cancel()
-            guard let self, let data else {
+        receiveRequest(connection: connection, buffer: Data(), idleTimeout: idleTimeout)
+    }
+
+    /// リクエストを「ヘッダ終端（CRLFCRLF）＋ Content-Length 分のボディ」が
+    /// 揃うまで蓄積してから処理する。1 回の receive で全体が届く保証はないため
+    /// （大きい POST ボディや分割到着で取りこぼさないように）。
+    private func receiveRequest(connection: NWConnection, buffer: Data, idleTimeout: DispatchWorkItem) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self else { connection.cancel(); return }
+
+            var buffer = buffer
+            if let data { buffer.append(data) }
+
+            if error != nil {
+                idleTimeout.cancel()
                 connection.cancel()
                 return
             }
 
-            self.processRequest(data: data, connection: connection)
+            // リクエストが大きすぎる → 413 で拒否（メモリ膨張防止）。
+            if buffer.count > self.maxRequestBytes {
+                idleTimeout.cancel()
+                self.sendErrorResponse(connection: connection, statusCode: 413, message: "Request too large")
+                return
+            }
+
+            // ヘッダが揃ったか？
+            if let headerEnd = buffer.firstRange(of: Data("\r\n\r\n".utf8)) {
+                let headerData = buffer[buffer.startIndex..<headerEnd.lowerBound]
+                switch Self.contentLengthField(from: headerData) {
+                case .invalid:
+                    idleTimeout.cancel()
+                    self.sendErrorResponse(connection: connection, statusCode: 400, message: "Invalid or conflicting Content-Length")
+                    return
+                case .absent, .present:
+                    let contentLength = Self.contentLengthValue(from: headerData)
+                    let bodyReceived = buffer.distance(from: headerEnd.upperBound, to: buffer.endIndex)
+                    if bodyReceived >= contentLength {
+                        idleTimeout.cancel()
+                        self.processRequest(data: buffer, connection: connection)
+                        return
+                    }
+                }
+            }
+
+            if isComplete {
+                // 相手が送信を終えた（が枠が完結していない）—持っている分で処理を試みる。
+                idleTimeout.cancel()
+                if buffer.isEmpty {
+                    connection.cancel()
+                } else {
+                    self.processRequest(data: buffer, connection: connection)
+                }
+                return
+            }
+
+            // まだ足りない—受信を継続。
+            self.receiveRequest(connection: connection, buffer: buffer, idleTimeout: idleTimeout)
         }
+    }
+
+    enum ContentLengthField { case absent; case present; case invalid }
+
+    /// Content-Length ヘッダを厳密に検証する。非数値・負値・値の異なる重複
+    /// （リクエストスマグリング対策）は invalid。
+    static func contentLengthField(from headerData: Data) -> ContentLengthField {
+        guard let text = String(data: headerData, encoding: .utf8) else { return .invalid }
+        var found: Int?
+        for line in text.components(separatedBy: "\r\n") {
+            let parts = line.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2,
+                  parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" else { continue }
+            let raw = parts[1].trimmingCharacters(in: .whitespaces)
+            guard let n = Int(raw), n >= 0 else { return .invalid }
+            if let prev = found, prev != n { return .invalid }
+            found = n
+        }
+        return found == nil ? .absent : .present
+    }
+
+    /// 検証済み前提で Content-Length の数値を返す（無ければ 0）。
+    static func contentLengthValue(from headerData: Data) -> Int {
+        guard let text = String(data: headerData, encoding: .utf8) else { return 0 }
+        for line in text.components(separatedBy: "\r\n") {
+            let parts = line.split(separator: ":", maxSplits: 1)
+            if parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
+                return Int(parts[1].trimmingCharacters(in: .whitespaces)) ?? 0
+            }
+        }
+        return 0
+    }
+
+    /// ヘッダバイト列から Content-Length を取り出す（無ければ 0）。テスト/上流補助用。
+    static func parseContentLength(from headerData: Data) -> Int {
+        contentLengthValue(from: headerData)
     }
 
     /// Keychain 読み取りを非対話・タイムアウト付きで実行する。
@@ -233,6 +383,18 @@ final class ProxyServer {
                 statusCode: 400, latency: 0, isError: true
             ))
             sendErrorResponse(connection: connection, statusCode: 400, message: "Failed to parse HTTP request")
+            return
+        }
+
+        // Transfer-Encoding は未対応（フレーミングは Content-Length のみ）。
+        // chunked を素通しするとリクエストスマグリングの余地になるため拒否する。
+        if parsed.headers.contains(where: { $0.name.lowercased() == "transfer-encoding" }) {
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: Date(), service: parsed.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: 400, latency: 0, isError: true
+            ))
+            sendErrorResponse(connection: connection, statusCode: 400, message: "Transfer-Encoding is not supported")
             return
         }
 
@@ -342,13 +504,8 @@ final class ProxyServer {
             requestData.append(body)
         }
 
-        // Connect to upstream via NWConnection (TLS)
-        let tlsParams = NWParameters.tls
-        let upstreamConnection = NWConnection(
-            host: NWEndpoint.Host(route.host),
-            port: .https,
-            using: tlsParams
-        )
+        // Connect to upstream (TLS:443 by default; injectable for tests).
+        let upstreamConnection = makeUpstream(route.host)
 
         // Guarantee exactly one client response even if the watchdog and a real
         // completion race each other.
@@ -408,46 +565,102 @@ final class ProxyServer {
         upstreamConnection.start(queue: processingQueue)
     }
 
+    /// 上流レスポンスを**ストリーミング**でクライアントへ転送する（SSE 等に対応）。
+    /// 各チャンクを受信即送信し、クライアント送信完了後に次のチャンクを読む
+    /// （バックプレッシャー）。`upstreamTimeout` の**非活動**タイムアウトで、
+    /// 上流の沈黙やクライアント停止による滞留を防ぐ（長時間ストリーム自体は許容）。
     private func receiveUpstreamResponse(upstream: NWConnection, clientConnection: NWConnection, requestStart: Date, route: ProxyRoute, parsed: HTTPRequestParser.ParsedRequest, watchdog: DispatchWorkItem, responseGuard: OneShot) {
-        // Receive all data from upstream then forward to client
-        // Note: NWConnection の send は中間チャンクをフラッシュしないため、
-        // ストリーミング転送ではなくバッファリング方式を使用
-        var allData = Data()
+        // 応答の所有権モデル:
+        //  - `responseGuard`（呼び出し元と共有）: 「最初に確定した結末」を 1 つだけ許す。
+        //    = ストリーミング開始 か、ストリーム前のエラー/タイムアウト 502 のどちらか。
+        //  - `finish`: ストリーム開始後の終端処理（正常完了/切断/非活動）を 1 回だけ。
+        var firstByte = true
+        let statusLock = NSLock()
+        var status = 200
+        let finish = OneShot()
+        var timer: InactivityTimer!
+
+        // ストリーム開始後の終端: クライアント接続を閉じる（502 は返せない）。
+        func closeAfterStream(truncated: Bool) {
+            guard finish.consume() else { return }
+            timer.stop()
+            upstream.cancel()
+            statusLock.lock(); let code = status; statusLock.unlock()
+            AppState.shared.proxyLogStore.append(ProxyLog(
+                timestamp: requestStart, service: route.host,
+                method: parsed.method, path: parsed.path,
+                statusCode: code, latency: Date().timeIntervalSince(requestStart),
+                isError: truncated || code >= 400
+            ))
+            clientConnection.cancel()
+        }
+
+        // ストリーム開始前の終端: まだヘッダ未送信なので 502 を返せる。
+        func failBeforeStream(_ message: String) {
+            guard responseGuard.consume() else { return }
+            timer.stop()
+            watchdog.cancel()
+            upstream.cancel()
+            self.logAndSend(
+                clientConnection: clientConnection, requestStart: requestStart,
+                route: route, parsed: parsed, message: message
+            )
+        }
+
+        timer = InactivityTimer(queue: processingQueue, interval: upstreamTimeout) {
+            // ストリーム開始前なら 502、開始後なら接続クローズ。responseGuard で判定。
+            if responseGuard.consume() {
+                timer.stop()
+                watchdog.cancel()
+                upstream.cancel()
+                self.logAndSend(
+                    clientConnection: clientConnection, requestStart: requestStart,
+                    route: route, parsed: parsed, message: "Upstream timed out (inactivity)"
+                )
+            } else {
+                closeAfterStream(truncated: true)
+            }
+        }
 
         func readMore() {
             upstream.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-                if let data {
-                    allData.append(data)
+                guard let self else { upstream.cancel(); return }
+
+                if let data, !data.isEmpty {
+                    if firstByte {
+                        firstByte = false
+                        watchdog.cancel()
+                        // 最初のバイトでストリーミング所有権を確定。取れなければ
+                        // 既に別経路（タイムアウト等）が 502 を確定済み → 中断。
+                        guard responseGuard.consume() else {
+                            timer.stop(); upstream.cancel(); clientConnection.cancel()
+                            return
+                        }
+                        statusLock.lock(); status = self.parseStatusCode(from: data); statusLock.unlock()
+                    }
+                    clientConnection.send(content: data, completion: .contentProcessed { sendError in
+                        if sendError != nil {
+                            closeAfterStream(truncated: true)
+                            return
+                        }
+                        if isComplete || error != nil {
+                            closeAfterStream(truncated: error != nil)
+                            return
+                        }
+                        timer.reschedule() // 送信完了＝進捗あり → 期限を延長
+                        readMore()
+                    })
+                    return
                 }
 
+                // データ無しのコールバック
                 if isComplete || error != nil {
-                    upstream.cancel()
-                    watchdog.cancel()
-                    guard responseGuard.consume() else { return }
-                    let latency = Date().timeIntervalSince(requestStart)
-
-                    if allData.isEmpty {
-                        self?.logAndSend(
-                            clientConnection: clientConnection, requestStart: requestStart,
-                            route: route, parsed: parsed,
-                            message: error.map { "Upstream error: \($0.localizedDescription)" } ?? "Empty upstream response"
-                        )
-                        return
+                    if firstByte {
+                        // 1 バイトも受信せず終了 → エラー応答（まだヘッダ未送信）。
+                        failBeforeStream(error.map { "Upstream error: \($0.localizedDescription)" } ?? "Empty upstream response")
+                    } else {
+                        closeAfterStream(truncated: error != nil)
                     }
-
-                    let statusCode = self?.parseStatusCode(from: allData) ?? 200
-
-                    AppState.shared.proxyLogStore.append(ProxyLog(
-                        timestamp: requestStart, service: route.host,
-                        method: parsed.method, path: parsed.path,
-                        statusCode: statusCode, latency: latency,
-                        isError: statusCode >= 400
-                    ))
-                    // requestCount は processRequest で既にインクリメント済み
-
-                    clientConnection.send(content: allData, completion: .contentProcessed { _ in
-                        clientConnection.cancel()
-                    })
                     return
                 }
 
@@ -455,6 +668,7 @@ final class ProxyServer {
             }
         }
 
+        timer.reschedule()
         readMore()
     }
 
