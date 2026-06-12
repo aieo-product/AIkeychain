@@ -270,6 +270,29 @@ struct ProxyHangRegressionTests {
         #expect(result.elapsed < 2)
     }
 
+    @Test("Circuit breaker: after a timeout, subsequent reads fail fast without re-blocking")
+    func circuitBreakerShortCircuits() throws {
+        let port = testPort()
+        // 10s block, 1s read timeout, 5s cooldown. First request times out (≈1s);
+        // the next request during cooldown must return 503 almost instantly
+        // (it must NOT spend another ~1s waiting on a fresh blocked read).
+        let server = ProxyServer(
+            keychainService: BlockingKeychainService(blockFor: 10),
+            keychainTimeout: 1, upstreamTimeout: 5, keychainCooldown: 5)
+        server.port = port
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+        let token = server.sessionToken
+
+        let first = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 5)
+        #expect(first.status == 504)
+
+        let second = TestHTTPClient.request(port: port, host: "api.anthropic.com", token: token, timeout: 5)
+        #expect(second.status == 503)
+        #expect(second.elapsed < 0.5) // short-circuited, not a fresh 1s block
+    }
+
     @Test("Unknown host is rejected instantly without touching the keychain")
     func unknownHostInstant502() throws {
         let port = testPort()

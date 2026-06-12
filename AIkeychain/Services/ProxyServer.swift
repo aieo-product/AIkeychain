@@ -30,13 +30,43 @@ final class ProxyServer {
     private let keychainTimeout: TimeInterval
     /// 上流接続・受信のタイムアウト
     private let upstreamTimeout: TimeInterval
+    /// Keychain が consent/タイムアウトで利用不能になった後、再試行を抑止する期間。
+    /// タイムアウトしても背後の `SecItemCopyMatching` スレッドは即座には解放されないため、
+    /// このサーキットブレーカーが無いと連続リクエストでスレッドが滞留・枯渇し得る。
+    private let keychainCooldown: TimeInterval
+
+    private let breakerLock = NSLock()
+    private var keychainUnavailableUntil: Date?
 
     init(keychainService: KeychainServiceProtocol = KeychainService.shared,
          keychainTimeout: TimeInterval = 3,
-         upstreamTimeout: TimeInterval = 30) {
+         upstreamTimeout: TimeInterval = 30,
+         keychainCooldown: TimeInterval = 10) {
         self.keychainService = keychainService
         self.keychainTimeout = keychainTimeout
         self.upstreamTimeout = upstreamTimeout
+        self.keychainCooldown = keychainCooldown
+    }
+
+    /// サーキットブレーカー: クールダウン中なら true（読み取りを試みない）。
+    private func keychainInCooldown() -> Bool {
+        breakerLock.lock(); defer { breakerLock.unlock() }
+        guard let until = keychainUnavailableUntil else { return false }
+        if Date() >= until {
+            keychainUnavailableUntil = nil
+            return false
+        }
+        return true
+    }
+
+    private func tripKeychainBreaker() {
+        breakerLock.lock(); defer { breakerLock.unlock() }
+        keychainUnavailableUntil = Date().addingTimeInterval(keychainCooldown)
+    }
+
+    private func resetKeychainBreaker() {
+        breakerLock.lock(); defer { breakerLock.unlock() }
+        keychainUnavailableUntil = nil
     }
 
     /// クライアントへの応答が一度だけ行われることを保証する（タイムアウトと正常完了の競合対策）。
@@ -201,21 +231,33 @@ final class ProxyServer {
             return
         }
 
+        // Circuit breaker: if a recent read was consent-blocked/timed out, fail
+        // fast without dispatching another read (whose backing SecItemCopyMatching
+        // thread would otherwise pile up while the prompt remains unanswered).
+        if keychainInCooldown() {
+            respondReadFailure(connection: connection, route: route, parsed: parsed,
+                               statusCode: 503, message: "Keychain temporarily unavailable (consent/unlock required). Open AI KeyChain and approve access, then retry.")
+            return
+        }
+
         // Read API key from Keychain — non-interactive and time-bounded so an
         // unattended proxy can never hang on a SecurityAgent consent prompt.
         let apiKey: String
         switch readKeyWithTimeout(account: route.keychainAccount) {
         case .success(let value):
+            resetKeychainBreaker()
             apiKey = value
         case .notFound:
             respondReadFailure(connection: connection, route: route, parsed: parsed,
                                statusCode: 401, message: "API key not found in Keychain for \(route.keychainAccount)")
             return
         case .interactionRequired:
+            tripKeychainBreaker()
             respondReadFailure(connection: connection, route: route, parsed: parsed,
                                statusCode: 503, message: "Keychain access for \(route.keychainAccount) requires user consent/unlock. Open AI KeyChain and approve access, then retry.")
             return
         case .timedOut:
+            tripKeychainBreaker()
             respondReadFailure(connection: connection, route: route, parsed: parsed,
                                statusCode: 504, message: "Keychain read for \(route.keychainAccount) timed out after \(Int(keychainTimeout))s")
             return
