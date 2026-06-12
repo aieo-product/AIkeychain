@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Testing
 @testable import AIkeychain
 
@@ -376,6 +377,180 @@ struct ProxyHangRegressionTests {
             port: port, host: "example.com", token: server.sessionToken, timeout: 3)
         #expect(result.status == 502)
         #expect(result.elapsed < 1.5)
+    }
+}
+
+/// A local plaintext TCP "upstream" the proxy can be pointed at (via the
+/// makeUpstream factory) so streaming/framing are testable without TLS or the network.
+final class FakeUpstream {
+    let port: UInt16
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "fake.upstream", attributes: .concurrent)
+
+    init(port: UInt16, responder: @escaping (NWConnection, DispatchQueue) -> Void) throws {
+        self.port = port
+        let params = NWParameters.tcp
+        params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port)!)
+        listener = try NWListener(using: params)
+        listener.newConnectionHandler = { [queue] conn in
+            conn.start(queue: queue)
+            responder(conn, queue)
+        }
+        listener.start(queue: queue)
+    }
+
+    func factory() -> (String) -> NWConnection {
+        let p = port
+        return { _ in
+            NWConnection(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: p)!, using: .tcp)
+        }
+    }
+
+    func stop() { listener.cancel() }
+}
+
+/// Raw-socket client with split-send and timed-recv, for streaming/framing tests.
+final class RawClient {
+    private let fd: Int32
+    init?(port: UInt16) {
+        fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return nil }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let r = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { Foundation.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        if r != 0 { close(fd); return nil }
+    }
+    func send(_ s: String) { _ = s.withCString { Foundation.send(fd, $0, strlen($0), 0) } }
+    /// recv with a timeout; returns whatever bytes arrived (may be empty on timeout/EOF).
+    func recv(timeout: TimeInterval) -> Data {
+        var tv = timeval(tv_sec: Int(timeout), tv_usec: Int32((timeout - floor(timeout)) * 1_000_000))
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var buf = [UInt8](repeating: 0, count: 8192)
+        let n = Foundation.recv(fd, &buf, buf.count, 0)
+        return n > 0 ? Data(buf[0..<n]) : Data()
+    }
+    func disconnect() { Foundation.close(fd) }
+}
+
+@Suite("Proxy HTTP Streaming & Framing Tests (issue #98)")
+struct ProxyStreamingTests {
+    private func port() -> UInt16 { UInt16.random(in: 20000...20900) }
+
+    @Test("Upstream response is streamed to the client, not buffered until completion")
+    func responseIsStreamed() throws {
+        let upstreamPort = port()
+        let proxyPort = port()
+        // Upstream sends headers + first SSE event immediately, then waits 1.5s
+        // before the second event and close. A buffering proxy would deliver
+        // nothing until ~1.5s; a streaming proxy delivers event 1 right away.
+        let upstream = try FakeUpstream(port: upstreamPort) { conn, queue in
+            conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { _, _, _, _ in
+                let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: 1\n\n"
+                conn.send(content: Data(head.utf8), completion: .contentProcessed { _ in
+                    queue.asyncAfter(deadline: .now() + 1.5) {
+                        conn.send(content: Data("data: 2\n\n".utf8), completion: .contentProcessed { _ in
+                            conn.cancel()
+                        })
+                    }
+                })
+            }
+        }
+        defer { upstream.stop() }
+
+        let mock = MockKeychainService()
+        try? mock.save(value: "test-key", for: "ANTHROPIC_API_KEY")
+        let server = ProxyServer(keychainService: mock, upstreamTimeout: 10, makeUpstream: upstream.factory())
+        server.port = proxyPort
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        let client = try #require(RawClient(port: proxyPort))
+        defer { client.disconnect() }
+        client.send("GET /v1/models HTTP/1.1\r\nHost: api.anthropic.com\r\n\(ProxyServer.tokenHeaderName): \(server.sessionToken)\r\n\r\n")
+
+        // Within 0.8s (well before the upstream's 1.5s gap), we must already have
+        // the status line and the first event — proof of streaming.
+        let early = client.recv(timeout: 0.8)
+        let earlyStr = String(data: early, encoding: .utf8) ?? ""
+        #expect(earlyStr.contains("200"))
+        #expect(earlyStr.contains("data: 1"))
+        #expect(!earlyStr.contains("data: 2")) // second event hasn't been sent yet
+
+        // Drain the rest.
+        var rest = Data()
+        for _ in 0..<5 {
+            let chunk = client.recv(timeout: 2)
+            if chunk.isEmpty { break }
+            rest.append(chunk)
+        }
+        #expect((String(data: rest, encoding: .utf8) ?? "").contains("data: 2"))
+    }
+
+    @Test("Full request body is framed before forwarding (split header/body sends)")
+    func requestBodyIsFullyFramed() throws {
+        let upstreamPort = port()
+        let proxyPort = port()
+        let bodyLen = 5000 // larger than a typical single segment; sent in two writes
+        // Upstream accumulates the request and reports how many body bytes it got.
+        let upstream = try FakeUpstream(port: upstreamPort) { conn, _ in
+            var buf = Data()
+            func read() {
+                conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, _ in
+                    if let data { buf.append(data) }
+                    if let r = buf.firstRange(of: Data("\r\n\r\n".utf8)) {
+                        let cl = ProxyServer.parseContentLength(from: buf[buf.startIndex..<r.lowerBound])
+                        let got = buf.distance(from: r.upperBound, to: buf.endIndex)
+                        if got >= cl {
+                            let resp = "HTTP/1.1 200 OK\r\nX-Body-Received: \(got)\r\nContent-Length: 0\r\n\r\n"
+                            conn.send(content: Data(resp.utf8), completion: .contentProcessed { _ in conn.cancel() })
+                            return
+                        }
+                    }
+                    if isComplete { conn.cancel(); return }
+                    read()
+                }
+            }
+            read()
+        }
+        defer { upstream.stop() }
+
+        let mock = MockKeychainService()
+        try? mock.save(value: "test-key", for: "ANTHROPIC_API_KEY")
+        let server = ProxyServer(keychainService: mock, upstreamTimeout: 10, inboundTimeout: 10, makeUpstream: upstream.factory())
+        server.port = proxyPort
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        let client = try #require(RawClient(port: proxyPort))
+        defer { client.disconnect() }
+        // Send headers first, then the body after a delay — exercises framing.
+        client.send("POST /v1/messages HTTP/1.1\r\nHost: api.anthropic.com\r\n\(ProxyServer.tokenHeaderName): \(server.sessionToken)\r\nContent-Length: \(bodyLen)\r\n\r\n")
+        Thread.sleep(forTimeInterval: 0.3)
+        client.send(String(repeating: "x", count: bodyLen))
+
+        var resp = Data()
+        for _ in 0..<5 {
+            let chunk = client.recv(timeout: 3)
+            if chunk.isEmpty { break }
+            resp.append(chunk)
+            if (String(data: resp, encoding: .utf8) ?? "").contains("\r\n\r\n") { break }
+        }
+        let respStr = String(data: resp, encoding: .utf8) ?? ""
+        #expect(respStr.contains("X-Body-Received: \(bodyLen)")) // proxy forwarded the FULL body
+    }
+
+    @Test("parseContentLength reads the header case-insensitively")
+    func parseContentLengthWorks() {
+        let h = "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 42\r\nAccept: */*"
+        #expect(ProxyServer.parseContentLength(from: Data(h.utf8)) == 42)
+        let h2 = "GET / HTTP/1.1\r\nhost: x"
+        #expect(ProxyServer.parseContentLength(from: Data(h2.utf8)) == 0)
     }
 }
 
