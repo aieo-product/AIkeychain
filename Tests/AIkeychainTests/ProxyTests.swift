@@ -552,6 +552,54 @@ struct ProxyStreamingTests {
         let h2 = "GET / HTTP/1.1\r\nhost: x"
         #expect(ProxyServer.parseContentLength(from: Data(h2.utf8)) == 0)
     }
+
+    @Test("contentLengthField validates: absent/present/invalid (non-numeric, negative, conflicting)")
+    func contentLengthValidation() {
+        func field(_ s: String) -> ProxyServer.ContentLengthField {
+            ProxyServer.contentLengthField(from: Data(s.utf8))
+        }
+        #expect(field("GET / HTTP/1.1\r\nHost: x") == .absent)
+        #expect(field("POST / HTTP/1.1\r\nContent-Length: 10") == .present)
+        #expect(field("POST / HTTP/1.1\r\nContent-Length: abc") == .invalid)
+        #expect(field("POST / HTTP/1.1\r\nContent-Length: -5") == .invalid)
+        #expect(field("POST / HTTP/1.1\r\nContent-Length: 10\r\nContent-Length: 20") == .invalid) // smuggling
+        #expect(field("POST / HTTP/1.1\r\nContent-Length: 10\r\nContent-Length: 10") == .present) // duplicate-equal OK
+    }
+
+    @Test("Oversized request is rejected with 413")
+    func oversizedRequestRejected() throws {
+        let proxyPort = port()
+        // 8KB cap (floor). Send a request larger than that.
+        let server = ProxyServer(keychainService: MockKeychainService(),
+                                 inboundTimeout: 10, maxRequestBytes: 8 * 1024)
+        server.port = proxyPort
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        let client = try #require(RawClient(port: proxyPort))
+        defer { client.disconnect() }
+        let big = String(repeating: "y", count: 20_000)
+        client.send("POST /v1/messages HTTP/1.1\r\nHost: api.anthropic.com\r\nContent-Length: 20000\r\n\r\n\(big)")
+        let resp = String(data: client.recv(timeout: 3), encoding: .utf8) ?? ""
+        #expect(resp.contains("413"))
+    }
+
+    @Test("Invalid (conflicting) Content-Length is rejected with 400")
+    func invalidContentLengthRejected() throws {
+        let proxyPort = port()
+        let server = ProxyServer(keychainService: MockKeychainService(), inboundTimeout: 10)
+        server.port = proxyPort
+        try server.start()
+        defer { server.stop() }
+        Thread.sleep(forTimeInterval: 0.4)
+
+        let client = try #require(RawClient(port: proxyPort))
+        defer { client.disconnect() }
+        client.send("POST /v1/messages HTTP/1.1\r\nHost: api.anthropic.com\r\nContent-Length: 5\r\nContent-Length: 9\r\n\r\nhello")
+        let resp = String(data: client.recv(timeout: 3), encoding: .utf8) ?? ""
+        #expect(resp.contains("400"))
+    }
 }
 
 @Suite("Header Injection Security Tests")
