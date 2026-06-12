@@ -1,6 +1,6 @@
 {
   "name": "aikeychain",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI KeyChain CLI & MCP server — resolve keychain:// secret references from macOS Keychain and let AI agents use them safely",
   "type": "module",
   "bin": {
