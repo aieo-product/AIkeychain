@@ -93,21 +93,10 @@ final class KeyEditorViewModel {
 
             if let key = editingKey {
                 // 既存キーの編集
-                if key.service != nil {
-                    let defaultCategory = key.service!.category
-                    let overrideValue: String? = {
-                        switch selectedCategorySelection {
-                        case .builtin(let cat) where cat == defaultCategory:
-                            return nil  // デフォルトに戻す → 上書き削除
-                        case .builtin(let cat):
-                            return "builtin:\(cat.rawValue)"
-                        case .custom(let id):
-                            return "custom:\(id.uuidString)"
-                        case .all, .activity, .none:
-                            return nil
-                        }
-                    }()
-                    customStore.setCategoryOverride(envVarName: trimmedEnvVar, value: overrideValue)
+                if let service = key.service {
+                    customStore.setCategoryOverride(
+                        envVarName: trimmedEnvVar,
+                        value: categoryOverrideValue(defaultCategory: service.category))
                 } else if let customKey = key.customKey {
                     // カスタムキーのカテゴリ変更
                     var updated = customKey
@@ -115,9 +104,15 @@ final class KeyEditorViewModel {
                     customStore.updateKey(updated)
                 }
             } else {
-                // 新規キー: envVarName がプリセットに一致しない場合は CustomKey として保存
-                let matchesPreset = ServiceType.allCases.contains { $0.envVarName == trimmedEnvVar }
-                if !matchesPreset {
+                // 新規キー
+                if let preset = ServiceType.allCases.first(where: { $0.envVarName == trimmedEnvVar }) {
+                    // envVarName がプリセットに一致 → プリセットキーとして一覧表示される。
+                    // 選択カテゴリがプリセット既定と異なる場合のみカテゴリ上書きを保存する
+                    // （Service 未選択でカテゴリだけ変えたケースを取りこぼさない / #102）。
+                    customStore.setCategoryOverride(
+                        envVarName: trimmedEnvVar,
+                        value: categoryOverrideValue(defaultCategory: preset.category))
+                } else {
                     let customKey = CustomKey(
                         envVarName: trimmedEnvVar,
                         displayName: selectedService?.displayName ?? trimmedEnvVar,
@@ -145,6 +140,21 @@ final class KeyEditorViewModel {
     }
 
     // MARK: - Private
+
+    /// 選択カテゴリをプリセット上書き文字列に変換する。
+    /// プリセット既定と同じなら nil（= 上書きを保存しない/削除）。
+    private func categoryOverrideValue(defaultCategory: KeyCategory) -> String? {
+        switch selectedCategorySelection {
+        case .builtin(let cat) where cat == defaultCategory:
+            return nil
+        case .builtin(let cat):
+            return "builtin:\(cat.rawValue)"
+        case .custom(let id):
+            return "custom:\(id.uuidString)"
+        case .all, .activity, .none:
+            return nil
+        }
+    }
 
     private func resolveCategoryId() -> UUID {
         switch selectedCategorySelection {

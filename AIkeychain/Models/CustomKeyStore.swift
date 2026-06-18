@@ -55,7 +55,12 @@ final class CustomKeyStore {
     /// プリセットキーのカテゴリ上書き（envVarName → カテゴリ識別子）
     var categoryOverrides: [String: String] = [:]
 
-    private init() {
+    private let defaults: UserDefaults
+
+    /// テストでは独立した `UserDefaults(suiteName:)` を注入して、実環境の
+    /// 設定を汚さずに永続化挙動を検証できる。
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         load()
     }
 
@@ -137,32 +142,32 @@ final class CustomKeyStore {
     // MARK: - Persistence
 
     private func load() {
-        if let data = UserDefaults.standard.data(forKey: Self.categoriesKey),
+        if let data = defaults.data(forKey: Self.categoriesKey),
            let decoded = try? JSONDecoder().decode([CustomCategory].self, from: data) {
             categories = decoded
         }
-        if let data = UserDefaults.standard.data(forKey: Self.keysKey),
+        if let data = defaults.data(forKey: Self.keysKey),
            let decoded = try? JSONDecoder().decode([CustomKey].self, from: data) {
             keys = decoded
         }
-        if let dict = UserDefaults.standard.dictionary(forKey: Self.overridesKey) as? [String: String] {
+        if let dict = defaults.dictionary(forKey: Self.overridesKey) as? [String: String] {
             categoryOverrides = dict
         }
     }
 
     private func saveCategories() {
         if let data = try? JSONEncoder().encode(categories) {
-            UserDefaults.standard.set(data, forKey: Self.categoriesKey)
+            defaults.set(data, forKey: Self.categoriesKey)
         }
     }
 
     private func saveKeys() {
         if let data = try? JSONEncoder().encode(keys) {
-            UserDefaults.standard.set(data, forKey: Self.keysKey)
+            defaults.set(data, forKey: Self.keysKey)
         }
     }
 
     private func saveOverrides() {
-        UserDefaults.standard.set(categoryOverrides, forKey: Self.overridesKey)
+        defaults.set(categoryOverrides, forKey: Self.overridesKey)
     }
 }
