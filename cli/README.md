@@ -4,9 +4,20 @@
 
 ```bash
 npm install -g aikeychain   # or use npx aikeychain
+akc init                    # teach the AI agents on this machine to use it
 ```
 
 > macOS only (uses the `security` command). Node.js 18+.
+
+## For AI agents (Claude, Codex, …)
+
+Run **`akc init`** once. It:
+
+1. Writes a managed instructions block into `CLAUDE.md` and `AGENTS.md` (idempotent) so agents in this project learn the rules.
+2. Registers the MCP server with Claude Code (`claude mcp add aikeychain -- akc mcp`).
+3. Prints the Codex config snippet and next steps.
+
+After that, every new AI session discovers AI KeyChain via the MCP tools (`usage_guide`, `list_keys`, `get_secret_reference`, …) and the instructions block — no per-session setup. `akc init --print` previews everything without writing; `--no-register` skips MCP registration; `--global` targets `~/.claude/CLAUDE.md`.
 
 ## Why
 

@@ -49,3 +49,6 @@ docs/appCapture/
 # Claude Code
 .claude/
 CLAUDE.md
+
+# npm pack artifacts
+cli/*.tgz
