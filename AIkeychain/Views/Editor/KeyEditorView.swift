@@ -30,19 +30,27 @@ struct KeyEditorView: View {
 
             // Form
             Form {
-                // Service picker
+                // Optional quick-preset: picking a known service auto-fills the
+                // env var name + category below. Not required — a category and
+                // environment variable name are enough.
                 if !viewModel.isEditing {
-                    Picker("Service", selection: $viewModel.selectedService) {
-                        Text("Select a service...")
-                            .foregroundStyle(.secondary)
-                            .tag(ServiceType?.none)
-                        ForEach(ServiceType.allCases) { service in
-                            Label(service.displayName, systemImage: service.systemImage)
-                                .tag(ServiceType?.some(service))
+                    Section {
+                        Picker("Quick preset", selection: $viewModel.selectedService) {
+                            Text("None (custom key)")
+                                .foregroundStyle(.secondary)
+                                .tag(ServiceType?.none)
+                            ForEach(ServiceType.allCases) { service in
+                                Label(service.displayName, systemImage: service.systemImage)
+                                    .tag(ServiceType?.some(service))
+                            }
                         }
-                    }
-                    .onChange(of: viewModel.selectedService) {
-                        viewModel.onServiceChange()
+                        .onChange(of: viewModel.selectedService) {
+                            viewModel.onServiceChange()
+                        }
+                    } footer: {
+                        Text("Optional. Pick a known service to auto-fill the fields below, or just set a category and variable name.")
+                            .font(AppFonts.caption)
+                            .foregroundStyle(.secondary)
                     }
                 } else if let service = viewModel.selectedService {
                     LabeledContent("Service") {
@@ -54,7 +62,7 @@ struct KeyEditorView: View {
                     }
                 }
 
-                // Category
+                // Category (required)
                 Picker("Category", selection: $viewModel.selectedCategorySelection) {
                     Text("Select a category...")
                         .foregroundStyle(.secondary)
@@ -72,7 +80,7 @@ struct KeyEditorView: View {
                     }
                 }
 
-                // Env var name
+                // Env var name (required)
                 TextField("Environment Variable", text: $viewModel.envVarName)
                     .font(AppFonts.code)
 

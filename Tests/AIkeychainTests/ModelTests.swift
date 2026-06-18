@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AIkeychain
 
@@ -115,11 +116,22 @@ struct KeyEditorViewModelTests {
         #expect(vm.prefixWarning == nil)
     }
 
-    @Test("Cannot save without service selection")
-    func cannotSaveNoService() {
+    @Test("Can save WITHOUT a service when category + env var + value are set (issue #102)")
+    func canSaveNoService() {
         let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.selectedService = nil // Service is an optional preset, not required
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = "MY_CUSTOM_KEY"
         vm.tokenValue = "test"
-        vm.envVarName = "TEST_KEY"
+        #expect(vm.canSave == true)
+    }
+
+    @Test("Cannot save with an invalid env var name even with a category")
+    func cannotSaveInvalidEnvVar() {
+        let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = "bad name!" // not a valid shell identifier
+        vm.tokenValue = "test"
         #expect(vm.canSave == false)
     }
 
@@ -173,5 +185,71 @@ struct KeyEditorViewModelTests {
         let vm = KeyEditorViewModel(editingKey: key, keychainService: mock)
         #expect(vm.tokenValue == "existing-value")
         #expect(vm.isEditing == true)
+    }
+
+    /// Build a CustomKeyStore backed by an isolated UserDefaults suite so tests
+    /// never touch the real app state.
+    private func isolatedStore() -> (CustomKeyStore, UserDefaults, String) {
+        let suite = "test-keyeditor-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        return (CustomKeyStore(defaults: defaults), defaults, suite)
+    }
+
+    @Test("Save with NO service + custom env var creates a CustomKey with the chosen category (#102)")
+    func saveNoServiceCreatesCustomKey() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedService = nil
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = "MY_CUSTOM_KEY"
+        vm.tokenValue = "secret-1"
+        try vm.save()
+
+        #expect(mock.store["MY_CUSTOM_KEY"] == "secret-1")
+        let created = store.keys.first { $0.envVarName == "MY_CUSTOM_KEY" }
+        #expect(created != nil)
+        #expect(created?.categoryId == KeyCategory.devTools.stableId)
+        #expect(created?.displayName == "MY_CUSTOM_KEY")
+    }
+
+    @Test("Save with NO service but a preset-named env var preserves the chosen category via override (#102)")
+    func saveNoServicePresetNamePreservesCategory() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedService = nil
+        // GITHUB_TOKEN is a preset (default category Code & Git) but the user
+        // deliberately files it under Developer Tools without picking a service.
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = "GITHUB_TOKEN"
+        vm.tokenValue = "ghp_test"
+        try vm.save()
+
+        #expect(mock.store["GITHUB_TOKEN"] == "ghp_test")
+        // The chosen category must be persisted as an override, not silently lost.
+        #expect(store.overriddenCategory(for: "GITHUB_TOKEN") == .builtin(.devTools))
+        // It is a preset, so no CustomKey is created.
+        #expect(store.keys.contains { $0.envVarName == "GITHUB_TOKEN" } == false)
+    }
+
+    @Test("Save with NO service + preset env var + matching default category writes no override")
+    func saveNoServicePresetDefaultCategoryNoOverride() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedService = nil
+        vm.selectedCategorySelection = .builtin(.codeAndGit) // GitHub's default
+        vm.envVarName = "GITHUB_TOKEN"
+        vm.tokenValue = "ghp_test"
+        try vm.save()
+
+        #expect(store.overriddenCategory(for: "GITHUB_TOKEN") == nil)
     }
 }
