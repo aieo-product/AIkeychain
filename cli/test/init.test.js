@@ -58,12 +58,32 @@ test('upsertManagedBlock replaces an outdated block in place (no duplicate)', ()
   assert.ok(content.includes(AGENT_INSTRUCTIONS));
 });
 
-test('upsertManagedBlock handles a dangling begin marker (no end)', () => {
-  const broken = `# Project\n${BLOCK_BEGIN}\nhalf written`;
+test('upsertManagedBlock refuses to edit a dangling BEGIN (no END) — never truncates user content', () => {
+  const broken = `# Project\n${BLOCK_BEGIN}\nhalf written\n\n## Important user notes kept\n`;
   const { content, action } = upsertManagedBlock(broken);
+  assert.equal(action, 'malformed');
+  assert.equal(content, broken); // untouched — user content preserved
+  assert.ok(content.includes('## Important user notes kept'));
+});
+
+test('upsertManagedBlock refuses a dangling END (no BEGIN)', () => {
+  const broken = `# Project\n${BLOCK_END}\nmore notes\n`;
+  const { content, action } = upsertManagedBlock(broken);
+  assert.equal(action, 'malformed');
+  assert.equal(content, broken);
+});
+
+test('upsertManagedBlock canonicalizes duplicate blocks to exactly one, preserving surrounding text', () => {
+  const dup = `# A\n\n${BLOCK_BEGIN}\nold1\n${BLOCK_END}\n\n## Middle\n\n${BLOCK_BEGIN}\nold2\n${BLOCK_END}\n\n## Tail\n`;
+  const { content, action } = upsertManagedBlock(dup);
   assert.equal(action, 'updated');
-  assert.ok(content.includes(BLOCK_END));
-  assert.equal(content.split(BLOCK_BEGIN).length - 1, 1);
+  assert.equal(content.split(BLOCK_BEGIN).length - 1, 1); // exactly one block
+  assert.ok(content.includes('## Middle'));
+  assert.ok(content.includes('## Tail'));
+  assert.ok(!content.includes('old1'));
+  assert.ok(!content.includes('old2'));
+  // re-running is now stable
+  assert.equal(upsertManagedBlock(content).action, 'unchanged');
 });
 
 function runAkc(args, opts = {}) {

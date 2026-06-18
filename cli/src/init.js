@@ -4,11 +4,11 @@
 //   2. Register the MCP server with Claude Code (`claude mcp add`) when available.
 //   3. Print the Codex config snippet and next steps.
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { renderManagedBlock, upsertManagedBlock } from './agent-setup.js';
 
 const pExecFile = promisify(execFile);
@@ -21,23 +21,32 @@ async function writeBlock(path) {
   let existing = '';
   try {
     existing = await readFile(path, 'utf8');
-  } catch {
-    existing = '';
+  } catch (err) {
+    // Only "file does not exist" means start fresh; surface other read errors
+    // (e.g. permissions) instead of silently overwriting as empty.
+    if (err.code !== 'ENOENT') throw err;
   }
   const { content, action } = upsertManagedBlock(existing);
+  if (action === 'malformed') {
+    return { path, action };
+  }
   if (action !== 'unchanged') {
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, content);
   }
   return { path, action };
 }
 
 async function registerClaudeMcp() {
-  // Idempotent-ish: remove any prior registration, then add. Tolerate failures.
+  // Add first; only if that fails (usually "already exists") do we replace, so a
+  // working registration is never removed unless the re-add is about to run.
   try {
-    await pExecFile('claude', ['mcp', 'remove', 'aikeychain'], { timeout: 15000 });
+    await pExecFile('claude', ['mcp', 'add', 'aikeychain', '--', 'akc', 'mcp'], { timeout: 15000 });
+    return;
   } catch {
-    // not registered yet, or claude missing — fall through to add
+    // likely already registered, or another transient failure
   }
+  await pExecFile('claude', ['mcp', 'remove', 'aikeychain'], { timeout: 15000 });
   await pExecFile('claude', ['mcp', 'add', 'aikeychain', '--', 'akc', 'mcp'], { timeout: 15000 });
 }
 
@@ -63,12 +72,19 @@ export async function cmdInit(argv) {
     ? [join(homedir(), '.claude', 'CLAUDE.md')]
     : [join(process.cwd(), 'CLAUDE.md'), join(process.cwd(), 'AGENTS.md')];
 
+  let writeFailed = false;
   for (const path of targets) {
     try {
       const { action } = await writeBlock(path);
+      if (action === 'malformed') {
+        writeFailed = true;
+        out.write(`  ⚠️  ${path} has unbalanced aikeychain markers — left untouched. Fix it manually, then re-run.\n`);
+        continue;
+      }
       const verb = { created: 'wrote', updated: 'updated', unchanged: 'already current' }[action];
       out.write(`  ✅ ${verb}: ${path}\n`);
     } catch (err) {
+      writeFailed = true;
       out.write(`  ⚠️  could not write ${path}: ${err.message}\n`);
     }
   }
@@ -91,5 +107,5 @@ export async function cmdInit(argv) {
   out.write(`${CODEX_SNIPPET.split('\n').map((l) => `  ${l}`).join('\n')}\n`);
   out.write('\nDone. New AI sessions will discover AI KeyChain via the MCP tools and the\n');
   out.write('instructions block. Run `akc guide` anytime for the full usage guide.\n');
-  return 0;
+  return writeFailed ? 1 : 0;
 }

@@ -36,33 +36,58 @@ export function renderManagedBlock() {
   return `${BLOCK_BEGIN}\n${AGENT_INSTRUCTIONS}\n${BLOCK_END}`;
 }
 
+function countOccurrences(haystack, needle) {
+  let count = 0;
+  let idx = haystack.indexOf(needle);
+  while (idx !== -1) {
+    count++;
+    idx = haystack.indexOf(needle, idx + needle.length);
+  }
+  return count;
+}
+
+/** Remove every complete BEGIN..END block (assumes balanced, non-overlapping markers). */
+function removeCompleteBlocks(content) {
+  let result = content;
+  let beginIdx = result.indexOf(BLOCK_BEGIN);
+  while (beginIdx !== -1) {
+    const endIdx = result.indexOf(BLOCK_END, beginIdx);
+    if (endIdx === -1) break; // shouldn't happen when markers are balanced
+    result = result.slice(0, beginIdx) + result.slice(endIdx + BLOCK_END.length);
+    beginIdx = result.indexOf(BLOCK_BEGIN);
+  }
+  return result;
+}
+
 /**
- * Insert or replace the managed block in `content`. Idempotent: re-running
- * replaces the existing block in place rather than appending a duplicate.
- * Returns { content, action: 'created' | 'updated' | 'unchanged' }.
+ * Insert or replace the managed block in `content`. Idempotent and
+ * non-destructive:
+ *  - no block         → append one
+ *  - one+ complete blocks → canonicalize to exactly one (dedupes duplicates)
+ *  - unbalanced markers (dangling BEGIN/END from hand-editing) → refuse to edit
+ *    so no user content is ever truncated.
+ * Returns { content, action: 'created' | 'updated' | 'unchanged' | 'malformed' }.
  */
 export function upsertManagedBlock(content) {
   const block = renderManagedBlock();
   const existing = content ?? '';
-  const beginIdx = existing.indexOf(BLOCK_BEGIN);
 
-  if (beginIdx === -1) {
-    // Append, separated by a blank line from any prior content.
+  const begins = countOccurrences(existing, BLOCK_BEGIN);
+  const ends = countOccurrences(existing, BLOCK_END);
+
+  if (begins !== ends) {
+    // Malformed (e.g. a dangling BEGIN with no END). Do not guess where the
+    // block ends — leave the file untouched and let the caller warn.
+    return { content: existing, action: 'malformed' };
+  }
+
+  if (begins === 0) {
     const sep = existing.length === 0 ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
     return { content: `${existing}${sep}${block}\n`, action: 'created' };
   }
 
-  const endIdx = existing.indexOf(BLOCK_END, beginIdx);
-  if (endIdx === -1) {
-    // Begin marker without a matching end (hand-edited): replace from begin to EOF.
-    return { content: `${existing.slice(0, beginIdx)}${block}\n`, action: 'updated' };
-  }
-
-  const before = existing.slice(0, beginIdx);
-  const after = existing.slice(endIdx + BLOCK_END.length);
-  const next = `${before}${block}${after}`;
-  if (next === existing) {
-    return { content: existing, action: 'unchanged' };
-  }
-  return { content: next, action: 'updated' };
+  // Remove all existing blocks, tidy whitespace, then append exactly one.
+  const stripped = removeCompleteBlocks(existing).replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '');
+  const next = stripped.length === 0 ? `${block}\n` : `${stripped}\n\n${block}\n`;
+  return { content: next, action: next === existing ? 'unchanged' : 'updated' };
 }
