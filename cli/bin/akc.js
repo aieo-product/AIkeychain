@@ -23,6 +23,7 @@ const { version } = require('../package.json');
 const USAGE = `akc — AI KeyChain CLI (secret references, key management, MCP server)
 
 Usage:
+  akc init [--print] [--no-register] [--global]
   akc run [--dry-run] -- <command> [args...]
   akc list
   akc check <KEY>
@@ -36,6 +37,9 @@ Usage:
   akc help
 
 Commands:
+  init     Set up agent discoverability: write CLAUDE.md/AGENTS.md instructions
+           and register the MCP server (--print previews, --no-register skips it,
+           --global targets ~/.claude/CLAUDE.md)
   run      Resolve keychain:// env references and execute a command
   list     List known key names (never prints values)
   check    Check whether a key exists and in which store
@@ -47,10 +51,11 @@ Commands:
   mcp      Start the MCP server on stdio (for Claude Code / Codex etc.)
 
 Examples:
+  akc init                        # teach AI agents on this machine to use akc
   export OPENAI_API_KEY=keychain://OPENAI_API_KEY
   akc run -- claude
   akc set GITHUB_TOKEN            # prompts for the value (hidden)
-  claude mcp add aikeychain -- npx -y aikeychain mcp
+  claude mcp add aikeychain -- akc mcp
 `;
 
 function readSecretFromTTY(promptText) {
@@ -196,6 +201,10 @@ async function main() {
     case 'guide':
       process.stdout.write(USAGE_GUIDE);
       return 0;
+    case 'init': {
+      const { cmdInit } = await import('../src/init.js');
+      return cmdInit(rest);
+    }
   }
 
   assertMacOS();

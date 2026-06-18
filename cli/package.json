@@ -1,7 +1,7 @@
 {
   "name": "aikeychain",
-  "version": "0.3.0",
-  "description": "AI KeyChain CLI & MCP server — resolve keychain:// secret references from macOS Keychain and let AI agents use them safely",
+  "version": "0.4.0",
+  "description": "AI KeyChain CLI & MCP server — resolve keychain:// secret references from macOS Keychain and let AI agents (Claude, Codex) use them safely. Run `akc init` to set up discovery.",
   "type": "module",
   "bin": {
     "akc": "bin/akc.js",
@@ -26,10 +26,16 @@
   "keywords": [
     "keychain",
     "secrets",
+    "secret-management",
     "api-keys",
+    "dotenv",
+    "dotenv-alternative",
     "mcp",
     "model-context-protocol",
     "claude",
+    "claude-code",
+    "codex",
+    "ai-agents",
     "macos"
   ],
   "license": "MIT",
