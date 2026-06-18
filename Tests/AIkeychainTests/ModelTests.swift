@@ -115,11 +115,22 @@ struct KeyEditorViewModelTests {
         #expect(vm.prefixWarning == nil)
     }
 
-    @Test("Cannot save without service selection")
-    func cannotSaveNoService() {
+    @Test("Can save WITHOUT a service when category + env var + value are set (issue #102)")
+    func canSaveNoService() {
         let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.selectedService = nil // Service is an optional preset, not required
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = "MY_CUSTOM_KEY"
         vm.tokenValue = "test"
-        vm.envVarName = "TEST_KEY"
+        #expect(vm.canSave == true)
+    }
+
+    @Test("Cannot save with an invalid env var name even with a category")
+    func cannotSaveInvalidEnvVar() {
+        let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = "bad name!" // not a valid shell identifier
+        vm.tokenValue = "test"
         #expect(vm.canSave == false)
     }
 

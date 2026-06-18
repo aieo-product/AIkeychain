@@ -38,9 +38,10 @@ final class KeyEditorViewModel {
         return trimmed.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil
     }
 
+    /// 保存可能条件。Service は任意のプリセット（クイック補完）に過ぎないため
+    /// 必須ではない。必須は「カテゴリ + 妥当な環境変数名 + 値」。
     var canSave: Bool {
-        selectedService != nil
-        && selectedCategorySelection != nil
+        selectedCategorySelection != nil
         && !tokenValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         && isValidEnvVarName
     }
