@@ -16,7 +16,7 @@ npx aikeychain <command>
 
 | コマンド | 機能 |
 |---|---|
-| `akc init` | AI エージェント向けセットアップ。`CLAUDE.md`/`AGENTS.md` に作法スニペットを追記（冪等）+ MCP サーバー登録。`--print` プレビュー / `--no-register` / `--global` |
+| `akc init` | **マシン全体**のセットアップ: `~/.claude/CLAUDE.md` + `~/.codex/AGENTS.md` にスニペット、Claude MCP を user スコープ登録、`~/.codex/config.toml` に Codex MCP 追記（冪等）。`--print` プレビュー / `--no-register` / `--local`（プロジェクト単位） |
 | `akc run [--dry-run] -- <cmd>` | env の `keychain://` 参照を解決してコマンド実行（値は子プロセスのみに注入） |
 | `akc list` | キー名一覧（値は一切表示しない） |
 | `akc check <KEY>` | キーの存在・格納先（app / manual）確認 |

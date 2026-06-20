@@ -8,9 +8,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   upsertManagedBlock,
+  upsertCodexBlock,
   renderManagedBlock,
   BLOCK_BEGIN,
   BLOCK_END,
+  CODEX_BLOCK_BEGIN,
   AGENT_INSTRUCTIONS,
 } from '../src/agent-setup.js';
 
@@ -93,35 +95,61 @@ function runAkc(args, opts = {}) {
   );
 }
 
-test('akc init --print previews without writing files', async () => {
+test('upsertCodexBlock appends once and is idempotent (never reformats existing TOML)', () => {
+  const existing = `[mcp_servers.node_repl]\ncommand = "node"\n`;
+  const first = upsertCodexBlock(existing);
+  assert.equal(first.action, 'created');
+  assert.ok(first.content.startsWith(existing)); // existing config untouched
+  assert.ok(first.content.includes(CODEX_BLOCK_BEGIN));
+  assert.ok(first.content.includes('[mcp_servers.aikeychain]'));
+  // re-run leaves it completely unchanged
+  const second = upsertCodexBlock(first.content);
+  assert.equal(second.action, 'unchanged');
+  assert.equal(second.content, first.content);
+});
+
+test('akc init --print previews machine-wide setup without writing', async () => {
   const r = await runAkc(['init', '--print']);
   assert.equal(r.code, 0);
   assert.match(r.stdout, new RegExp(BLOCK_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(r.stdout, /claude mcp add aikeychain -- akc mcp/);
+  assert.match(r.stdout, /claude mcp add --scope user aikeychain -- akc mcp/);
   assert.match(r.stdout, /\[mcp_servers\.aikeychain\]/);
 });
 
-test('akc init writes CLAUDE.md + AGENTS.md and is idempotent', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'akc-init-'));
-  // --no-register so the test never touches the real Claude config.
-  const first = await runAkc(['init', '--no-register'], { cwd: dir });
+test('akc init (default machine-wide) writes ~/.claude + ~/.codex under HOME, idempotently', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'akc-home-'));
+  const env = { ...process.env, HOME: home };
+  const first = await runAkc(['init', '--no-register'], { env });
   assert.equal(first.code, 0);
-  const claudeMd = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
-  const agentsMd = await readFile(join(dir, 'AGENTS.md'), 'utf8');
-  assert.ok(claudeMd.includes(BLOCK_BEGIN));
-  assert.ok(agentsMd.includes(BLOCK_BEGIN));
-  assert.match(first.stdout, /skipped MCP registration/);
 
-  // Pre-existing content is preserved, block appended once.
+  const claudeMd = await readFile(join(home, '.claude', 'CLAUDE.md'), 'utf8');
+  const codexAgents = await readFile(join(home, '.codex', 'AGENTS.md'), 'utf8');
+  const codexToml = await readFile(join(home, '.codex', 'config.toml'), 'utf8');
+  assert.ok(claudeMd.includes(BLOCK_BEGIN));
+  assert.ok(codexAgents.includes(BLOCK_BEGIN));
+  assert.ok(codexToml.includes('[mcp_servers.aikeychain]'));
+
+  // Re-run is idempotent: still exactly one block in each.
+  await runAkc(['init', '--no-register'], { env });
+  const claudeMd2 = await readFile(join(home, '.claude', 'CLAUDE.md'), 'utf8');
+  const codexToml2 = await readFile(join(home, '.codex', 'config.toml'), 'utf8');
+  assert.equal(claudeMd2.split(BLOCK_BEGIN).length - 1, 1);
+  assert.equal(codexToml2.split(CODEX_BLOCK_BEGIN).length - 1, 1);
+});
+
+test('akc init --local writes cwd CLAUDE.md + AGENTS.md, preserving existing content', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'akc-init-'));
+  const first = await runAkc(['init', '--local', '--no-register'], { cwd: dir });
+  assert.equal(first.code, 0);
+  assert.ok((await readFile(join(dir, 'CLAUDE.md'), 'utf8')).includes(BLOCK_BEGIN));
+  assert.ok((await readFile(join(dir, 'AGENTS.md'), 'utf8')).includes(BLOCK_BEGIN));
+
+  // Pre-existing content is preserved, block appended once, then stable.
   await writeFile(join(dir, 'CLAUDE.md'), `# Existing\n\nrules here\n`);
-  await runAkc(['init', '--no-register'], { cwd: dir });
+  await runAkc(['init', '--local', '--no-register'], { cwd: dir });
   const updated = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
   assert.ok(updated.startsWith('# Existing'));
   assert.equal(updated.split(BLOCK_BEGIN).length - 1, 1);
-
-  // Third run: unchanged, still exactly one block.
-  await runAkc(['init', '--no-register'], { cwd: dir });
-  const third = await readFile(join(dir, 'CLAUDE.md'), 'utf8');
-  assert.equal(third.split(BLOCK_BEGIN).length - 1, 1);
-  assert.equal(third, updated);
+  await runAkc(['init', '--local', '--no-register'], { cwd: dir });
+  assert.equal(await readFile(join(dir, 'CLAUDE.md'), 'utf8'), updated);
 });

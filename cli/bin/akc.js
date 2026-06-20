@@ -23,7 +23,7 @@ const { version } = require('../package.json');
 const USAGE = `akc — AI KeyChain CLI (secret references, key management, MCP server)
 
 Usage:
-  akc init [--print] [--no-register] [--global]
+  akc init [--print] [--no-register] [--local]
   akc run [--dry-run] -- <command> [args...]
   akc list
   akc check <KEY>
@@ -37,9 +37,10 @@ Usage:
   akc help
 
 Commands:
-  init     Set up agent discoverability: write CLAUDE.md/AGENTS.md instructions
-           and register the MCP server (--print previews, --no-register skips it,
-           --global targets ~/.claude/CLAUDE.md)
+  init     Set up agent discoverability machine-wide: write ~/.claude/CLAUDE.md
+           + ~/.codex/AGENTS.md instructions, register the MCP server (Claude user
+           scope + ~/.codex/config.toml). --local scopes it to the current project,
+           --print previews, --no-register skips MCP registration.
   run      Resolve keychain:// env references and execute a command
   list     List known key names (never prints values)
   check    Check whether a key exists and in which store
@@ -51,7 +52,7 @@ Commands:
   mcp      Start the MCP server on stdio (for Claude Code / Codex etc.)
 
 Examples:
-  akc init                        # teach AI agents on this machine to use akc
+  akc init                        # set up every AI session on this machine (Claude + Codex)
   export OPENAI_API_KEY=keychain://OPENAI_API_KEY
   akc run -- claude
   akc set GITHUB_TOKEN            # prompts for the value (hidden)
