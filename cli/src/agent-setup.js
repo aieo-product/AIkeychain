@@ -113,6 +113,12 @@ export function upsertCodexBlock(content) {
   if (existing.includes(CODEX_BLOCK_BEGIN)) {
     return { content: existing, action: 'unchanged' };
   }
+  // A hand-written [mcp_servers.aikeychain] table (without our markers) would
+  // become a duplicate table key — invalid TOML — if we appended ours. Refuse
+  // and let the caller tell the user to merge manually.
+  if (/^\s*\[mcp_servers\.aikeychain\]\s*$/m.test(existing)) {
+    return { content: existing, action: 'conflict' };
+  }
   const sep = existing.length === 0 ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
   return { content: `${existing}${sep}${renderCodexBlock()}\n`, action: 'created' };
 }

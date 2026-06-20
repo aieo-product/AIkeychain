@@ -108,6 +108,16 @@ test('upsertCodexBlock appends once and is idempotent (never reformats existing 
   assert.equal(second.content, first.content);
 });
 
+test('upsertCodexBlock refuses to append when a marker-less aikeychain table already exists', () => {
+  // The exact hazard: user hand-wrote the table without our markers.
+  const existing = `[mcp_servers.node_repl]\ncommand = "node"\n\n[mcp_servers.aikeychain]\ncommand = "akc"\nargs = ["mcp"]\n`;
+  const { content, action } = upsertCodexBlock(existing);
+  assert.equal(action, 'conflict');
+  assert.equal(content, existing); // untouched — never produces duplicate table
+  // and it must NOT have appended a second table
+  assert.equal((content.match(/\[mcp_servers\.aikeychain\]/g) || []).length, 1);
+});
+
 test('akc init --print previews machine-wide setup without writing', async () => {
   const r = await runAkc(['init', '--print']);
   assert.equal(r.code, 0);

@@ -34,38 +34,46 @@ async function readFileOrEmpty(path) {
 async function applyUpsert(path, upsert) {
   const existing = await readFileOrEmpty(path);
   const { content, action } = upsert(existing);
-  if (action !== 'unchanged' && action !== 'malformed') {
+  if (action === 'created' || action === 'updated') {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, content);
   }
   return action;
 }
 
-async function registerClaudeMcp(scope) {
-  const addArgs = ['mcp', 'add', '--scope', scope, 'aikeychain', '--', 'akc', 'mcp'];
-  // Add first; only replace (remove+add) if the add fails (usually "exists"),
-  // so a working registration is never deleted unless we are re-adding it.
+/** Is the aikeychain MCP server already registered with Claude Code? */
+async function claudeMcpRegistered() {
   try {
-    await pExecFile('claude', addArgs, { timeout: 15000 });
+    const { stdout } = await pExecFile('claude', ['mcp', 'list'], { timeout: 15000 });
+    return /(^|\n)\s*aikeychain[:\s]/.test(stdout);
+  } catch {
+    return false;
+  }
+}
+
+async function registerClaudeMcp(scope) {
+  // Add first. If that fails, it is almost always "already registered" — verify
+  // and leave the existing one in place. Never remove a working registration
+  // (a transient re-add failure must not leave the user with nothing).
+  try {
+    await pExecFile('claude', ['mcp', 'add', '--scope', scope, 'aikeychain', '--', 'akc', 'mcp'], {
+      timeout: 15000,
+    });
     return;
   } catch {
-    // already registered or transient failure
+    // fall through to verification
   }
-  try {
-    await pExecFile('claude', ['mcp', 'remove', '--scope', scope, 'aikeychain'], { timeout: 15000 });
-  } catch {
-    try {
-      await pExecFile('claude', ['mcp', 'remove', 'aikeychain'], { timeout: 15000 });
-    } catch {
-      // ignore — the add below will surface a real failure
-    }
-  }
-  await pExecFile('claude', addArgs, { timeout: 15000 });
+  if (await claudeMcpRegistered()) return; // already there — keep it
+  throw new Error('claude mcp add failed and aikeychain is not registered');
 }
 
 function reportAction(out, path, action) {
   if (action === 'malformed') {
     out.write(`  ⚠️  ${path} has unbalanced aikeychain markers — left untouched. Fix it manually, then re-run.\n`);
+    return true; // failure
+  }
+  if (action === 'conflict') {
+    out.write(`  ⚠️  ${path} already has an [mcp_servers.aikeychain] table without our markers — left untouched. Merge it manually.\n`);
     return true; // failure
   }
   const verb = { created: 'wrote', updated: 'updated', unchanged: 'already current' }[action];
