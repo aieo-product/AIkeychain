@@ -11,13 +11,15 @@ akc init                    # teach the AI agents on this machine to use it
 
 ## For AI agents (Claude, Codex, …)
 
-Run **`akc init`** once. It:
+Run **`akc init`** once. It sets up **every AI session on this machine** (AI KeyChain is not a per-project tool):
 
-1. Writes a managed instructions block into `CLAUDE.md` and `AGENTS.md` (idempotent) so agents in this project learn the rules.
-2. Registers the MCP server with Claude Code (`claude mcp add aikeychain -- akc mcp`).
-3. Prints the Codex config snippet and next steps.
+1. Writes a managed instructions block into `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` (idempotent) so agents learn the rules.
+2. Registers the MCP server with Claude Code at **user scope** (`claude mcp add --scope user aikeychain -- akc mcp`) — every project/session sees it.
+3. Adds the MCP server to `~/.codex/config.toml` for Codex.
 
-After that, every new AI session discovers AI KeyChain via the MCP tools (`usage_guide`, `list_keys`, `get_secret_reference`, …) and the instructions block — no per-session setup. `akc init --print` previews everything without writing; `--no-register` skips MCP registration; `--global` targets `~/.claude/CLAUDE.md`.
+After that, every new Claude/Codex session discovers AI KeyChain via the MCP tools (`usage_guide`, `list_keys`, `get_secret_reference`, …) and the instructions block — no per-session setup. (Already-running sessions need a restart.)
+
+Flags: `--print` previews without writing, `--no-register` skips MCP registration, `--local` scopes everything to the current project (`./CLAUDE.md` + `./AGENTS.md` + a local-scope Claude MCP) instead of machine-wide.
 
 ## Why
 

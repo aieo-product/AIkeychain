@@ -109,7 +109,7 @@ The [`aikeychain`](cli/) npm package provides a standalone CLI (`akc`) and an MC
 
 ```bash
 npm install -g aikeychain    # or: npx aikeychain
-akc init                     # set up AI-agent discovery (CLAUDE.md/AGENTS.md + MCP)
+akc init                     # set up AI-agent discovery machine-wide (Claude + Codex)
 
 # Secret Reference workflow
 export OPENAI_API_KEY=keychain://OPENAI_API_KEY
@@ -120,10 +120,10 @@ akc set GITHUB_TOKEN         # hidden prompt, overwrites in place
 akc doctor                   # diagnose env + ~/.zshrc references
 ```
 
-Let AI agents (Claude Code, Codex, ...) use AI KeyChain correctly — run **`akc init`** once and every future session discovers it via the MCP tools and the instructions block written into `CLAUDE.md`/`AGENTS.md`. To register the MCP server manually instead:
+Let AI agents (Claude Code, Codex, ...) use AI KeyChain correctly — run **`akc init`** once and every future session on the machine discovers it via the MCP tools and the instructions block written into `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`. To register the Claude MCP server manually instead:
 
 ```bash
-claude mcp add aikeychain -- akc mcp
+claude mcp add --scope user aikeychain -- akc mcp
 ```
 
 The MCP tools (`usage_guide`, `list_keys`, `check_key`, `get_secret_reference`, `set_secret`, `delete_secret`, `doctor`) **never return raw secret values to the model** — agents get `keychain://` references and run workloads through `akc run`. See [cli/README.md](cli/README.md) for details.

@@ -46,48 +46,79 @@ function countOccurrences(haystack, needle) {
   return count;
 }
 
-/** Remove every complete BEGIN..END block (assumes balanced, non-overlapping markers). */
-function removeCompleteBlocks(content) {
+/** Remove every complete begin..end block (assumes balanced, non-overlapping markers). */
+function removeCompleteBlocks(content, begin, end) {
   let result = content;
-  let beginIdx = result.indexOf(BLOCK_BEGIN);
+  let beginIdx = result.indexOf(begin);
   while (beginIdx !== -1) {
-    const endIdx = result.indexOf(BLOCK_END, beginIdx);
+    const endIdx = result.indexOf(end, beginIdx);
     if (endIdx === -1) break; // shouldn't happen when markers are balanced
-    result = result.slice(0, beginIdx) + result.slice(endIdx + BLOCK_END.length);
-    beginIdx = result.indexOf(BLOCK_BEGIN);
+    result = result.slice(0, beginIdx) + result.slice(endIdx + end.length);
+    beginIdx = result.indexOf(begin);
   }
   return result;
 }
 
 /**
- * Insert or replace the managed block in `content`. Idempotent and
+ * Insert or replace a marker-delimited block in `content`. Idempotent and
  * non-destructive:
- *  - no block         → append one
+ *  - no block          → append one
  *  - one+ complete blocks → canonicalize to exactly one (dedupes duplicates)
- *  - unbalanced markers (dangling BEGIN/END from hand-editing) → refuse to edit
- *    so no user content is ever truncated.
+ *  - unbalanced markers (dangling begin/end) → refuse to edit (no truncation)
  * Returns { content, action: 'created' | 'updated' | 'unchanged' | 'malformed' }.
  */
-export function upsertManagedBlock(content) {
-  const block = renderManagedBlock();
+export function upsertDelimitedBlock(content, begin, end, fullBlock) {
   const existing = content ?? '';
-
-  const begins = countOccurrences(existing, BLOCK_BEGIN);
-  const ends = countOccurrences(existing, BLOCK_END);
+  const begins = countOccurrences(existing, begin);
+  const ends = countOccurrences(existing, end);
 
   if (begins !== ends) {
-    // Malformed (e.g. a dangling BEGIN with no END). Do not guess where the
-    // block ends — leave the file untouched and let the caller warn.
     return { content: existing, action: 'malformed' };
   }
 
   if (begins === 0) {
     const sep = existing.length === 0 ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
-    return { content: `${existing}${sep}${block}\n`, action: 'created' };
+    return { content: `${existing}${sep}${fullBlock}\n`, action: 'created' };
   }
 
-  // Remove all existing blocks, tidy whitespace, then append exactly one.
-  const stripped = removeCompleteBlocks(existing).replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '');
-  const next = stripped.length === 0 ? `${block}\n` : `${stripped}\n\n${block}\n`;
+  const stripped = removeCompleteBlocks(existing, begin, end)
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\s+$/, '');
+  const next = stripped.length === 0 ? `${fullBlock}\n` : `${stripped}\n\n${fullBlock}\n`;
   return { content: next, action: next === existing ? 'unchanged' : 'updated' };
+}
+
+/** Upsert the markdown instructions block (CLAUDE.md / AGENTS.md). */
+export function upsertManagedBlock(content) {
+  return upsertDelimitedBlock(content, BLOCK_BEGIN, BLOCK_END, renderManagedBlock());
+}
+
+// --- Codex MCP server block (~/.codex/config.toml) ---
+// Markers are TOML comments so the block is valid TOML.
+export const CODEX_BLOCK_BEGIN = '# BEGIN aikeychain (managed by `akc init`)';
+export const CODEX_BLOCK_END = '# END aikeychain (managed by `akc init`)';
+
+export function renderCodexBlock() {
+  return `${CODEX_BLOCK_BEGIN}\n[mcp_servers.aikeychain]\ncommand = "akc"\nargs = ["mcp"]\n${CODEX_BLOCK_END}`;
+}
+
+/**
+ * Ensure the Codex MCP block is present in a config.toml. Append-only and
+ * idempotent: if the marker is already there it leaves the file completely
+ * untouched (never reformats the user's hand-written TOML).
+ * Returns { content, action: 'created' | 'unchanged' }.
+ */
+export function upsertCodexBlock(content) {
+  const existing = content ?? '';
+  if (existing.includes(CODEX_BLOCK_BEGIN)) {
+    return { content: existing, action: 'unchanged' };
+  }
+  // A hand-written [mcp_servers.aikeychain] table (without our markers) would
+  // become a duplicate table key — invalid TOML — if we appended ours. Refuse
+  // and let the caller tell the user to merge manually.
+  if (/^\s*\[mcp_servers\.aikeychain\]\s*$/m.test(existing)) {
+    return { content: existing, action: 'conflict' };
+  }
+  const sep = existing.length === 0 ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
+  return { content: `${existing}${sep}${renderCodexBlock()}\n`, action: 'created' };
 }

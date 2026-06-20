@@ -1,6 +1,6 @@
 {
   "name": "aikeychain",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "AI KeyChain CLI & MCP server — resolve keychain:// secret references from macOS Keychain and let AI agents (Claude, Codex) use them safely. Run `akc init` to set up discovery.",
   "type": "module",
   "bin": {
