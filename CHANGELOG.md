@@ -2,6 +2,12 @@
 
 All notable changes to AI KeyChain are documented in this file.
 
+## [1.6.1] - 2026-05-13
+
+### Fixed
+- **`akc` CLI** — `keychain://KEY_NAME` references registered via the AI KeyChain GUI (stored under `service=com.aieo.aikeychain` / `account=<KEY_NAME>`) could not be resolved by `akc run`; only manually-registered keys (`service=<KEY_NAME>` / `account=$USER`) were looked up. `resolve_keychain` now checks the GUI scheme first and falls back to the manual scheme, so Secret Reference mode works end-to-end with keys added through the app (#90)
+- **`MARKETING_VERSION` drift** — `project.yml` and the generated `AIkeychain.xcodeproj` had been frozen at `1.0.0` even though the project was released as `v1.5.1` / `v1.6.0`. Bumped to `1.6.1` to align with the Git tag and CHANGELOG. `scripts/akc` `VERSION` is now also aligned to the app version
+
 ## [1.6.0] - 2026-04-21
 
 ### Added
