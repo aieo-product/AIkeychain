@@ -10,6 +10,18 @@ enum KeyCategory: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// UI 表示用のローカライズ名（`rawValue` は永続化キーなので英語のまま維持）。
+    var displayName: String {
+        switch self {
+        case .ai: L10n.s(ja: "AI API", en: "AI API")
+        case .webAuth: L10n.s(ja: "AI Web 認証", en: "AI Web")
+        case .codeAndGit: L10n.s(ja: "コード & Git", en: "Code & Git")
+        case .cloud: L10n.s(ja: "クラウド & インフラ", en: "Cloud & Infra")
+        case .communication: L10n.s(ja: "コミュニケーション", en: "Communication")
+        case .devTools: L10n.s(ja: "開発ツール", en: "Developer Tools")
+        }
+    }
+
     var color: Color {
         switch self {
         case .ai: Color(hex: 0x7C3AED)

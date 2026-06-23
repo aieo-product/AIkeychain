@@ -43,15 +43,30 @@ struct APIKey: Identifiable, Equatable, Hashable {
         if let override = CustomKeyStore.shared.overriddenIcon(for: envVarName), !override.isEmpty {
             return override
         }
-        // 2. プリセット由来のアイコン
+        // 2. プリセット名キーを別カテゴリへ移している場合は、その実効カテゴリのアイコン
+        //    （エディタの既定選択と一致させ「nil はカテゴリ追従」を成立させる）
+        if let sel = CustomKeyStore.shared.overriddenCategory(for: envVarName),
+           let icon = Self.categoryIcon(for: sel), !icon.isEmpty {
+            return icon
+        }
+        // 3. プリセット由来のアイコン（既定配置のプリセット名キー）
         if let service { return service.systemImage }
-        // 3. カスタムキーが属するカテゴリのアイコン
-        if let customKey, let cat = CustomKeyStore.shared.category(for: customKey.categoryId) {
+        // 4. カスタムキーが属するカテゴリのアイコン
+        if let customKey, let cat = CustomKeyStore.shared.category(for: customKey.categoryId),
+           !cat.systemImage.isEmpty {
             return cat.systemImage
         }
-        // 4. ビルトインカテゴリのアイコン（プリセット名キーのフォールバック）
-        if let builtin = builtinCategory { return builtin.systemImage }
+        // 5. ビルトインカテゴリのアイコン（プリセット名キーのフォールバック）
+        if let builtin = builtinCategory, !builtin.systemImage.isEmpty { return builtin.systemImage }
         return "key"
+    }
+
+    private static func categoryIcon(for selection: CategorySelection) -> String? {
+        switch selection {
+        case .builtin(let cat): return cat.systemImage
+        case .custom(let id): return CustomKeyStore.shared.category(for: id)?.systemImage
+        case .all, .activity: return nil
+        }
     }
 
     var categoryColor: Color {

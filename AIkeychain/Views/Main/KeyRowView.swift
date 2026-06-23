@@ -6,7 +6,7 @@ struct KeyRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             if let service = key.service {
-                ServiceIcon(service: service)
+                ServiceIcon(service: service, symbol: key.systemImage)
             } else {
                 Image(systemName: key.systemImage)
                     .font(.system(size: 16))

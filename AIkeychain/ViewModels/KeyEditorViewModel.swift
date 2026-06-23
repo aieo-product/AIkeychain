@@ -92,9 +92,16 @@ final class KeyEditorViewModel {
                 selectedCategorySelection = .custom(customId)
             }
 
-            // 現在の表示アイコンを初期値にし、編集中は維持（カテゴリ追従させない）
-            selectedIcon = key.systemImage
-            iconManuallySet = true
+            // 明示的に保存されたアイコンがあればそれを初期値に（保存時に維持）。
+            // 無ければ現在の表示アイコンを初期値にし、未指定扱い（カテゴリ追従可）。
+            let explicitIcon = key.customKey?.icon ?? customStore.overriddenIcon(for: key.envVarName)
+            if let explicitIcon, !explicitIcon.isEmpty {
+                selectedIcon = explicitIcon
+                iconManuallySet = true
+            } else {
+                selectedIcon = key.systemImage
+                iconManuallySet = false
+            }
 
             tokenValue = (try? keychainService.retrieve(for: key.envVarName)) ?? ""
         } else {
@@ -188,11 +195,12 @@ final class KeyEditorViewModel {
         }
     }
 
-    /// 保存するアイコン。カテゴリ既定と同じなら nil（= カテゴリに追従させ、保存しない）。
+    /// 保存するアイコン。ユーザーが明示的に選んでいなければ nil（= カテゴリ/プリセットに
+    /// 追従させ、上書きを保存しない）。明示選択時のみその値を保存する。
     private func iconToPersist() -> String? {
+        guard iconManuallySet else { return nil }
         let trimmed = selectedIcon.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty || trimmed == categoryDefaultIcon { return nil }
-        return trimmed
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func resolveCategoryId() -> UUID {

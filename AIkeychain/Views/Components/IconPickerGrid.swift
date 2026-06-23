@@ -23,9 +23,18 @@ struct IconPickerGrid: View {
         "star.fill", "tag.fill", "shippingbox.fill", "terminal.fill",
     ]
 
+    /// 現在の選択が選択肢に無い場合（既存キーのサービスアイコン等）でも
+    /// 選択状態が見えるよう、先頭に補う。
+    private var displayedOptions: [String] {
+        if !selection.isEmpty && !Self.options.contains(selection) {
+            return [selection] + Self.options
+        }
+        return Self.options
+    }
+
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(32)), count: columns), spacing: 6) {
-            ForEach(Self.options, id: \.self) { icon in
+            ForEach(displayedOptions, id: \.self) { icon in
                 Button {
                     selection = icon
                 } label: {

@@ -281,6 +281,14 @@ struct KeyEditorViewModelTests {
         #expect(store.overriddenIcon(for: "GITHUB_TOKEN") == "star.fill")
     }
 
+    @Test("APIKey.systemImage prefers a custom key's explicit icon (#110)")
+    func apiKeyExplicitIcon() {
+        let key = APIKey(customKey: CustomKey(
+            envVarName: "X_CUSTOM", displayName: "X",
+            categoryId: KeyCategory.devTools.stableId, icon: "flame"))
+        #expect(key.systemImage == "flame")
+    }
+
     @Test("Old CustomKey JSON without an icon field decodes safely (migration, #110)")
     func oldCustomKeyJsonDecodes() throws {
         // A record persisted by a version before the `icon` field existed.

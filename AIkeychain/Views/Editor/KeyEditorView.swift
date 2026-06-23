@@ -36,7 +36,7 @@ struct KeyEditorView: View {
                         .foregroundStyle(.secondary)
                         .tag(CategorySelection?.none)
                     ForEach(KeyCategory.allCases) { cat in
-                        Label(cat.rawValue, systemImage: cat.systemImage)
+                        Label(cat.displayName, systemImage: cat.systemImage)
                             .tag(CategorySelection?.some(.builtin(cat)))
                     }
                     if !CustomKeyStore.shared.categories.isEmpty {
