@@ -15,8 +15,12 @@
   "engines": {
     "node": ">=18"
   },
+  "os": [
+    "darwin"
+  ],
   "scripts": {
-    "test": "node --test 'test/*.test.js'"
+    "test": "node --test 'test/*.test.js'",
+    "prepublishOnly": "npm test"
   },
   "repository": {
     "type": "git",
