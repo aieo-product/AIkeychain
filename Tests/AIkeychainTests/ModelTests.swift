@@ -84,13 +84,29 @@ struct KeyEditorViewModelTests {
         #expect(vm.selectedCategorySelection == nil)
     }
 
-    @Test("Service change updates env var name")
-    func serviceChange() {
+    @Test("Icon follows the category default until the user picks one")
+    func iconFollowsCategory() {
         let vm = KeyEditorViewModel(keychainService: MockKeychainService())
-        vm.selectedService = .github
-        vm.onServiceChange()
-        #expect(vm.envVarName == "GITHUB_TOKEN")
-        #expect(vm.selectedCategorySelection == .builtin(.codeAndGit))
+        vm.selectedCategorySelection = .builtin(.cloud)
+        vm.categoryDidChange()
+        #expect(vm.selectedIcon == KeyCategory.cloud.systemImage)
+
+        // Switching category updates the icon (not manually set yet)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.categoryDidChange()
+        #expect(vm.selectedIcon == KeyCategory.devTools.systemImage)
+    }
+
+    @Test("Once the user picks an icon, category changes no longer override it")
+    func pickedIconSticks() {
+        let vm = KeyEditorViewModel(keychainService: MockKeychainService())
+        vm.selectedCategorySelection = .builtin(.cloud)
+        vm.categoryDidChange()
+        vm.pickIcon("flame")
+        #expect(vm.selectedIcon == "flame")
+        vm.selectedCategorySelection = .builtin(.ai)
+        vm.categoryDidChange()
+        #expect(vm.selectedIcon == "flame") // sticks
     }
 
     @Test("Prefix warning shows for wrong prefix")
@@ -213,6 +229,69 @@ struct KeyEditorViewModelTests {
         #expect(created != nil)
         #expect(created?.categoryId == KeyCategory.devTools.stableId)
         #expect(created?.displayName == "MY_CUSTOM_KEY")
+    }
+
+    @Test("Save stores a user-picked icon on a custom key (#110)")
+    func saveCustomKeyWithIcon() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = "MY_CUSTOM_KEY"
+        vm.tokenValue = "x"
+        vm.pickIcon("flame")
+        try vm.save()
+
+        let created = store.keys.first { $0.envVarName == "MY_CUSTOM_KEY" }
+        #expect(created?.icon == "flame")
+    }
+
+    @Test("Custom key icon equal to category default is not persisted (follows category)")
+    func saveCustomKeyIconMatchingCategoryNotStored() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.categoryDidChange() // icon = devTools default
+        vm.envVarName = "MY_CUSTOM_KEY"
+        vm.tokenValue = "x"
+        try vm.save()
+
+        let created = store.keys.first { $0.envVarName == "MY_CUSTOM_KEY" }
+        #expect(created?.icon == nil) // nil → follows category icon
+    }
+
+    @Test("Save stores an icon override for a preset-named key (#110)")
+    func saveIconOverrideForPresetName() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.codeAndGit)
+        vm.envVarName = "GITHUB_TOKEN"
+        vm.tokenValue = "ghp_x"
+        vm.pickIcon("star.fill")
+        try vm.save()
+
+        #expect(store.overriddenIcon(for: "GITHUB_TOKEN") == "star.fill")
+    }
+
+    @Test("Old CustomKey JSON without an icon field decodes safely (migration, #110)")
+    func oldCustomKeyJsonDecodes() throws {
+        // A record persisted by a version before the `icon` field existed.
+        let json = """
+        [{"id":"\(UUID().uuidString)","envVarName":"LEGACY_KEY","displayName":"Legacy",
+          "categoryId":"\(KeyCategory.ai.stableId.uuidString)"}]
+        """
+        let decoded = try JSONDecoder().decode([CustomKey].self, from: Data(json.utf8))
+        #expect(decoded.count == 1)
+        #expect(decoded[0].envVarName == "LEGACY_KEY")
+        #expect(decoded[0].icon == nil) // missing field → nil, no crash
     }
 
     @Test("Save with NO service but a preset-named env var preserves the chosen category via override (#102)")

@@ -30,41 +30,9 @@ struct KeyEditorView: View {
 
             // Form
             Form {
-                // Optional quick-preset: picking a known service auto-fills the
-                // env var name + category below. Not required — a category and
-                // environment variable name are enough.
-                if !viewModel.isEditing {
-                    Section {
-                        Picker("Quick preset", selection: $viewModel.selectedService) {
-                            Text("None (custom key)")
-                                .foregroundStyle(.secondary)
-                                .tag(ServiceType?.none)
-                            ForEach(ServiceType.allCases) { service in
-                                Label(service.displayName, systemImage: service.systemImage)
-                                    .tag(ServiceType?.some(service))
-                            }
-                        }
-                        .onChange(of: viewModel.selectedService) {
-                            viewModel.onServiceChange()
-                        }
-                    } footer: {
-                        Text("Optional. Pick a known service to auto-fill the fields below, or just set a category and variable name.")
-                            .font(AppFonts.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } else if let service = viewModel.selectedService {
-                    LabeledContent("Service") {
-                        HStack(spacing: 8) {
-                            Image(systemName: service.systemImage)
-                                .foregroundStyle(service.category.color)
-                            Text(service.displayName)
-                        }
-                    }
-                }
-
                 // Category (required)
-                Picker("Category", selection: $viewModel.selectedCategorySelection) {
-                    Text("Select a category...")
+                Picker(L10n.s(ja: "カテゴリ", en: "Category"), selection: $viewModel.selectedCategorySelection) {
+                    Text(L10n.s(ja: "カテゴリを選択...", en: "Select a category..."))
                         .foregroundStyle(.secondary)
                         .tag(CategorySelection?.none)
                     ForEach(KeyCategory.allCases) { cat in
@@ -79,19 +47,40 @@ struct KeyEditorView: View {
                         }
                     }
                 }
+                .onChange(of: viewModel.selectedCategorySelection) {
+                    viewModel.categoryDidChange()
+                }
 
                 // Env var name (required)
-                TextField("Environment Variable", text: $viewModel.envVarName)
+                TextField(L10n.s(ja: "環境変数名", en: "Environment Variable"), text: $viewModel.envVarName)
                     .font(AppFonts.code)
+
+                // Icon picker — pick the symbol shown for this key in its category.
+                Section {
+                    IconPickerGrid(
+                        selection: Binding(
+                            get: { viewModel.selectedIcon },
+                            set: { viewModel.pickIcon($0) }
+                        ),
+                        tint: categoryColor(viewModel.selectedCategorySelection)
+                    )
+                } header: {
+                    Text(L10n.s(ja: "アイコン", en: "Icon"))
+                } footer: {
+                    Text(L10n.s(ja: "一覧でこのキーに表示するアイコンを選びます。",
+                                en: "Choose the icon shown for this key in the list."))
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 // Token value
                 Section {
                     HStack {
                         if viewModel.showToken {
-                            TextField("Token Value", text: $viewModel.tokenValue)
+                            TextField(L10n.s(ja: "トークンの値", en: "Token Value"), text: $viewModel.tokenValue)
                                 .font(AppFonts.code)
                         } else {
-                            SecureField("Token Value", text: $viewModel.tokenValue)
+                            SecureField(L10n.s(ja: "トークンの値", en: "Token Value"), text: $viewModel.tokenValue)
                                 .font(AppFonts.code)
                         }
                         Button {
@@ -109,11 +98,11 @@ struct KeyEditorView: View {
                     }
                 }
 
-                // Setup URL
+                // Setup URL (existing preset keys only)
                 if let url = viewModel.selectedService?.setupURL {
                     Section {
                         Link(destination: url) {
-                            Label("Get Token", systemImage: "arrow.up.right.square")
+                            Label(L10n.s(ja: "トークンを取得", en: "Get Token"), systemImage: "arrow.up.right.square")
                         }
                     }
                 }
@@ -133,17 +122,19 @@ struct KeyEditorView: View {
             // Actions
             HStack {
                 if viewModel.isEditing {
-                    Button("Delete", role: .destructive) {
+                    Button(L10n.s(ja: "削除", en: "Delete"), role: .destructive) {
                         viewModel.showDeleteConfirm = true
                     }
                 }
 
                 Spacer()
 
-                Button("Cancel") { dismiss() }
+                Button(L10n.s(ja: "キャンセル", en: "Cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
 
-                Button(viewModel.showSaveSuccess ? "Saved!" : "Save to Keychain") {
+                Button(viewModel.showSaveSuccess
+                       ? L10n.s(ja: "保存しました", en: "Saved!")
+                       : L10n.s(ja: "Keychain に保存", en: "Save to Keychain")) {
                     do {
                         try viewModel.save()
                         onSave()
@@ -159,10 +150,10 @@ struct KeyEditorView: View {
             }
             .padding()
         }
-        .frame(width: 520, height: 460)
-        .alert("Delete Key?", isPresented: $viewModel.showDeleteConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
+        .frame(width: 520, height: 480)
+        .alert(L10n.s(ja: "キーを削除しますか？", en: "Delete Key?"), isPresented: $viewModel.showDeleteConfirm) {
+            Button(L10n.s(ja: "キャンセル", en: "Cancel"), role: .cancel) {}
+            Button(L10n.s(ja: "削除", en: "Delete"), role: .destructive) {
                 do {
                     try viewModel.deleteKey()
                     onSave()
@@ -172,7 +163,17 @@ struct KeyEditorView: View {
                 }
             }
         } message: {
-            Text("This will remove the key from Keychain. This action cannot be undone.")
+            Text(L10n.s(ja: "このキーを Keychain から削除します。この操作は取り消せません。",
+                        en: "This will remove the key from Keychain. This action cannot be undone."))
+        }
+    }
+
+    /// 選択中カテゴリの強調色（アイコンピッカーの tint）。
+    private func categoryColor(_ sel: CategorySelection?) -> Color {
+        switch sel {
+        case .builtin(let cat): return cat.color
+        case .custom(let id): return CustomKeyStore.shared.category(for: id)?.color ?? AppColors.aiPurple
+        default: return AppColors.aiPurple
         }
     }
 }

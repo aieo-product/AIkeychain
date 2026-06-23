@@ -36,10 +36,21 @@ struct APIKey: Identifiable, Equatable, Hashable {
     }
 
     var systemImage: String {
+        // 1. ユーザーがこのキーに設定した個別アイコンを最優先
+        if let customKey, let icon = customKey.icon, !icon.isEmpty {
+            return icon
+        }
+        if let override = CustomKeyStore.shared.overriddenIcon(for: envVarName), !override.isEmpty {
+            return override
+        }
+        // 2. プリセット由来のアイコン
         if let service { return service.systemImage }
+        // 3. カスタムキーが属するカテゴリのアイコン
         if let customKey, let cat = CustomKeyStore.shared.category(for: customKey.categoryId) {
             return cat.systemImage
         }
+        // 4. ビルトインカテゴリのアイコン（プリセット名キーのフォールバック）
+        if let builtin = builtinCategory { return builtin.systemImage }
         return "key"
     }
 

@@ -3,6 +3,8 @@ import Observation
 
 @Observable
 final class KeyEditorViewModel {
+    /// 既存プリセットキーの編集時のみ参照（プレフィックス検証 / 発行 URL 表示用）。
+    /// エディタにサービス選択 UI は無い。
     var selectedService: ServiceType?
     var envVarName: String = ""
     var tokenValue: String = ""
@@ -12,6 +14,10 @@ final class KeyEditorViewModel {
     var showDeleteConfirm: Bool = false
     var errorMessage: String?
     var selectedCategorySelection: CategorySelection?
+    /// このキーに表示するアイコン（SF Symbol 名）。
+    var selectedIcon: String = "key"
+    /// ユーザーが明示的にアイコンを選んだか（カテゴリ変更で自動追従させるか判定）。
+    var iconManuallySet: Bool = false
 
     let editingKey: APIKey?
     private let keychainService: KeychainServiceProtocol
@@ -20,7 +26,29 @@ final class KeyEditorViewModel {
     var isEditing: Bool { editingKey != nil }
 
     var title: String {
-        isEditing ? "Edit Key" : "Add Key"
+        isEditing ? L10n.s(ja: "キーを編集", en: "Edit Key") : L10n.s(ja: "キーを追加", en: "Add Key")
+    }
+
+    /// 選択中カテゴリの既定アイコン。
+    var categoryDefaultIcon: String {
+        switch selectedCategorySelection {
+        case .builtin(let cat): return cat.systemImage
+        case .custom(let id): return customStore.category(for: id)?.systemImage ?? "folder"
+        case .all, .activity, .none: return "key"
+        }
+    }
+
+    /// カテゴリ選択が変わったとき、ユーザー未指定なら既定アイコンに追従させる。
+    func categoryDidChange() {
+        if !iconManuallySet {
+            selectedIcon = categoryDefaultIcon
+        }
+    }
+
+    /// ユーザーがアイコンを選んだ。
+    func pickIcon(_ icon: String) {
+        selectedIcon = icon
+        iconManuallySet = true
     }
 
     var prefixWarning: String? {
@@ -29,7 +57,7 @@ final class KeyEditorViewModel {
               !tokenValue.hasPrefix(prefix) else {
             return nil
         }
-        return "Expected prefix: \(prefix)"
+        return L10n.s(ja: "想定プレフィックス: \(prefix)", en: "Expected prefix: \(prefix)")
     }
 
     /// envVarName が安全なシェル変数名パターンに一致するか
@@ -54,7 +82,7 @@ final class KeyEditorViewModel {
         self.customStore = customStore
 
         if let key = editingKey {
-            selectedService = key.service ?? .anthropic
+            selectedService = key.service
             envVarName = key.envVarName
 
             // Resolve current category
@@ -64,19 +92,18 @@ final class KeyEditorViewModel {
                 selectedCategorySelection = .custom(customId)
             }
 
+            // 現在の表示アイコンを初期値にし、編集中は維持（カテゴリ追従させない）
+            selectedIcon = key.systemImage
+            iconManuallySet = true
+
             tokenValue = (try? keychainService.retrieve(for: key.envVarName)) ?? ""
         } else {
             // 新規: 未選択状態で開始
             selectedService = nil
             envVarName = ""
             selectedCategorySelection = nil
-        }
-    }
-
-    func onServiceChange() {
-        if !isEditing, let service = selectedService {
-            envVarName = service.envVarName
-            selectedCategorySelection = .builtin(service.category)
+            selectedIcon = "key"
+            iconManuallySet = false
         }
     }
 
@@ -91,34 +118,38 @@ final class KeyEditorViewModel {
         do {
             try keychainService.save(value: trimmedValue, for: trimmedEnvVar)
 
+            let iconToStore = iconToPersist()
+
             if let key = editingKey {
                 // 既存キーの編集
                 if let service = key.service {
                     customStore.setCategoryOverride(
                         envVarName: trimmedEnvVar,
                         value: categoryOverrideValue(defaultCategory: service.category))
+                    customStore.setIconOverride(envVarName: trimmedEnvVar, icon: iconToStore)
                 } else if let customKey = key.customKey {
-                    // カスタムキーのカテゴリ変更
+                    // カスタムキーのカテゴリ/アイコン変更
                     var updated = customKey
                     updated.categoryId = resolveCategoryId()
+                    updated.icon = iconToStore
                     customStore.updateKey(updated)
                 }
             } else {
                 // 新規キー
                 if let preset = ServiceType.allCases.first(where: { $0.envVarName == trimmedEnvVar }) {
                     // envVarName がプリセットに一致 → プリセットキーとして一覧表示される。
-                    // 選択カテゴリがプリセット既定と異なる場合のみカテゴリ上書きを保存する
-                    // （Service 未選択でカテゴリだけ変えたケースを取りこぼさない / #102）。
+                    // 選択カテゴリ/アイコンがプリセット既定と異なる場合のみ上書きを保存
+                    // （Service 未選択でカテゴリ・アイコンだけ変えたケースを取りこぼさない）。
                     customStore.setCategoryOverride(
                         envVarName: trimmedEnvVar,
                         value: categoryOverrideValue(defaultCategory: preset.category))
+                    customStore.setIconOverride(envVarName: trimmedEnvVar, icon: iconToStore)
                 } else {
                     let customKey = CustomKey(
                         envVarName: trimmedEnvVar,
-                        displayName: selectedService?.displayName ?? trimmedEnvVar,
+                        displayName: trimmedEnvVar,
                         categoryId: resolveCategoryId(),
-                        tokenPrefix: selectedService?.tokenPrefix,
-                        setupURLString: selectedService?.setupURL?.absoluteString
+                        icon: iconToStore
                     )
                     customStore.addKey(customKey)
                 }
@@ -135,8 +166,9 @@ final class KeyEditorViewModel {
     func deleteKey() throws {
         guard let key = editingKey else { return }
         try keychainService.delete(for: key.envVarName)
-        // カテゴリ上書きも削除
+        // カテゴリ/アイコン上書きも削除
         customStore.setCategoryOverride(envVarName: key.envVarName, value: nil)
+        customStore.setIconOverride(envVarName: key.envVarName, icon: nil)
     }
 
     // MARK: - Private
@@ -154,6 +186,13 @@ final class KeyEditorViewModel {
         case .all, .activity, .none:
             return nil
         }
+    }
+
+    /// 保存するアイコン。カテゴリ既定と同じなら nil（= カテゴリに追従させ、保存しない）。
+    private func iconToPersist() -> String? {
+        let trimmed = selectedIcon.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty || trimmed == categoryDefaultIcon { return nil }
+        return trimmed
     }
 
     private func resolveCategoryId() -> UUID {
