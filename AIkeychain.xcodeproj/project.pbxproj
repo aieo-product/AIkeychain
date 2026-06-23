@@ -39,6 +39,7 @@
 		7D946F2DB9B9D085052EDB87 /* AppFonts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56404BDE58192F0E86AD8B7E /* AppFonts.swift */; };
 		997092F4B071916A707F052B /* AppColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25AF158D6FB20753F89DF323 /* AppColors.swift */; };
 		A2F1064807E933FE345F8063 /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DC4BEF20A119E940433F3A /* KeychainServiceTests.swift */; };
+		A333DEEBD8AD828CC031413A /* IconPickerGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE82389E8C1EDD586872750A /* IconPickerGrid.swift */; };
 		A5417351BB72385534D8B9B7 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E7404C25ED51694C3DF766 /* SidebarView.swift */; };
 		AB911324067521B34322D8A9 /* KeyListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86254B995FB20769DA53656A /* KeyListViewModel.swift */; };
 		AF1D41DA4AC29AEE58B49FDF /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF474BC29A1530637DA89AB /* MenuBarView.swift */; };
@@ -121,6 +122,7 @@
 		F2A3438BA6DB0A665C0E3D08 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModel.swift; sourceTree = "<group>"; };
 		F69D54AA42B1FDEBB2AD036B /* ViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModelTests.swift; sourceTree = "<group>"; };
 		FCD863D9D3D25902544E5FFC /* ShareKeysView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareKeysView.swift; sourceTree = "<group>"; };
+		FE82389E8C1EDD586872750A /* IconPickerGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconPickerGrid.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -160,6 +162,14 @@
 			path = Onboarding;
 			sourceTree = "<group>";
 		};
+		3583B31A559FCC2A23E29BC3 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				FE82389E8C1EDD586872750A /* IconPickerGrid.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
 		59E705C3BF8EAB243BA4E46E /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -172,6 +182,7 @@
 				2939F10EF6CE9C4D059904DC /* ModeSelectView.swift */,
 				4A96E32BD83312A5116D44E7 /* RecoveryView.swift */,
 				FCD863D9D3D25902544E5FFC /* ShareKeysView.swift */,
+				3583B31A559FCC2A23E29BC3 /* Components */,
 				C166B224999EEA1A66870FC9 /* Editor */,
 				A9A45D381E261DC40D05F3B2 /* Export */,
 				EAD00F96FE54FBD31C7BED93 /* Main */,
@@ -404,6 +415,7 @@
 				17E984B7629D8CE3316EA863 /* ExportView.swift in Sources */,
 				25101CE19322B14D1988F7ED /* HTTPRequestParser.swift in Sources */,
 				DB35D6EB592E09D00C582035 /* HelpView.swift in Sources */,
+				A333DEEBD8AD828CC031413A /* IconPickerGrid.swift in Sources */,
 				C8354CC8F169967E2C4F8058 /* KeyCategory.swift in Sources */,
 				163DDFF8E8B54D9552084AC4 /* KeyEditorView.swift in Sources */,
 				057C67CA77C34F8753AC4E1B /* KeyEditorViewModel.swift in Sources */,

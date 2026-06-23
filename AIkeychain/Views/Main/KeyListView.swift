@@ -11,7 +11,7 @@ struct KeyListView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(selectedCategoryName)
                         .font(AppFonts.sectionTitle)
-                    Text("\(viewModel.filteredKeys.count) keys")
+                    Text(L10n.s(ja: "\(viewModel.filteredKeys.count) 件のキー", en: "\(viewModel.filteredKeys.count) keys"))
                         .font(AppFonts.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -21,13 +21,13 @@ struct KeyListView: View {
                 Button {
                     showingImport = true
                 } label: {
-                    Label("Import", systemImage: "square.and.arrow.down")
+                    Label(L10n.s(ja: "インポート", en: "Import"), systemImage: "square.and.arrow.down")
                 }
 
                 Button {
                     viewModel.addNewKey()
                 } label: {
-                    Label("Add Key", systemImage: "plus")
+                    Label(L10n.s(ja: "キーを追加", en: "Add Key"), systemImage: "plus")
                 }
             }
             .padding()
@@ -46,10 +46,10 @@ struct KeyListView: View {
                     Image(systemName: "key.slash")
                         .font(.system(size: 32))
                         .foregroundStyle(.tertiary)
-                    Text("No Keys Found")
+                    Text(L10n.s(ja: "キーがありません", en: "No Keys Found"))
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.secondary)
-                    Text("Add Key or Import to get started.")
+                    Text(L10n.s(ja: "「キーを追加」またはインポートで始めましょう。", en: "Add Key or Import to get started."))
                         .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
                 }
@@ -59,13 +59,13 @@ struct KeyListView: View {
                     KeyRowView(key: key)
                         .tag(key)
                         .contextMenu {
-                            Button("Edit") { viewModel.editKey(key) }
-                            Button("Copy Env Name") {
+                            Button(L10n.s(ja: "編集", en: "Edit")) { viewModel.editKey(key) }
+                            Button(L10n.s(ja: "変数名をコピー", en: "Copy Env Name")) {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(key.envVarName, forType: .string)
                             }
                             if key.isConfigured {
-                                Button("Copy Value") {
+                                Button(L10n.s(ja: "値をコピー", en: "Copy Value")) {
                                     if let value = viewModel.retrieveValue(for: key) {
                                         NSPasteboard.general.clearContents()
                                         NSPasteboard.general.setString(value, forType: .string)
@@ -78,7 +78,7 @@ struct KeyListView: View {
                             }
                             Divider()
                             if let url = key.setupURL {
-                                Button("Open Setup Page") {
+                                Button(L10n.s(ja: "取得ページを開く", en: "Open Setup Page")) {
                                     NSWorkspace.shared.open(url)
                                 }
                             }
@@ -93,14 +93,14 @@ struct KeyListView: View {
     }
 
     private var selectedCategoryName: String {
-        guard let sel = viewModel.selectedCategory else { return "All Keys" }
+        guard let sel = viewModel.selectedCategory else { return L10n.s(ja: "すべてのキー", en: "All Keys") }
         switch sel {
-        case .all: return "All Keys"
-        case .builtin(let cat): return cat.rawValue
+        case .all: return L10n.s(ja: "すべてのキー", en: "All Keys")
+        case .builtin(let cat): return cat.displayName
         case .custom(let id):
-            return CustomKeyStore.shared.category(for: id)?.name ?? "Custom"
+            return CustomKeyStore.shared.category(for: id)?.name ?? L10n.s(ja: "カスタム", en: "Custom")
         case .activity:
-            return "Activity"
+            return L10n.s(ja: "アクティビティ", en: "Activity")
         }
     }
 }
