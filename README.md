@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%2014+-blue?style=flat-square&logo=apple" />
+  <img src="https://img.shields.io/badge/platform-macOS%2014+-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/Swift-5.9+-orange?style=flat-square&logo=swift" />
   <img src="https://img.shields.io/badge/SwiftUI-Native-purple?style=flat-square" />
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" />
@@ -170,6 +170,10 @@ The author assumes no responsibility for any damages resulting from the use of t
 
 **Use entirely at your own risk.**
 
+### Trademarks
+
+This is an independent project and is **not affiliated with, endorsed by, or sponsored by Apple Inc.** "Apple", "macOS", and "Keychain" are trademarks of Apple Inc., used here for descriptive and identification purposes only.
+
 ---
 
 <a id="日本語"></a>
@@ -301,3 +305,7 @@ MIT License
 作者は本アプリの使用によって生じたいかなる損害（APIキー漏洩、請求発生、データ損失など）についても一切の責任を負いません。
 
 **すべて自己責任**でご利用ください。
+
+### 商標について
+
+本プロジェクトは独立したプロジェクトであり、**Apple Inc. とは一切提携しておらず、Apple による承認・後援も受けていません**。「Apple」「macOS」「Keychain」は Apple Inc. の商標であり、本書では説明・識別の目的でのみ使用しています。

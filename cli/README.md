@@ -87,6 +87,10 @@ claude mcp add aikeychain -- npx -y aikeychain mcp
 
 **There is intentionally no tool that returns a secret value.** Agents obtain a `keychain://` reference and execute workloads through `akc run`, so values stay out of the model context entirely.
 
+## Trademarks
+
+This is an independent project and is **not affiliated with, endorsed by, or sponsored by Apple Inc.** "Apple", "macOS", and "Keychain" are trademarks of Apple Inc., used here for descriptive and identification purposes only.
+
 ## License
 
 MIT
