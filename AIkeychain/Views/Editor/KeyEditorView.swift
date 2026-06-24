@@ -55,25 +55,7 @@ struct KeyEditorView: View {
                 TextField(L10n.s(ja: "環境変数名", en: "Environment Variable"), text: $viewModel.envVarName)
                     .font(AppFonts.code)
 
-                // Icon picker — pick the symbol shown for this key in its category.
-                Section {
-                    IconPickerGrid(
-                        selection: Binding(
-                            get: { viewModel.selectedIcon },
-                            set: { viewModel.pickIcon($0) }
-                        ),
-                        tint: categoryColor(viewModel.selectedCategorySelection)
-                    )
-                } header: {
-                    Text(L10n.s(ja: "アイコン", en: "Icon"))
-                } footer: {
-                    Text(L10n.s(ja: "一覧でこのキーに表示するアイコンを選びます。",
-                                en: "Choose the icon shown for this key in the list."))
-                        .font(AppFonts.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                // Token value
+                // Token value (required) — primary input, kept above the optional icon picker.
                 Section {
                     HStack {
                         if viewModel.showToken {
@@ -96,6 +78,30 @@ struct KeyEditorView: View {
                             .font(AppFonts.caption)
                             .foregroundStyle(AppColors.pending)
                     }
+                } header: {
+                    Text(L10n.s(ja: "トークンの値", en: "Token Value"))
+                }
+
+                // Icon picker (optional) — compact, scrollable so it never hides the fields above.
+                Section {
+                    ScrollView {
+                        IconPickerGrid(
+                            selection: Binding(
+                                get: { viewModel.selectedIcon },
+                                set: { viewModel.pickIcon($0) }
+                            ),
+                            tint: categoryColor(viewModel.selectedCategorySelection)
+                        )
+                        .padding(.vertical, 2)
+                    }
+                    .frame(height: 96)
+                } header: {
+                    Text(L10n.s(ja: "アイコン（任意）", en: "Icon (optional)"))
+                } footer: {
+                    Text(L10n.s(ja: "一覧でこのキーに表示するアイコンを選びます。",
+                                en: "Choose the icon shown for this key in the list."))
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 // Setup URL (existing preset keys only)
@@ -150,7 +156,7 @@ struct KeyEditorView: View {
             }
             .padding()
         }
-        .frame(width: 520, height: 480)
+        .frame(width: 520, height: 540)
         .alert(L10n.s(ja: "キーを削除しますか？", en: "Delete Key?"), isPresented: $viewModel.showDeleteConfirm) {
             Button(L10n.s(ja: "キャンセル", en: "Cancel"), role: .cancel) {}
             Button(L10n.s(ja: "削除", en: "Delete"), role: .destructive) {
