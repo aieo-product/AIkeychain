@@ -26,18 +26,22 @@ struct CustomKey: Identifiable, Codable, Hashable {
     var categoryId: UUID  // CustomCategory.id or built-in category ID
     var tokenPrefix: String?
     var setupURLString: String?
+    /// ユーザーが選んだ表示アイコン（SF Symbol 名）。未設定はカテゴリのアイコンに従う。
+    /// Optional なので旧データ（icon フィールド無し）は nil で復号され非破壊。
+    var icon: String?
 
     var setupURL: URL? {
         setupURLString.flatMap { URL(string: $0) }
     }
 
-    init(id: UUID = UUID(), envVarName: String, displayName: String, categoryId: UUID, tokenPrefix: String? = nil, setupURLString: String? = nil) {
+    init(id: UUID = UUID(), envVarName: String, displayName: String, categoryId: UUID, tokenPrefix: String? = nil, setupURLString: String? = nil, icon: String? = nil) {
         self.id = id
         self.envVarName = envVarName
         self.displayName = displayName
         self.categoryId = categoryId
         self.tokenPrefix = tokenPrefix
         self.setupURLString = setupURLString
+        self.icon = icon
     }
 }
 
@@ -49,11 +53,14 @@ final class CustomKeyStore {
     private static let categoriesKey = "custom_categories"
     private static let keysKey = "custom_keys"
     private static let overridesKey = "category_overrides"
+    private static let iconOverridesKey = "icon_overrides"
 
     var categories: [CustomCategory] = []
     var keys: [CustomKey] = []
     /// プリセットキーのカテゴリ上書き（envVarName → カテゴリ識別子）
     var categoryOverrides: [String: String] = [:]
+    /// プリセット名キーのアイコン上書き（envVarName → SF Symbol 名）
+    var iconOverrides: [String: String] = [:]
 
     private let defaults: UserDefaults
 
@@ -139,6 +146,23 @@ final class CustomKeyStore {
         return nil
     }
 
+    // MARK: - Icon Overrides (for preset-named keys)
+
+    /// プリセット名キー（CustomKey でないキー）の表示アイコンを上書き。
+    func setIconOverride(envVarName: String, icon: String?) {
+        if let icon, !icon.isEmpty {
+            iconOverrides[envVarName] = icon
+        } else {
+            iconOverrides.removeValue(forKey: envVarName)
+        }
+        saveIconOverrides()
+    }
+
+    /// プリセット名キーの上書きアイコンを取得（無ければ nil）。
+    func overriddenIcon(for envVarName: String) -> String? {
+        iconOverrides[envVarName]
+    }
+
     // MARK: - Persistence
 
     private func load() {
@@ -152,6 +176,9 @@ final class CustomKeyStore {
         }
         if let dict = defaults.dictionary(forKey: Self.overridesKey) as? [String: String] {
             categoryOverrides = dict
+        }
+        if let dict = defaults.dictionary(forKey: Self.iconOverridesKey) as? [String: String] {
+            iconOverrides = dict
         }
     }
 
@@ -169,5 +196,9 @@ final class CustomKeyStore {
 
     private func saveOverrides() {
         defaults.set(categoryOverrides, forKey: Self.overridesKey)
+    }
+
+    private func saveIconOverrides() {
+        defaults.set(iconOverrides, forKey: Self.iconOverridesKey)
     }
 }

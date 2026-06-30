@@ -15,7 +15,7 @@ struct SidebarView: View {
                 NavigationLink(value: CategorySelection.all) {
                     Label {
                         HStack {
-                            Text("All Keys")
+                            Text(L10n.s(ja: "すべてのキー", en: "All Keys"))
                             Spacer()
                             Text("\(viewModel.configuredCount)/\(viewModel.keys.count)")
                                 .font(AppFonts.badge)
@@ -30,7 +30,7 @@ struct SidebarView: View {
                 NavigationLink(value: CategorySelection.activity) {
                     Label {
                         HStack {
-                            Text("Activity")
+                            Text(L10n.s(ja: "アクティビティ", en: "Activity"))
                             Spacer()
                             if appState.isProxyMode && logStore.todayCount > 0 {
                                 Text("\(logStore.todayCount)")
@@ -45,12 +45,12 @@ struct SidebarView: View {
                 }
             }
 
-            Section("Categories") {
+            Section(L10n.s(ja: "カテゴリ", en: "Categories")) {
                 ForEach(KeyCategory.allCases) { category in
                     NavigationLink(value: CategorySelection.builtin(category)) {
                         Label {
                             HStack {
-                                Text(category.rawValue)
+                                Text(category.displayName)
                                 Spacer()
                                 Text("\(viewModel.builtinCategoryConfiguredCount(for: category))/\(viewModel.builtinCategoryCount(for: category))")
                                     .font(AppFonts.badge)
@@ -64,7 +64,7 @@ struct SidebarView: View {
             }
 
             if !customStore.categories.isEmpty {
-                Section("Custom") {
+                Section(L10n.s(ja: "カスタム", en: "Custom")) {
                     ForEach(customStore.categories) { category in
                         NavigationLink(value: CategorySelection.custom(category.id)) {
                             Label {
@@ -94,16 +94,16 @@ struct SidebarView: View {
                 Button {
                     showingCategoryEditor = true
                 } label: {
-                    Label("Manage Categories", systemImage: "folder.badge.gearshape")
+                    Label(L10n.s(ja: "カテゴリを管理", en: "Manage Categories"), systemImage: "folder.badge.gearshape")
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
 
                 HStack(spacing: 12) {
-                    Label("\(viewModel.configuredCount) configured", systemImage: "checkmark.circle.fill")
+                    Label(L10n.s(ja: "\(viewModel.configuredCount) 設定済み", en: "\(viewModel.configuredCount) configured"), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(AppColors.configured)
-                    Label("\(viewModel.pendingCount) pending", systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.s(ja: "\(viewModel.pendingCount) 未設定", en: "\(viewModel.pendingCount) pending"), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(AppColors.pending)
                 }
                 .font(AppFonts.badge)
