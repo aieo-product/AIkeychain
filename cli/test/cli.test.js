@@ -1,10 +1,12 @@
-// CLI integration tests. A stub `security` command is placed first on PATH so
-// these run without touching the real Keychain.
+// CLI integration tests. A stub `security` command is pointed to via
+// AIKEYCHAIN_SECURITY_BIN (the test-only override for the hardcoded
+// /usr/bin/security default, issue #117) so these run without touching the
+// real Keychain.
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, writeFile, chmod } from 'node:fs/promises';
+import { mkdtemp, writeFile, chmod, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,7 +73,7 @@ before(async () => {
 
 function runAkc(args, env = {}) {
   return pExecFile(process.execPath, [AKC, ...args], {
-    env: { PATH: `${stubDir}:${process.env.PATH}`, ...env },
+    env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security'), ...env },
   }).then(
     (r) => ({ code: 0, ...r }),
     (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
@@ -108,6 +110,32 @@ test('run passes through when no refs exist', async () => {
   const r = await runAkc(['run', '--', 'echo', 'hello']);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /hello/);
+});
+
+test('a `security` stub on PATH is ignored when the override is unset (issue #117)', async () => {
+  // The actual fix: even with a hostile `security` first on PATH, the CLI must
+  // invoke the hardcoded absolute /usr/bin/security and never the PATH stub.
+  // (execFile with an absolute path does not search PATH, so this holds even on
+  // platforms where /usr/bin/security is absent — the stub is simply never run.)
+  const hijackDir = await mkdtemp(join(tmpdir(), 'akc-hijack-'));
+  const marker = join(hijackDir, 'INVOKED');
+  const hijack = join(hijackDir, 'security');
+  await writeFile(hijack, `#!/bin/bash\ntouch "${marker}"\nexit 0\n`);
+  await chmod(hijack, 0o755);
+
+  // Read-only command, hijack dir first on PATH, and crucially NO
+  // AIKEYCHAIN_SECURITY_BIN override.
+  await pExecFile(process.execPath, [AKC, 'check', 'DEFINITELY_NOT_A_REAL_KEY_117'], {
+    env: { PATH: `${hijackDir}:${process.env.PATH}` },
+  }).catch(() => {});
+
+  let stubWasInvoked = true;
+  try {
+    await access(marker);
+  } catch {
+    stubWasInvoked = false;
+  }
+  assert.equal(stubWasInvoked, false, 'PATH `security` stub was executed — absolute path not enforced');
 });
 
 test('run resolves GUI-store and manual refs into the child env only', async () => {
@@ -178,7 +206,7 @@ test('set stores a piped value via security -i stdin, never argv', async () => {
   const r = await pExecFile(
     'bash',
     ['-c', `echo "piped-secret" | ${process.execPath} ${AKC} set NEW_KEY`],
-    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
   ).then(
     (r) => ({ code: 0, ...r }),
     (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
@@ -194,7 +222,7 @@ test('set failure stderr never leaks the value, even when security echoes the co
   const r = await pExecFile(
     'bash',
     ['-c', `printf '%s' "${value}" | ${process.execPath} ${AKC} set ECHO_KEY`],
-    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
   ).then(
     () => ({ code: 0, stdout: '', stderr: '' }),
     (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
@@ -210,7 +238,7 @@ test('set rejects invalid names and control characters before touching security'
   const badName = await pExecFile(
     'bash',
     ['-c', `echo "v" | ${process.execPath} ${AKC} set 'BAD KEY'`],
-    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
   ).then(
     () => ({ code: 0 }),
     (e) => ({ code: e.code ?? 1, stderr: e.stderr ?? '' })
@@ -221,7 +249,7 @@ test('set rejects invalid names and control characters before touching security'
   const ctrl = await pExecFile(
     'bash',
     ['-c', `printf 'line1\\nline2\\n' | ${process.execPath} ${AKC} set NEW_KEY`],
-    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
   ).then(
     () => ({ code: 0 }),
     (e) => ({ code: e.code ?? 1, stderr: e.stderr ?? '' })

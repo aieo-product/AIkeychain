@@ -8,8 +8,31 @@
 
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import { isAbsolute } from 'node:path';
 
 const pExecFile = promisify(execFile);
+
+// Always invoke the `security` binary by absolute path (issue #117): a bare
+// 'security' command name is resolved via PATH lookup, so a same-uid
+// attacker (or a malicious postinstall from any other npm package) could
+// place a fake `security` earlier on PATH and intercept secrets — including
+// the hex-encoded value fed to `add-generic-password` on stdin — without the
+// real Keychain's ACL/authorization prompt ever appearing. The Swift GUI
+// already hardcodes /usr/bin/security; the CLI must match.
+//
+// AIKEYCHAIN_SECURITY_BIN is an override for tests only (to point at a PATH
+// stub instead of the real binary) — it must never be relied on in
+// production, where the default below is always used.
+//
+// The override MUST be an absolute path. A relative value (e.g. "security")
+// would fall back to PATH lookup inside execFile/spawn and silently
+// reintroduce the very #117 vulnerability this fix closes, so a non-absolute
+// override is ignored in favor of the hardcoded default.
+const securityBinOverride = process.env.AIKEYCHAIN_SECURITY_BIN;
+export const SECURITY_BIN =
+  securityBinOverride && isAbsolute(securityBinOverride)
+    ? securityBinOverride
+    : '/usr/bin/security';
 
 export const KEY_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
@@ -29,7 +52,7 @@ export function assertMacOS() {
 
 async function security(args) {
   try {
-    const { stdout, stderr } = await pExecFile('security', args, {
+    const { stdout, stderr } = await pExecFile(SECURITY_BIN, args, {
       maxBuffer: 16 * 1024 * 1024,
     });
     return { ok: true, stdout, stderr };
@@ -72,7 +95,7 @@ export function redactSecrets(text) {
 /** Run a command through `security -i`, which reads commands from stdin. */
 function securityInteractive(commandLine) {
   return new Promise((resolve) => {
-    const child = spawn('security', ['-i'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(SECURITY_BIN, ['-i'], { stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (chunk) => (stdout += chunk));
