@@ -74,6 +74,7 @@ private struct KeyPairManagementTab: View {
     @State private var hasKeyPair = KeyShareService.hasKeyPair()
     @State private var publicKeyDisplay: String = ""
     @State private var errorMessage: String?
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         ScrollView {
@@ -114,9 +115,24 @@ private struct KeyPairManagementTab: View {
                         .buttonStyle(.borderedProminent)
 
                         Button("Delete Key Pair", role: .destructive) {
-                            KeyShareService.deleteKeyPair()
-                            hasKeyPair = false
-                            publicKeyDisplay = ""
+                            showDeleteConfirm = true
+                        }
+                        .confirmationDialog(
+                            L10n.s(ja: "鍵ペアを削除しますか？", en: "Delete key pair?"),
+                            isPresented: $showDeleteConfirm,
+                            titleVisibility: .visible
+                        ) {
+                            Button(L10n.s(ja: "削除する", en: "Delete"), role: .destructive) {
+                                KeyShareService.deleteKeyPair()
+                                hasKeyPair = false
+                                publicKeyDisplay = ""
+                            }
+                            Button(L10n.s(ja: "キャンセル", en: "Cancel"), role: .cancel) {}
+                        } message: {
+                            Text(L10n.s(
+                                ja: "鍵共有鍵に加えて署名アイデンティティも破棄されます。再生成すると署名フィンガープリントが変わり、以前あなたの指紋を確認した相手は改めて照合し直す必要があります。",
+                                en: "This also destroys your signing identity, not just the key-agreement key. Regenerating produces a NEW signing fingerprint, so anyone who previously verified your fingerprint must re-verify it."
+                            ))
                         }
                     }
                 } else {
@@ -197,6 +213,10 @@ private struct SendTab: View {
     @State private var exported = false
     @State private var cachedValues: [String: String] = [:] // 一括取得キャッシュ
     @State private var isLoading = false
+    // 署名フィンガープリントは Keychain I/O（初回は鍵生成）を伴うので body 内で毎回
+    // 呼ばず、onAppear で一度だけ解決して state に持つ（finding 6）。
+    @State private var ownSigningFingerprint: String?
+    @State private var signingKeyError = false
 
     private var configuredKeys: [APIKey] {
         keys.filter(\.isConfigured)
@@ -273,6 +293,27 @@ private struct SendTab: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
 
+                    if let ownFP = ownSigningFingerprint {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.s(ja: "あなたの署名フィンガープリント（受信者に帯域外で伝えてください）:", en: "Your signing fingerprint (share it out-of-band with the recipient):"))
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                            Text(ownFP)
+                                .font(.system(size: 10, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+                        .padding(.horizontal, 16)
+                    } else if signingKeyError {
+                        Text(L10n.s(ja: "署名鍵を準備できませんでした（Keychain アクセスを確認してください）。", en: "Could not prepare the signing key (check Keychain access)."))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                    }
+
                     HStack {
                         Text(L10n.s(ja: "転送するキーを選択:", en: "Select keys to transfer:"))
                             .font(.system(size: 12, weight: .medium))
@@ -335,6 +376,14 @@ private struct SendTab: View {
                     .disabled(selectedKeys.isEmpty)
                 }
                 .padding(12)
+            }
+        }
+        .onAppear {
+            // 署名鍵の解決（初回は生成）を一度だけ実行。失敗時はエラー行を出す。
+            if let fp = KeyShareService.ownSigningFingerprint() {
+                ownSigningFingerprint = fp
+            } else {
+                signingKeyError = true
             }
         }
     }
@@ -409,110 +458,263 @@ private struct SendTab: View {
 
 private struct ReceiveTab: View {
     var onImport: () -> Void = {}
-    @State private var decryptedKeys: [(envVarName: String, value: String)] = []
+    @State private var share: KeyShareService.DecryptedShare?
+    @State private var revealed: Set<String> = []          // envVarName ごとの値表示トグル
+    @State private var fingerprintConfirmed = false        // 帯域外照合の必須チェック
+    @State private var unsignedAck = false                 // 未署名ファイルの追加承諾
+    @State private var overwriteConfirmed = false          // 既存上書きの明示承諾
     @State private var imported = false
     @State private var importCount = 0
     @State private var errorMessage: String?
+    // 復号時に envVarName で重複排除（先勝ち）した表示用エントリ（finding 10）と、
+    // その時点で一度だけ Keychain を引いて数えた上書き件数（finding 11）。
+    @State private var entries: [(envVarName: String, value: String)] = []
+    @State private var overwriteNames: Set<String> = []
+
+    private var overwriteCount: Int { overwriteNames.count }
+
+    /// インポート可能条件: 指紋照合済み ∧ (認証済み ∨ 未署名承諾) ∧ (上書き無し ∨ 上書き承諾)
+    private var canImport: Bool {
+        guard let share else { return false }
+        let authGate = share.isAuthenticated || unsignedAck
+        let overwriteGate = overwriteCount == 0 || overwriteConfirmed
+        return fingerprintConfirmed && authGate && overwriteGate
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            if decryptedKeys.isEmpty && !imported {
-                VStack(spacing: 16) {
-                    Spacer()
-                    Image(systemName: "lock.open.rotation")
-                        .font(.system(size: 40))
-                        .foregroundStyle(AppColors.commGreen)
-
-                    if KeyShareService.hasKeyPair() {
-                        Text(L10n.s(ja: "暗号化された .aikeychain ファイルを\n自分の秘密鍵で復号します", en: "Decrypt the encrypted .aikeychain file\nusing your private key"))
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        Button("Open .aikeychain...") {
-                            decryptFile()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    } else {
-                        Text(L10n.s(ja: "鍵ペアが必要です。\n「My Keys」タブで生成してください。", en: "A key pair is required.\nGenerate one in the \"My Keys\" tab."))
-                            .font(.system(size: 14))
-                            .foregroundStyle(.orange)
-                            .multilineTextAlignment(.center)
-                    }
-
-                    if let error = errorMessage {
-                        Text(error).font(.system(size: 11)).foregroundStyle(.red)
-                    }
-                    Spacer()
-                }
-            } else if !decryptedKeys.isEmpty && !imported {
-                // Preview decrypted keys
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Decrypted \(decryptedKeys.count) keys:")
-                        .font(.system(size: 12, weight: .medium))
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-                }
-
-                List {
-                    ForEach(decryptedKeys, id: \.envVarName) { entry in
-                        HStack {
-                            let service = ServiceType.allCases.first { $0.envVarName == entry.envVarName }
-                            Image(systemName: service?.systemImage ?? "key")
-                                .foregroundStyle(service?.category.color ?? .secondary)
-                                .frame(width: 20)
-                            VStack(alignment: .leading) {
-                                Text(service?.displayName ?? entry.envVarName)
-                                    .font(.system(size: 12, weight: .medium))
-                                Text(entry.envVarName)
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Spacer()
-                            if KeychainService.shared.exists(for: entry.envVarName) {
-                                Text("Overwrite")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.orange)
-                            }
-                        }
-                    }
-                }
-                .listStyle(.inset)
-
-                Divider()
-
-                HStack {
-                    Spacer()
-                    Button("Import to Keychain") {
-                        importDecrypted()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(12)
+            if share == nil && !imported {
+                startView
+            } else if let share, !imported {
+                previewView(share)
             } else {
-                // Import complete
-                VStack(spacing: 16) {
-                    Spacer()
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(AppColors.configured)
-                    Text("\(importCount) keys imported!")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text(L10n.s(ja: "Keychain に保存されました", en: "Saved to Keychain"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                completeView
+            }
+        }
+    }
 
-                    Button {
-                        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app"))
-                    } label: {
-                        Label("Open Keychain Access", systemImage: "lock.rectangle")
+    // MARK: Start
+
+    private var startView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "lock.open.rotation")
+                .font(.system(size: 40))
+                .foregroundStyle(AppColors.commGreen)
+
+            if KeyShareService.hasKeyPair() {
+                Text(L10n.s(ja: "暗号化された .aikeychain ファイルを\n自分の秘密鍵で復号します", en: "Decrypt the encrypted .aikeychain file\nusing your private key"))
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button("Open .aikeychain...") {
+                    decryptFile()
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Text(L10n.s(ja: "鍵ペアが必要です。\n「My Keys」タブで生成してください。", en: "A key pair is required.\nGenerate one in the \"My Keys\" tab."))
+                    .font(.system(size: 14))
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+            }
+
+            if let error = errorMessage {
+                Text(error).font(.system(size: 11)).foregroundStyle(.red)
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: Preview
+
+    @ViewBuilder
+    private func previewView(_ share: KeyShareService.DecryptedShare) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                senderBanner(share)
+
+                Text(L10n.s(ja: "復号された \(entries.count) 件のキー:", en: "Decrypted \(entries.count) keys:"))
+                    .font(.system(size: 12, weight: .medium))
+
+                VStack(spacing: 0) {
+                    ForEach(entries, id: \.envVarName) { entry in
+                        keyRow(entry)
+                        Divider()
                     }
-                    .buttonStyle(.bordered)
+                }
+                .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
 
-                    Spacer()
+                gates(share)
+            }
+            .padding(16)
+        }
+
+        Divider()
+
+        HStack {
+            Button("Cancel") { resetPreview() }
+                .font(.system(size: 11))
+            Spacer()
+            Button("Import to Keychain") {
+                importDecrypted()
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canImport)
+        }
+        .padding(12)
+    }
+
+    @ViewBuilder
+    private func senderBanner(_ share: KeyShareService.DecryptedShare) -> some View {
+        if share.isAuthenticated, let fp = share.senderFingerprint {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(L10n.s(ja: "送信者の署名を検証しました", en: "Sender signature verified"), systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColors.configured)
+                Text(L10n.s(ja: "送信者フィンガープリント:", en: "Sender fingerprint:"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Text(fp)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                if let created = share.createdAt {
+                    Text(L10n.s(ja: "作成日時: ", en: "Created: ") + created.formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                }
+                Text(L10n.s(ja: "有効な署名は「その署名鍵の保有者が作成した」ことしか証明しません。上の指紋を信頼できる経路（対面/電話等）で送信者本人と照合してください。", en: "A valid signature only proves the file was made by whoever holds that signing key. Compare the fingerprint above with the sender over a trusted channel (in person / phone)."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(AppColors.configured.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(L10n.s(ja: "送信者を認証できません", en: "Sender could NOT be authenticated"), systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.red)
+                Text(L10n.s(ja: "⚠ 送信者を認証できません。このファイル (v1/未署名) はあなたの公開鍵を持つ第三者が偽造した可能性があります。攻撃者が選んだキー値を掴まされる恐れがあります。", en: "⚠ Sender could NOT be authenticated. This file (v1/unsigned) may have been forged by anyone holding your public key — the values could be attacker-chosen."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    @ViewBuilder
+    private func keyRow(_ entry: (envVarName: String, value: String)) -> some View {
+        let service = ServiceType.allCases.first { $0.envVarName == entry.envVarName }
+        let isRevealed = revealed.contains(entry.envVarName)
+        let overwrites = overwriteNames.contains(entry.envVarName)
+        HStack {
+            Image(systemName: service?.systemImage ?? "key")
+                .foregroundStyle(service?.category.color ?? .secondary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(service?.displayName ?? entry.envVarName)
+                        .font(.system(size: 12, weight: .medium))
+                    if overwrites {
+                        Text(L10n.s(ja: "上書き", en: "Overwrite"))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.orange.opacity(0.15), in: Capsule())
+                    }
+                }
+                Text(entry.envVarName)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                Text(isRevealed ? entry.value : SecretMask.mask(entry.value))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(isRevealed ? .primary : .secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            Button {
+                if isRevealed { revealed.remove(entry.envVarName) }
+                else { revealed.insert(entry.envVarName) }
+            } label: {
+                Image(systemName: isRevealed ? "eye.slash" : "eye")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(L10n.s(ja: "値を表示/非表示", en: "Show / hide value"))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func gates(_ share: KeyShareService.DecryptedShare) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: $fingerprintConfirmed) {
+                // 未認証(v1)は照合すべき指紋自体が無いので、確認対象を「送信者本人への
+                // 直接確認」に変える（finding 7）。
+                Text(share.isAuthenticated
+                     ? L10n.s(ja: "送信者のフィンガープリントを信頼できる経路で確認しました", en: "I verified the sender's fingerprint via a trusted channel")
+                     : L10n.s(ja: "送信者本人に、このファイルを送ったことを信頼できる経路で直接確認しました", en: "I directly confirmed with the sender, over a trusted channel, that they sent this file"))
+                    .font(.system(size: 11))
+            }
+
+            if !share.isAuthenticated {
+                Toggle(isOn: $unsignedAck) {
+                    Text(L10n.s(ja: "このファイルは送信者を認証できないことを理解し、リスクを承知でインポートします", en: "I understand this file's sender cannot be authenticated and import at my own risk"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if overwriteCount > 0 {
+                Toggle(isOn: $overwriteConfirmed) {
+                    Text(L10n.s(ja: "既存の \(overwriteCount) 件を上書きします", en: "Overwrite \(overwriteCount) existing key(s)"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
                 }
             }
         }
+        .toggleStyle(.checkbox)
+    }
+
+    // MARK: Complete
+
+    private var completeView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(AppColors.configured)
+            Text(L10n.s(ja: "\(importCount) 件のキーをインポートしました", en: "\(importCount) keys imported!"))
+                .font(.system(size: 16, weight: .semibold))
+            Text(L10n.s(ja: "Keychain に保存されました", en: "Saved to Keychain"))
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+
+            Button {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app"))
+            } label: {
+                Label("Open Keychain Access", systemImage: "lock.rectangle")
+            }
+            .buttonStyle(.bordered)
+
+            Spacer()
+        }
+    }
+
+    private func resetPreview() {
+        share = nil
+        entries = []
+        overwriteNames = []
+        revealed = []
+        fingerprintConfirmed = false
+        unsignedAck = false
+        overwriteConfirmed = false
     }
 
     private func decryptFile() {
@@ -522,7 +724,18 @@ private struct ReceiveTab: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             do {
-                decryptedKeys = try KeyShareService.decryptAndImport(from: url)
+                let decrypted = try KeyShareService.decryptAndImport(from: url)
+                // envVarName で重複排除（先勝ち）。ForEach の ID 衝突と、
+                // 後勝ちで意図せぬ値を保存する事故を防ぐ（finding 10）。
+                var seen = Set<String>()
+                let deduped = decrypted.entries.filter { seen.insert($0.envVarName).inserted }
+                // 上書き対象は decrypt 時に一度だけ Keychain を引いて確定（毎描画で
+                // 引かない / finding 11）。
+                let owNames = Set(deduped.map(\.envVarName).filter { KeychainService.shared.exists(for: $0) })
+                entries = deduped
+                overwriteNames = owNames
+                share = decrypted
+                errorMessage = nil
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -530,8 +743,9 @@ private struct ReceiveTab: View {
     }
 
     private func importDecrypted() {
+        guard canImport else { return }
         var count = 0
-        for entry in decryptedKeys {
+        for entry in entries {
             // 外部由来の .aikeychain ファイルの envVarName は信頼できない。
             // シェル export に不正な名前はスキップする（KeychainService.save 側でも
             // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
