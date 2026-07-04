@@ -532,6 +532,10 @@ private struct ReceiveTab: View {
     private func importDecrypted() {
         var count = 0
         for entry in decryptedKeys {
+            // 外部由来の .aikeychain ファイルの envVarName は信頼できない。
+            // シェル export に不正な名前はスキップする（KeychainService.save 側でも
+            // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
+            guard EnvVarName.isValid(entry.envVarName) else { continue }
             if let _ = try? KeychainService.shared.save(value: entry.value, for: entry.envVarName) {
                 count += 1
             }

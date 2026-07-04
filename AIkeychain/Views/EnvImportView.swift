@@ -338,7 +338,7 @@ struct EnvImportView: View {
                                     .foregroundStyle(.green)
                             }
 
-                            Text(maskValue(entry.value))
+                            Text(SecretMask.mask(entry.value))
                                 .font(.system(size: 10, design: .monospaced))
                                 .foregroundStyle(.tertiary)
                                 .frame(width: 80, alignment: .trailing)
@@ -489,11 +489,6 @@ struct EnvImportView: View {
         }
         return nil
     }
-
-    private func maskValue(_ value: String) -> String {
-        if value.count <= 8 { return String(repeating: "*", count: value.count) }
-        return String(value.prefix(4)) + "..." + String(value.suffix(4))
-    }
 }
 
 // MARK: - Components
@@ -559,7 +554,7 @@ private struct EnvEntryRow: View {
                     }
                 }
 
-                Text(maskValue(entry.value))
+                Text(SecretMask.mask(entry.value))
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
@@ -573,11 +568,6 @@ private struct EnvEntryRow: View {
             }
         }
         .padding(.vertical, 1)
-    }
-
-    private func maskValue(_ value: String) -> String {
-        if value.count <= 8 { return String(repeating: "*", count: value.count) }
-        return String(value.prefix(4)) + "..." + String(value.suffix(4))
     }
 }
 
@@ -665,6 +655,10 @@ enum EnvParser {
         if key.hasPrefix("__CF") || key == "_" { return nil }
 
         guard !key.isEmpty, !value.isEmpty else { return nil }
+
+        // 安全なシェル変数名パターンに一致しないキーはインポート対象から除外する
+        // （不正な文字列が Keychain に書き込まれる/後続処理でシェル展開されるのを防ぐ）。
+        guard EnvVarName.isValid(key) else { return nil }
 
         let matched = ServiceType.allCases.first { $0.envVarName == key }
         let guess = matched == nil ? guessCategory(key: key) : nil

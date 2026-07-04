@@ -6,6 +6,7 @@ enum KeychainError: LocalizedError {
     case duplicateItem
     case itemNotFound
     case invalidData
+    case invalidAccount
     case interactionRequired
     case unexpectedStatus(OSStatus)
 
@@ -14,6 +15,7 @@ enum KeychainError: LocalizedError {
         case .duplicateItem: "This key already exists in the Keychain."
         case .itemNotFound: "Key not found in the Keychain."
         case .invalidData: "Failed to encode/decode the key data."
+        case .invalidAccount: "Invalid key name. Use only letters, digits and underscores (must start with a letter or underscore)."
         case .interactionRequired: "Keychain access requires user interaction (consent or unlock), which is unavailable in this context."
         case .unexpectedStatus(let status): "Keychain error: \(status)"
         }
@@ -48,6 +50,13 @@ final class KeychainService: KeychainServiceProtocol {
     }
 
     func save(value: String, for account: String) throws {
+        // シンクでの一元検証: どの ingress（手動エディタ / .env インポート /
+        // キー共有インポート）経由でも、シェル export に安全な名前だけを Keychain に
+        // 書き込む。共有ファイル等の外部由来 envVarName によるシェルインジェクション
+        // （ZshrcExporter が `export \(name)=...` へ生値補間）を根本で防ぐ (#116)。
+        guard EnvVarName.isValid(account) else {
+            throw KeychainError.invalidAccount
+        }
         guard let data = value.data(using: .utf8) else {
             throw KeychainError.invalidData
         }
