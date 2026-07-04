@@ -6,7 +6,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, writeFile, chmod } from 'node:fs/promises';
+import { mkdtemp, writeFile, chmod, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -110,6 +110,32 @@ test('run passes through when no refs exist', async () => {
   const r = await runAkc(['run', '--', 'echo', 'hello']);
   assert.equal(r.code, 0);
   assert.match(r.stdout, /hello/);
+});
+
+test('a `security` stub on PATH is ignored when the override is unset (issue #117)', async () => {
+  // The actual fix: even with a hostile `security` first on PATH, the CLI must
+  // invoke the hardcoded absolute /usr/bin/security and never the PATH stub.
+  // (execFile with an absolute path does not search PATH, so this holds even on
+  // platforms where /usr/bin/security is absent — the stub is simply never run.)
+  const hijackDir = await mkdtemp(join(tmpdir(), 'akc-hijack-'));
+  const marker = join(hijackDir, 'INVOKED');
+  const hijack = join(hijackDir, 'security');
+  await writeFile(hijack, `#!/bin/bash\ntouch "${marker}"\nexit 0\n`);
+  await chmod(hijack, 0o755);
+
+  // Read-only command, hijack dir first on PATH, and crucially NO
+  // AIKEYCHAIN_SECURITY_BIN override.
+  await pExecFile(process.execPath, [AKC, 'check', 'DEFINITELY_NOT_A_REAL_KEY_117'], {
+    env: { PATH: `${hijackDir}:${process.env.PATH}` },
+  }).catch(() => {});
+
+  let stubWasInvoked = true;
+  try {
+    await access(marker);
+  } catch {
+    stubWasInvoked = false;
+  }
+  assert.equal(stubWasInvoked, false, 'PATH `security` stub was executed — absolute path not enforced');
 });
 
 test('run resolves GUI-store and manual refs into the child env only', async () => {
