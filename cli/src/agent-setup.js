@@ -2,6 +2,10 @@
 // teaches AI agents (Claude, Codex, ...) how to use AI KeyChain, plus an
 // idempotent upsert so re-running init never duplicates the block.
 
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
 export const BLOCK_BEGIN = '<!-- BEGIN aikeychain (managed by `akc init`) -->';
 export const BLOCK_END = '<!-- END aikeychain (managed by `akc init`) -->';
 
@@ -93,25 +97,115 @@ export function upsertManagedBlock(content) {
   return upsertDelimitedBlock(content, BLOCK_BEGIN, BLOCK_END, renderManagedBlock());
 }
 
+// --- PATH-independent MCP launch resolution (issue #131) ---
+//
+// `akc init` used to register the aikeychain MCP server with the bare
+// command name `akc`. That relies on PATH lookup at spawn time — but MCP
+// servers are frequently spawned from environments that don't source the
+// user's shell rc (GUI apps, cron, launchd) or after a Node version switch
+// (nvm) moved `akc` to a different bin directory. Result: the server fails to
+// launch silently and AI sessions can't discover AI KeyChain.
+//
+// Resolving an absolute path to the Node binary that's *currently running
+// this process* (`process.execPath`) and to this package's own `bin/akc.js`
+// makes the registration PATH-independent: it works from any environment,
+// with any PATH (even `env -i`), as long as those two files still exist.
+
+/**
+ * Resolve absolute, PATH-independent launch info for this akc install: the
+ * node binary running this process, and this package's bin/akc.js.
+ * Returns null if resolution fails (e.g. an unexpected package layout) —
+ * callers should fall back to the bare `akc` command in that case.
+ */
+export function resolveAkcLaunch() {
+  try {
+    const nodeBin = process.execPath;
+    // This file lives at <package root>/src/agent-setup.js.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const akcJs = join(here, '..', 'bin', 'akc.js');
+    if (nodeBin && existsSync(nodeBin) && existsSync(akcJs)) {
+      return { nodeBin, akcJs };
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+/** Quote a value for safe inclusion in a POSIX shell command line (copy-paste display only). */
+export function shellQuote(value) {
+  if (/^[A-Za-z0-9_./-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+/** Escape a value for inclusion in a TOML basic string ("..."). */
+function tomlEscape(value) {
+  const named = { '\\': '\\\\', '"': '\\"', '\b': '\\b', '\t': '\\t', '\n': '\\n', '\f': '\\f', '\r': '\\r' };
+  let out = '';
+  for (const ch of value) {
+    const code = ch.codePointAt(0);
+    if (named[ch]) {
+      out += named[ch];
+    } else if (code < 0x20 || code === 0x7f) {
+      // Other control chars are illegal literally in a TOML basic string.
+      out += `\\u${code.toString(16).padStart(4, '0')}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
 // --- Codex MCP server block (~/.codex/config.toml) ---
 // Markers are TOML comments so the block is valid TOML.
 export const CODEX_BLOCK_BEGIN = '# BEGIN aikeychain (managed by `akc init`)';
 export const CODEX_BLOCK_END = '# END aikeychain (managed by `akc init`)';
 
-export function renderCodexBlock() {
+/**
+ * Render the Codex MCP block. When `launch` (from resolveAkcLaunch) is
+ * given, registers with absolute paths (PATH-independent); otherwise falls
+ * back to the bare `akc` command.
+ */
+export function renderCodexBlock(launch) {
+  if (launch) {
+    const command = tomlEscape(launch.nodeBin);
+    const akcJs = tomlEscape(launch.akcJs);
+    return (
+      `${CODEX_BLOCK_BEGIN}\n` +
+      '# Absolute paths — PATH-independent launch (issue #131). If Node was\n' +
+      '# upgraded/reinstalled, re-run `akc init` to refresh these paths.\n' +
+      '[mcp_servers.aikeychain]\n' +
+      `command = "${command}"\n` +
+      `args = ["${akcJs}", "mcp"]\n` +
+      `${CODEX_BLOCK_END}`
+    );
+  }
   return `${CODEX_BLOCK_BEGIN}\n[mcp_servers.aikeychain]\ncommand = "akc"\nargs = ["mcp"]\n${CODEX_BLOCK_END}`;
 }
 
 /**
- * Ensure the Codex MCP block is present in a config.toml. Append-only and
- * idempotent: if the marker is already there it leaves the file completely
- * untouched (never reformats the user's hand-written TOML).
- * Returns { content, action: 'created' | 'unchanged' }.
+ * Ensure the Codex MCP block is present — and current — in a config.toml.
+ * Idempotent and re-render-on-change:
+ *  - no block                → append one (`created`)
+ *  - our managed block exists → re-render in place, so a stale bare-`akc` or a
+ *    stale absolute path (e.g. after a Node upgrade) gets refreshed to the
+ *    current `launch` (`updated`, or `unchanged` if already identical). This
+ *    matches the CLAUDE.md side (`upsertDelimitedBlock`) — the old behavior of
+ *    leaving an existing block untouched meant re-`akc init` on the very
+ *    machines issue #131 targets was a no-op.
+ *  - unbalanced markers       → refuse to edit (`malformed`)
+ *  - hand-written aikeychain table without our markers → refuse (`conflict`)
+ * Surrounding TOML is preserved.
+ * Returns { content, action: 'created' | 'updated' | 'unchanged' | 'malformed' | 'conflict' }.
  */
-export function upsertCodexBlock(content) {
+export function upsertCodexBlock(content, launch) {
   const existing = content ?? '';
-  if (existing.includes(CODEX_BLOCK_BEGIN)) {
-    return { content: existing, action: 'unchanged' };
+  const fullBlock = renderCodexBlock(launch);
+  // If our managed markers are present (in any balance), let the delimited-block
+  // upsert re-render/canonicalize them. It also reports 'malformed' on a
+  // dangling marker, so we never truncate the user's TOML.
+  if (existing.includes(CODEX_BLOCK_BEGIN) || existing.includes(CODEX_BLOCK_END)) {
+    return upsertDelimitedBlock(existing, CODEX_BLOCK_BEGIN, CODEX_BLOCK_END, fullBlock);
   }
   // A hand-written [mcp_servers.aikeychain] table (without our markers) would
   // become a duplicate table key — invalid TOML — if we appended ours. Refuse
@@ -120,5 +214,5 @@ export function upsertCodexBlock(content) {
     return { content: existing, action: 'conflict' };
   }
   const sep = existing.length === 0 ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
-  return { content: `${existing}${sep}${renderCodexBlock()}\n`, action: 'created' };
+  return { content: `${existing}${sep}${fullBlock}\n`, action: 'created' };
 }

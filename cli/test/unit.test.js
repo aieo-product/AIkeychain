@@ -8,7 +8,11 @@ import {
   GUI_SERVICE,
 } from '../src/keychain.js';
 import { collectRefs } from '../src/run.js';
-import { scanShellConfig } from '../src/doctor.js';
+import {
+  scanShellConfig,
+  extractCodexAikeychainCommand,
+  classifyMcpCommand,
+} from '../src/doctor.js';
 
 const SAMPLE_DUMP = `keychain: "/Users/x/Library/Keychains/login.keychain-db"
 version: 512
@@ -117,4 +121,60 @@ export OPENAI_API_KEY=$(security find-generic-password -s "com.aieo.aikeychain" 
   assert.ok(!keys.includes('com.aieo.aikeychain'));
   // 新形式は -a "$USER" を使わないので警告なし
   assert.equal(warnings.length, 0);
+});
+
+// --- issue #131: doctor MCP registration path-independence checks (hermetic) ---
+
+test('extractCodexAikeychainCommand reads command only from the [mcp_servers.aikeychain] table', () => {
+  const toml = `[mcp_servers.other]
+command = "akc"
+args = ["x"]
+
+# BEGIN aikeychain (managed by \`akc init\`)
+[mcp_servers.aikeychain]
+command = "/opt/homebrew/bin/node"
+args = ["/pkg/bin/akc.js", "mcp"]
+# END aikeychain (managed by \`akc init\`)
+`;
+  // Must NOT be fooled by the other server's bare command = "akc".
+  assert.equal(extractCodexAikeychainCommand(toml), '/opt/homebrew/bin/node');
+});
+
+test('extractCodexAikeychainCommand returns null when there is no aikeychain table', () => {
+  assert.equal(extractCodexAikeychainCommand(`[mcp_servers.other]\ncommand = "akc"\n`), null);
+});
+
+test('extractCodexAikeychainCommand unescapes a TOML basic string', () => {
+  const toml = `[mcp_servers.aikeychain]\ncommand = "/a b/n\\"ode"\n`;
+  assert.equal(extractCodexAikeychainCommand(toml), '/a b/n"ode');
+});
+
+test('classifyMcpCommand flags bare `akc` (PATH-dependent)', () => {
+  const r = classifyMcpCommand('akc', { exists: () => true });
+  assert.equal(r.ok, false);
+  assert.equal(r.kind, 'bare');
+});
+
+test('classifyMcpCommand flags a non-absolute command (still PATH-dependent)', () => {
+  const r = classifyMcpCommand('node', { exists: () => true });
+  assert.equal(r.ok, false);
+  assert.equal(r.kind, 'bare');
+});
+
+test('classifyMcpCommand flags an absolute path that no longer exists as stale', () => {
+  const r = classifyMcpCommand('/nvm/v18/bin/node', { exists: () => false });
+  assert.equal(r.ok, false);
+  assert.equal(r.kind, 'stale');
+  assert.equal(r.command, '/nvm/v18/bin/node');
+});
+
+test('classifyMcpCommand passes an absolute path that exists (PATH-independent)', () => {
+  const r = classifyMcpCommand('/opt/homebrew/bin/node', { exists: () => true });
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, 'absolute');
+});
+
+test('classifyMcpCommand returns null when there is nothing to check', () => {
+  assert.equal(classifyMcpCommand(undefined), null);
+  assert.equal(classifyMcpCommand(''), null);
 });
