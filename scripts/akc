@@ -57,9 +57,7 @@ resolve_keychain() {
 }
 
 mask_value() {
-    local val="$1"
-    local len=${#val}
-    echo "****** (${len} chars)"
+    echo "********"
 }
 
 cmd_run() {
@@ -95,12 +93,20 @@ cmd_run() {
     # Find and resolve keychain:// references
     local resolved_count=0
     local failed_count=0
-    local -a export_cmds=()
+    local -a export_names=() export_values=()
 
     while IFS='=' read -r var_name var_value; do
         # Skip if not a keychain:// reference
         case "$var_value" in
             keychain://*)
+                # 不正な識別子名の行はスキップする。env の出力を IFS='=' でパースする
+                # 都合上、親 env の値に改行が混ざると "bad name=keychain://KEY" のような
+                # 行が生成されうる。これをそのまま export に渡すと bash が
+                # 「not a valid identifier」エラーを *解決済みシークレット値ごと* stderr に
+                # 出力してしまう（#115 が狙う漏洩クラスそのもの）。resolve する前に弾く。
+                case "$var_name" in
+                    *[!A-Za-z0-9_]* | "" | [0-9]* ) continue ;;
+                esac
                 local key_name="${var_value#keychain://}"
                 local resolved
                 resolved=$(resolve_keychain "$key_name") || true
@@ -109,10 +115,11 @@ cmd_run() {
                     resolved_count=$((resolved_count + 1))
                     if $dry_run; then
                         local masked
-                        masked=$(mask_value "$resolved")
+                        masked=$(mask_value)
                         echo "  ✅ $var_name = $masked (from keychain://$key_name)"
                     else
-                        export_cmds+=("$var_name=$resolved")
+                        export_names+=("$var_name")
+                        export_values+=("$resolved")
                     fi
                 else
                     failed_count=$((failed_count + 1))
@@ -142,12 +149,13 @@ cmd_run() {
         exit 1
     fi
 
-    # Execute command with resolved environment
-    if [ ${#export_cmds[@]} -eq 0 ]; then
-        exec "$@"
-    else
-        exec env "${export_cmds[@]}" "$@"
-    fi
+    # Export resolved secrets via the shell builtin (no child process, no argv
+    # exposure) before exec'ing the target command.
+    local i
+    for i in "${!export_names[@]}"; do
+        export "${export_names[$i]}=${export_values[$i]}"
+    done
+    exec "$@"
 }
 
 # Main dispatch
