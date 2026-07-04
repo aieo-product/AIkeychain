@@ -91,6 +91,46 @@ struct KeyShareHardeningTests {
                 == KeyShareService.fingerprint(of: second.signingPublicKey))
     }
 
+    // MARK: - #127 decodeSigningBlob ordering (deterministic backward-compat)
+
+    @Test("decodeSigningBlob: 32B blob decodes as software (raw first), regardless of SE availability")
+    func decode32ByteIsSoftware() {
+        let sw = P256.Signing.PrivateKey()
+        let raw = sw.rawRepresentation
+        #expect(raw.count == 32)
+
+        for seAvailable in [false, true] {
+            let identity = KeyShareService.decodeSigningBlob(raw, seAvailable: seAvailable)
+            #expect(identity?.isSecureEnclave == false)
+            #expect(identity.map { KeyShareService.fingerprint(of: $0.signingPublicKey) }
+                    == KeyShareService.fingerprint(of: sw.publicKey))
+        }
+    }
+
+    @Test("decodeSigningBlob: >32B blob is never mis-decoded as software; SE only tried when available")
+    func decodeOver32Byte() {
+        // 32B 超のダミー blob（有効な SE blob ではない）。
+        let bogus = Data(repeating: 0xAB, count: 91)
+        // SE 非搭載: SE を試さず、software raw も 32B でないので失敗 → nil。
+        #expect(KeyShareService.decodeSigningBlob(bogus, seAvailable: false) == nil)
+        // SE 搭載でも不正 blob は SE init が失敗し、software raw も不成立 → nil。
+        // （実 SE 生成は CI 不能だが、無効 blob は必ず nil に落ちる。）
+        #expect(KeyShareService.decodeSigningBlob(bogus, seAvailable: true) == nil)
+    }
+
+    @Test("decodeSigningBlob: round-trips a freshly created SE identity when available")
+    func decodeSERoundTrip() throws {
+        let (identity, blob) = try KeyShareService.makeNewSigningIdentity()
+        guard identity.isSecureEnclave else {
+            // SE 非搭載 / 生成失敗環境ではスキップ相当（software は 32B テストで担保済み）。
+            return
+        }
+        let decoded = KeyShareService.decodeSigningBlob(blob, seAvailable: true)
+        #expect(decoded?.isSecureEnclave == true)
+        #expect(decoded.map { KeyShareService.fingerprint(of: $0.signingPublicKey) }
+                == KeyShareService.fingerprint(of: identity.signingPublicKey))
+    }
+
     // MARK: - #127 SE abstraction / software path
 
     @Test("makeNewSigningIdentity produces a usable signer (SE or software)")

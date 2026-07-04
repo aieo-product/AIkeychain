@@ -106,12 +106,16 @@ enum KeyShareService {
         if SecureEnclave.isAvailable {
             // .privateKeyUsage + AfterFirstUnlockThisDeviceOnly のアクセス制御を付与。
             var acError: Unmanaged<CFError>?
-            if let access = SecAccessControlCreateWithFlags(
+            let access = SecAccessControlCreateWithFlags(
                 nil,
                 kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
                 [.privateKeyUsage],
                 &acError
-            ), let seKey = try? SecureEnclave.P256.Signing.PrivateKey(accessControl: access) {
+            )
+            // 失敗時に CFError がセットされうるので必ず解放する（リーク防止）。
+            acError?.release()
+            if let access,
+               let seKey = try? SecureEnclave.P256.Signing.PrivateKey(accessControl: access) {
                 return (.secureEnclave(seKey), seKey.dataRepresentation)
             }
             // SE 生成に失敗したらソフトウェアへフォールバック（可用性優先）。
@@ -123,6 +127,12 @@ enum KeyShareService {
     /// 署名用公開鍵を取得（存在する場合のみ。無ければ nil）
     static func getSigningPublicKey() -> P256.Signing.PublicKey? {
         loadSigningIdentity()?.signingPublicKey
+    }
+
+    /// 現在の署名鍵が Secure Enclave 保護かどうか（鍵が無ければ nil）。UI バッジ用（#127）。
+    /// SE→software へサイレント降格した場合もこれで false として可視化できる。
+    static func isSigningKeySecureEnclave() -> Bool? {
+        loadSigningIdentity()?.isSecureEnclave
     }
 
     /// 自分の署名フィンガープリント（無ければ生成して算出）
@@ -475,20 +485,36 @@ enum KeyShareService {
         return try? P256.KeyAgreement.PrivateKey(rawRepresentation: data)
     }
 
-    /// 保存済みの署名アイデンティティを読み込む。
-    ///
-    /// 後方互換（#127）: 保存ブロブは
-    ///   - Secure Enclave 鍵の `dataRepresentation`（不透明・可変長, 通常 32B 超）、または
-    ///   - ソフトウェア鍵の `rawRepresentation`（厳密に 32B）
-    /// のどちらか。SE を先に試し、失敗したら raw を試す。これにより #125 で作られた
-    /// 既存のソフトウェア署名鍵はローテーションされず（＝フィンガープリント不変で）
-    /// そのまま使い続けられる。SE init は 32B のソフトウェア raw を弾くため誤判定しない。
+    /// 保存済みの署名アイデンティティを読み込む（Keychain I/O）。
+    /// デコード順序の判定は純粋関数 `decodeSigningBlob` に委譲する。
     private static func loadSigningIdentity() -> SigningIdentity? {
         guard let data = loadRawKey(service: signKeyTag, account: "signing_key") else { return nil }
-        if SecureEnclave.isAvailable,
+        return decodeSigningBlob(data, seAvailable: SecureEnclave.isAvailable)
+    }
+
+    /// 保存ブロブを署名アイデンティティへデコードする純粋関数（Keychain 非依存・テスト可能）。
+    ///
+    /// 後方互換（#127, 最重要保証）: 保存ブロブは
+    ///   - ソフトウェア鍵の `rawRepresentation`（**厳密に 32B** = P-256 スカラー。#125 の既存鍵）、または
+    ///   - Secure Enclave 鍵の `dataRepresentation`（不透明ブロブ・通常 32B 超）
+    /// のどちらか。
+    ///
+    /// 判定を「SE が 32B software raw を弾く」という未文書の挙動に依存させないため、
+    /// **32B なら software raw を先に試す**（旧 #125 鍵は必ず software として復元され
+    /// フィンガープリントは不変）。32B 超のみ SE を試し、失敗時に software へフォールバックする。
+    static func decodeSigningBlob(_ data: Data, seAvailable: Bool) -> SigningIdentity? {
+        // 32B は P-256 スカラー = software raw のみが取り得る長さ。SE blob は 32B より長い。
+        if data.count == 32 {
+            if let sw = try? P256.Signing.PrivateKey(rawRepresentation: data) {
+                return .software(sw)
+            }
+            return nil
+        }
+        if seAvailable,
            let se = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data) {
             return .secureEnclave(se)
         }
+        // 念のため software としても試す（想定外長のフォールバック）。
         if let sw = try? P256.Signing.PrivateKey(rawRepresentation: data) {
             return .software(sw)
         }

@@ -75,6 +75,8 @@ private struct KeyPairManagementTab: View {
     @State private var publicKeyDisplay: String = ""
     @State private var errorMessage: String?
     @State private var showDeleteConfirm = false
+    // 署名鍵が Secure Enclave 保護か（#127）。SE→software のサイレント降格も可視化する。
+    @State private var signingIsSecureEnclave: Bool?
 
     var body: some View {
         ScrollView {
@@ -93,6 +95,18 @@ private struct KeyPairManagementTab: View {
                     Text(L10n.s(ja: "公開鍵を共有相手に渡してください。", en: "Share your public key with the recipient."))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
+
+                    // 署名鍵の保護レベルバッジ（#127）
+                    if let isSE = signingIsSecureEnclave {
+                        Label(
+                            isSE
+                                ? L10n.s(ja: "署名鍵: Secure Enclave 保護", en: "Signing key: Secure Enclave protected")
+                                : L10n.s(ja: "署名鍵: ソフトウェア鍵", en: "Signing key: software key"),
+                            systemImage: isSE ? "cpu.fill" : "key.fill"
+                        )
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(isSE ? AppColors.configured : .secondary)
+                    }
 
                     if !publicKeyDisplay.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
@@ -126,6 +140,7 @@ private struct KeyPairManagementTab: View {
                                 KeyShareService.deleteKeyPair()
                                 hasKeyPair = false
                                 publicKeyDisplay = ""
+                                signingIsSecureEnclave = nil
                             }
                             Button(L10n.s(ja: "キャンセル", en: "Cancel"), role: .cancel) {}
                         } message: {
@@ -146,6 +161,7 @@ private struct KeyPairManagementTab: View {
                             let pubKey = try KeyShareService.generateKeyPair()
                             hasKeyPair = true
                             publicKeyDisplay = fingerprint(pubKey)
+                            signingIsSecureEnclave = KeyShareService.isSigningKeySecureEnclave()
                         } catch {
                             errorMessage = error.localizedDescription
                         }
@@ -177,6 +193,7 @@ private struct KeyPairManagementTab: View {
             if let pubKey = KeyShareService.getPublicKey() {
                 publicKeyDisplay = fingerprint(pubKey)
             }
+            signingIsSecureEnclave = KeyShareService.isSigningKeySecureEnclave()
         }
     }
 

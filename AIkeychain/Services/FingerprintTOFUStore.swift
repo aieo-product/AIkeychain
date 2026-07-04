@@ -14,6 +14,14 @@ import Foundation
 ///
 /// 保存形式は UserDefaults の `[fingerprint: firstSeen(参照時刻からの秒)]` 辞書。
 /// テスト分離のため `UserDefaults` を注入できる。
+///
+/// ⚠️ 残存リスク（改ざん面）: このピンは **署名なしの user-writable な UserDefaults** に
+/// 保存される。同一ユーザー権限で動くプロセスは、この辞書へ直接書き込むことで
+/// 任意のフィンガープリントを「既知の送信者」として事前 seed（詐称）できる。
+/// これは緩和済み（ROOT ではなく UX 補助）であり、インポート時の帯域外照合チェックは
+/// TOFU 状態に関わらず**常に必須**であるため、seed 単独では検証ゲートを回避できない。
+/// より強い保証が必要なら将来的に MAC 化（例: Keychain 由来の鍵で HMAC）を検討する
+/// （本 PR ではスコープ外）。
 struct FingerprintTOFUStore {
     /// 送信者の信頼状態。
     enum SenderTrust: Equatable {
