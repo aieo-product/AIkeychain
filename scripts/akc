@@ -95,6 +95,14 @@ cmd_run() {
         # Skip if not a keychain:// reference
         case "$var_value" in
             keychain://*)
+                # 不正な識別子名の行はスキップする。env の出力を IFS='=' でパースする
+                # 都合上、親 env の値に改行が混ざると "bad name=keychain://KEY" のような
+                # 行が生成されうる。これをそのまま export に渡すと bash が
+                # 「not a valid identifier」エラーを *解決済みシークレット値ごと* stderr に
+                # 出力してしまう（#115 が狙う漏洩クラスそのもの）。resolve する前に弾く。
+                case "$var_name" in
+                    *[!A-Za-z0-9_]* | "" | [0-9]* ) continue ;;
+                esac
                 local key_name="${var_value#keychain://}"
                 local resolved
                 resolved=$(resolve_keychain "$key_name") || true
@@ -103,7 +111,7 @@ cmd_run() {
                     resolved_count=$((resolved_count + 1))
                     if $dry_run; then
                         local masked
-                        masked=$(mask_value "$resolved")
+                        masked=$(mask_value)
                         echo "  ✅ $var_name = $masked (from keychain://$key_name)"
                     else
                         export_names+=("$var_name")
