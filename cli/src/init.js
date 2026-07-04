@@ -44,6 +44,9 @@ async function applyUpsert(path, upsert) {
 /** Is the aikeychain MCP server already registered with Claude Code? */
 async function claudeMcpRegistered() {
   try {
+    // `claude` is invoked by bare name (PATH lookup) intentionally: unlike
+    // `security` (see issue #117 / cli/src/keychain.js), this command never
+    // handles secret material, so a hijacked PATH entry has nothing to steal.
     const { stdout } = await pExecFile('claude', ['mcp', 'list'], { timeout: 15000 });
     return /(^|\n)\s*aikeychain[:\s]/.test(stdout);
   } catch {

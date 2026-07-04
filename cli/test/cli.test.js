@@ -1,5 +1,7 @@
-// CLI integration tests. A stub `security` command is placed first on PATH so
-// these run without touching the real Keychain.
+// CLI integration tests. A stub `security` command is pointed to via
+// AIKEYCHAIN_SECURITY_BIN (the test-only override for the hardcoded
+// /usr/bin/security default, issue #117) so these run without touching the
+// real Keychain.
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -71,7 +73,7 @@ before(async () => {
 
 function runAkc(args, env = {}) {
   return pExecFile(process.execPath, [AKC, ...args], {
-    env: { PATH: `${stubDir}:${process.env.PATH}`, ...env },
+    env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security'), ...env },
   }).then(
     (r) => ({ code: 0, ...r }),
     (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
@@ -178,7 +180,7 @@ test('set stores a piped value via security -i stdin, never argv', async () => {
   const r = await pExecFile(
     'bash',
     ['-c', `echo "piped-secret" | ${process.execPath} ${AKC} set NEW_KEY`],
-    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
   ).then(
     (r) => ({ code: 0, ...r }),
     (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
@@ -194,7 +196,7 @@ test('set failure stderr never leaks the value, even when security echoes the co
   const r = await pExecFile(
     'bash',
     ['-c', `printf '%s' "${value}" | ${process.execPath} ${AKC} set ECHO_KEY`],
-    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
   ).then(
     () => ({ code: 0, stdout: '', stderr: '' }),
     (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
@@ -210,7 +212,7 @@ test('set rejects invalid names and control characters before touching security'
   const badName = await pExecFile(
     'bash',
     ['-c', `echo "v" | ${process.execPath} ${AKC} set 'BAD KEY'`],
-    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
   ).then(
     () => ({ code: 0 }),
     (e) => ({ code: e.code ?? 1, stderr: e.stderr ?? '' })
@@ -221,7 +223,7 @@ test('set rejects invalid names and control characters before touching security'
   const ctrl = await pExecFile(
     'bash',
     ['-c', `printf 'line1\\nline2\\n' | ${process.execPath} ${AKC} set NEW_KEY`],
-    { env: { PATH: `${stubDir}:${process.env.PATH}` } }
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
   ).then(
     () => ({ code: 0 }),
     (e) => ({ code: e.code ?? 1, stderr: e.stderr ?? '' })
