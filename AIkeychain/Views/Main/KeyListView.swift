@@ -67,12 +67,7 @@ struct KeyListView: View {
                             if key.isConfigured {
                                 Button(L10n.s(ja: "値をコピー", en: "Copy Value")) {
                                     if let value = viewModel.retrieveValue(for: key) {
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(value, forType: .string)
-                                        // Auto-clear after 30 seconds
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
-                                            NSPasteboard.general.clearContents()
-                                        }
+                                        copySecretToPasteboard(value)
                                     }
                                 }
                             }
@@ -88,6 +83,25 @@ struct KeyListView: View {
                         }
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
+            }
+        }
+    }
+
+    /// シークレット値をクリップボードへコピーする。
+    /// クリップボード履歴ツール（Maccy/Raycast 等）や Universal Clipboard に
+    /// 秘密情報が残留しないよう `org.nspasteboard.ConcealedType` を付与し、
+    /// 30秒後にユーザーが別の内容を上書きコピーしていない場合のみクリアする。
+    private func copySecretToPasteboard(_ value: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+        pb.declareTypes([.string, concealed], owner: nil)
+        pb.setString(value, forType: .string)
+        pb.setString(value, forType: concealed)
+        let writeCount = pb.changeCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+            if NSPasteboard.general.changeCount == writeCount {
+                NSPasteboard.general.clearContents()
             }
         }
     }

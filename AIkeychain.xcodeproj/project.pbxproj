@@ -42,6 +42,7 @@
 		A333DEEBD8AD828CC031413A /* IconPickerGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE82389E8C1EDD586872750A /* IconPickerGrid.swift */; };
 		A5417351BB72385534D8B9B7 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E7404C25ED51694C3DF766 /* SidebarView.swift */; };
 		AB911324067521B34322D8A9 /* KeyListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86254B995FB20769DA53656A /* KeyListViewModel.swift */; };
+		ADD892CA115969AC2CF3C169 /* SecretHygiene.swift in Sources */ = {isa = PBXBuildFile; fileRef = E18E322C52277BDBD022D701 /* SecretHygiene.swift */; };
 		AF1D41DA4AC29AEE58B49FDF /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF474BC29A1530637DA89AB /* MenuBarView.swift */; };
 		B2F5D286112157097BF29416 /* KeyRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71C2E4D1617957A56CFF459 /* KeyRowView.swift */; };
 		BBEC55D1F836E307DE46B844 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B69E8B22FA2C8C00A6DF9A /* AppLanguage.swift */; };
@@ -118,6 +119,7 @@
 		BBB424D42EDE63D9E03A86DD /* ProxyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyTests.swift; sourceTree = "<group>"; };
 		CFEC2C4A62A257212BEE4D95 /* SetupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupManagerTests.swift; sourceTree = "<group>"; };
 		DDE2E88F59640366B8EE60C8 /* ProxyServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyServer.swift; sourceTree = "<group>"; };
+		E18E322C52277BDBD022D701 /* SecretHygiene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretHygiene.swift; sourceTree = "<group>"; };
 		F1CFA57EED2AEC2489060E17 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		F2A3438BA6DB0A665C0E3D08 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModel.swift; sourceTree = "<group>"; };
 		F69D54AA42B1FDEBB2AD036B /* ViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModelTests.swift; sourceTree = "<group>"; };
@@ -307,6 +309,7 @@
 				2F4FD4DB8058AD798CC211E6 /* KeyShareService.swift */,
 				7DF81328B72F2A8A703BEFF2 /* L10n.swift */,
 				DDE2E88F59640366B8EE60C8 /* ProxyServer.swift */,
+				E18E322C52277BDBD022D701 /* SecretHygiene.swift */,
 				524109D967A855636B5BECB8 /* SetupManager.swift */,
 				728E72380D1F60902EF105B2 /* ZshrcExporter.swift */,
 			);
@@ -435,6 +438,7 @@
 				52B070DF55ECCB79349CF51C /* ProxyRoute.swift in Sources */,
 				1FBDB678ABCDB9503FE0DCEA /* ProxyServer.swift in Sources */,
 				C4C7726A2BDC408D034DC23A /* RecoveryView.swift in Sources */,
+				ADD892CA115969AC2CF3C169 /* SecretHygiene.swift in Sources */,
 				47D0324B8366C625BD452CE3 /* ServiceIcon.swift in Sources */,
 				6857A9D9465864324DC7F284 /* ServiceType.swift in Sources */,
 				E60B2BDDB0E9793C2CC58C5C /* SetupManager.swift in Sources */,
