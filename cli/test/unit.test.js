@@ -105,3 +105,16 @@ export BAD_TOKEN=$(security find-generic-password -s "BAD_TOKEN" -a "$USER" -w)
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /BAD_TOKEN/);
 });
+
+test('scanShellConfig extracts the key from -a for GUI-pinned lines', () => {
+  // AI KeyChain GUI が生成する新形式: -s は共通サービス名なので、実キー名は -a 側。
+  const { keys, warnings } = scanShellConfig(`
+export ANTHROPIC_API_KEY=$(security find-generic-password -s "com.aieo.aikeychain" -a "ANTHROPIC_API_KEY" -w)
+export OPENAI_API_KEY=$(security find-generic-password -s "com.aieo.aikeychain" -a "OPENAI_API_KEY" -w)
+`);
+  // 共通サービス名 "com.aieo.aikeychain" ではなく、各キー名が採取される
+  assert.deepEqual(keys, ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
+  assert.ok(!keys.includes('com.aieo.aikeychain'));
+  // 新形式は -a "$USER" を使わないので警告なし
+  assert.equal(warnings.length, 0);
+});
