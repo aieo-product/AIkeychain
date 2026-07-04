@@ -12,7 +12,9 @@
 #
 # Lookup order:
 #   1. service="com.aieo.aikeychain" account="<KEY_NAME>"  (AI KeyChain GUI store)
-#   2. service="<KEY_NAME>"          account="$USER"        (manually-registered keys)
+#   2. service="<KEY_NAME>"  (manually-registered keys; account 非指定)
+#      -a は付けない: 手動登録キーは acct の値が一定しないため、
+#      service 名のみで引く方が安定する (issue #91)
 
 set -euo pipefail
 
@@ -49,7 +51,9 @@ resolve_keychain() {
     value=$(security find-generic-password -s "com.aieo.aikeychain" -a "$key_name" -w 2>/dev/null) \
         && [ -n "$value" ] && { printf '%s' "$value"; return 0; }
 
-    security find-generic-password -s "$key_name" -a "$USER" -w 2>/dev/null
+    # 手動登録キーのフォールバック。-a はあえて指定しない: acct の値が
+    # エントリごとに一定しないため、service 名のみで引く方が安定する (issue #91)
+    security find-generic-password -s "$key_name" -w 2>/dev/null
 }
 
 mask_value() {

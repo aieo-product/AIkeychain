@@ -141,10 +141,12 @@ enum SetupManager {
 
     /// macOS Keychain (システム) から指定キーの値を読み取る
     /// security find-generic-password で保存された値を取得
+    /// 手動登録キーは acct (-a) の値が一定しないため、account は指定せず
+    /// service 名のみで引く（acct 不整合による古い/無効な値の誤取得を防止 / issue #91）
     static func readSystemKeychainValue(for account: String) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-s", account, "-a", NSUserName(), "-w"]
+        process.arguments = ["find-generic-password", "-s", account, "-w"]
 
         let pipe = Pipe()
         process.standardOutput = pipe

@@ -84,7 +84,7 @@ sequenceDiagram
     participant API as AI API
 
     Shell->>Zshrc: source ~/.zshrc
-    Zshrc->>Security: security find-generic-password -s "ANTHROPIC_API_KEY" -a "$USER" -w
+    Zshrc->>Security: security find-generic-password -s "com.aieo.aikeychain" -a "ANTHROPIC_API_KEY" -w
     Security->>Keychain: SecItemCopyMatching
     Keychain-->>Security: シークレット値
     Security-->>Zshrc: 値を返却
@@ -108,7 +108,7 @@ sequenceDiagram
     Zshrc->>Shell: export ANTHROPIC_API_KEY="keychain://ANTHROPIC_API_KEY"
     Shell->>Akc: akc run -- claude
     Akc->>Akc: env をスキャン (keychain:// プレフィックス検出)
-    Akc->>Security: security find-generic-password -s ANTHROPIC_API_KEY -a "$USER" -w
+    Akc->>Security: security find-generic-password -s "com.aieo.aikeychain" -a "ANTHROPIC_API_KEY" -w
     Security->>Keychain: SecItemCopyMatching
     Keychain-->>Security: シークレット値
     Security-->>Akc: 値を返却
