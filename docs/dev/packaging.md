@@ -100,6 +100,15 @@ iconutil -c icns "$ICONSET" -o "$APP_DIR/Resources/AppIcon.icns"
 Developer ID がない場合の署名（「壊れているため開けません」エラーを防止）。
 **Proxy モードの outbound TLS 接続には network entitlements が必須。**
 
+::: warning 正典レシピは CI 側
+実際に出荷されるアーティファクトは **CI（`.github/workflows/auto-release.yml`）が生成する DMG** であり、
+CI の ad-hoc 署名は **network entitlements を付けていない**。この §5 の手動署名（entitlements 付き）は
+ローカル動作確認用であり、出荷物とは署名内容が異なる。**Hardened Runtime の実機起動テストは
+必ず CI 生成物（Release にアップロードされた DMG）に対して行うこと**。
+Proxy モードの upstream TLS 挙動は entitlements の有無で変わるため、手動署名版で
+「動いた／動かない」を CI 生成物の判断材料にしないこと。
+:::
+
 ```bash
 # network entitlements を作成（初回のみ）
 cat > /tmp/aikeychain.entitlements << 'ENTITLEMENTS'

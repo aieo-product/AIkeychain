@@ -143,6 +143,24 @@ jobs:
           # that holds decrypted secrets in memory. See #114.)
           codesign --force --deep --options runtime --sign - "build/AI KeyChain.app"
 
+      - name: Verify code signature and Hardened Runtime flag
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          APP="build/AI KeyChain.app"
+
+          # 署名そのものが壊れていないか
+          codesign --verify --deep --strict "$APP"
+
+          # Hardened Runtime フラグが実際に付与されているか検証
+          # (付与に失敗した署名をサイレントに出荷しないためのゲート)
+          if codesign -dvvv "$APP" 2>&1 | grep -qE 'flags=.*runtime'; then
+            echo "Hardened Runtime flag confirmed on $APP"
+          else
+            echo "ERROR: Hardened Runtime flag missing on $APP" >&2
+            codesign -dvvv "$APP" 2>&1 || true
+            exit 1
+          fi
+
       - name: Install create-dmg
         if: steps.check.outputs.exists == 'false'
         run: brew install create-dmg
@@ -168,8 +186,9 @@ jobs:
 
       - name: Compute DMG checksum
         if: steps.check.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           cd build
           shasum -a 256 "AIKeyChain-v${VERSION}.dmg" > "AIKeyChain-v${VERSION}.dmg.sha256"
           cat "AIKeyChain-v${VERSION}.dmg.sha256"
