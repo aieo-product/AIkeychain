@@ -18,6 +18,15 @@
 
 set -euo pipefail
 
+# security(1) をバイナリ名解決 (PATH lookup) で呼ぶと、同一UIDの攻撃者や
+# npm パッケージの悪意ある postinstall が PATH 上に偽の "security" を
+# 先に置くことでシークレットを横取りできてしまう (#117 と同種の脅威)。
+# 絶対パスに固定して PATH ハイジャックを防ぐ。
+readonly SECURITY_BIN="/usr/bin/security"
+# env も秘密解決パス上にある: `< <(env)` の env が偽装されると
+# `VAR=keychain://KEY` 行を捏造して任意の Keychain 値を解決・export させられる。
+readonly ENV_BIN="/usr/bin/env"
+
 VERSION="1.6.1"
 
 usage() {
@@ -48,12 +57,12 @@ resolve_keychain() {
     local key_name="$1"
     local value
 
-    value=$(security find-generic-password -s "com.aieo.aikeychain" -a "$key_name" -w 2>/dev/null) \
+    value=$("$SECURITY_BIN" find-generic-password -s "com.aieo.aikeychain" -a "$key_name" -w 2>/dev/null) \
         && [ -n "$value" ] && { printf '%s' "$value"; return 0; }
 
     # 手動登録キーのフォールバック。-a はあえて指定しない: acct の値が
     # エントリごとに一定しないため、service 名のみで引く方が安定する (issue #91)
-    security find-generic-password -s "$key_name" -w 2>/dev/null
+    "$SECURITY_BIN" find-generic-password -s "$key_name" -w 2>/dev/null
 }
 
 mask_value() {
@@ -127,7 +136,7 @@ cmd_run() {
                 fi
                 ;;
         esac
-    done < <(env)
+    done < <("$ENV_BIN")
 
     if $dry_run; then
         echo ""
