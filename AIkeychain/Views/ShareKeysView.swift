@@ -75,6 +75,8 @@ private struct KeyPairManagementTab: View {
     @State private var publicKeyDisplay: String = ""
     @State private var errorMessage: String?
     @State private var showDeleteConfirm = false
+    // 署名鍵が Secure Enclave 保護か（#127）。SE→software のサイレント降格も可視化する。
+    @State private var signingIsSecureEnclave: Bool?
 
     var body: some View {
         ScrollView {
@@ -93,6 +95,18 @@ private struct KeyPairManagementTab: View {
                     Text(L10n.s(ja: "公開鍵を共有相手に渡してください。", en: "Share your public key with the recipient."))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
+
+                    // 署名鍵の保護レベルバッジ（#127）
+                    if let isSE = signingIsSecureEnclave {
+                        Label(
+                            isSE
+                                ? L10n.s(ja: "署名鍵: Secure Enclave 保護", en: "Signing key: Secure Enclave protected")
+                                : L10n.s(ja: "署名鍵: ソフトウェア鍵", en: "Signing key: software key"),
+                            systemImage: isSE ? "cpu.fill" : "key.fill"
+                        )
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(isSE ? AppColors.configured : .secondary)
+                    }
 
                     if !publicKeyDisplay.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
@@ -126,6 +140,7 @@ private struct KeyPairManagementTab: View {
                                 KeyShareService.deleteKeyPair()
                                 hasKeyPair = false
                                 publicKeyDisplay = ""
+                                signingIsSecureEnclave = nil
                             }
                             Button(L10n.s(ja: "キャンセル", en: "Cancel"), role: .cancel) {}
                         } message: {
@@ -146,6 +161,7 @@ private struct KeyPairManagementTab: View {
                             let pubKey = try KeyShareService.generateKeyPair()
                             hasKeyPair = true
                             publicKeyDisplay = fingerprint(pubKey)
+                            signingIsSecureEnclave = KeyShareService.isSigningKeySecureEnclave()
                         } catch {
                             errorMessage = error.localizedDescription
                         }
@@ -177,6 +193,7 @@ private struct KeyPairManagementTab: View {
             if let pubKey = KeyShareService.getPublicKey() {
                 publicKeyDisplay = fingerprint(pubKey)
             }
+            signingIsSecureEnclave = KeyShareService.isSigningKeySecureEnclave()
         }
     }
 
@@ -470,6 +487,12 @@ private struct ReceiveTab: View {
     // その時点で一度だけ Keychain を引いて数えた上書き件数（finding 11）。
     @State private var entries: [(envVarName: String, value: String)] = []
     @State private var overwriteNames: Set<String> = []
+    // TOFU 分類（#126）と鮮度（#126）。復号時に一度だけ算出して state に持つ。
+    @State private var senderTrust: FingerprintTOFUStore.SenderTrust?
+    @State private var freshness: KeyShareService.Freshness?
+
+    /// 確認済みフィンガープリントのピン留めストア（#126）。
+    private let tofu = FingerprintTOFUStore()
 
     private var overwriteCount: Int { overwriteNames.count }
 
@@ -572,6 +595,10 @@ private struct ReceiveTab: View {
                 Label(L10n.s(ja: "送信者の署名を検証しました", en: "Sender signature verified"), systemImage: "checkmark.seal.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AppColors.configured)
+
+                // TOFU 分類（#126）: 既知 → 緑バッジで照合負担を軽減、初見 → 中立の注記。
+                tofuNote()
+
                 Text(L10n.s(ja: "送信者フィンガープリント:", en: "Sender fingerprint:"))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -579,10 +606,14 @@ private struct ReceiveTab: View {
                     .font(.system(size: 12, design: .monospaced))
                     .textSelection(.enabled)
                 if let created = share.createdAt {
-                    Text(L10n.s(ja: "作成日時: ", en: "Created: ") + created.formatted(date: .abbreviated, time: .shortened))
+                    Text(L10n.s(ja: "作成日時: ", en: "Created: ") + created.formatted(date: .abbreviated, time: .shortened) + "（\(ageText(created))）")
                         .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
                 }
+
+                // 鮮度（#126）: しきい値超過は replay の疑いとして目立たせる。
+                freshnessNote()
+
                 Text(L10n.s(ja: "有効な署名は「その署名鍵の保有者が作成した」ことしか証明しません。上の指紋を信頼できる経路（対面/電話等）で送信者本人と照合してください。", en: "A valid signature only proves the file was made by whoever holds that signing key. Compare the fingerprint above with the sender over a trusted channel (in person / phone)."))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -603,6 +634,61 @@ private struct ReceiveTab: View {
             .padding(10)
             .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
         }
+    }
+
+    /// TOFU 分類バッジ（#126）。既知＝緑「既知の送信者」、初見＝中立「初回の送信者」。
+    @ViewBuilder
+    private func tofuNote() -> some View {
+        switch senderTrust {
+        case .known(let since):
+            Label(
+                L10n.s(
+                    ja: "既知の送信者（\(since.formatted(date: .abbreviated, time: .omitted)) に確認済み）",
+                    en: "Known sender (confirmed on \(since.formatted(date: .abbreviated, time: .omitted)))"
+                ),
+                systemImage: "person.fill.checkmark"
+            )
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(AppColors.configured)
+        case .firstSeen:
+            Label(
+                L10n.s(ja: "初回の送信者（このフィンガープリントは初めてです）", en: "First-seen sender (this fingerprint is new)"),
+                systemImage: "person.fill.questionmark"
+            )
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    /// 鮮度バッジ（#126）。stale は replay の疑いとして赤字で目立たせる。
+    @ViewBuilder
+    private func freshnessNote() -> some View {
+        switch freshness {
+        case .stale:
+            HStack(spacing: 4) {
+                Image(systemName: "clock.badge.exclamationmark.fill")
+                Text(L10n.s(
+                    ja: "⚠ このファイルは古い（30日超）です。古い署名済みファイルは、送信者が鍵をローテーション済みでも有効に見えるため、リプレイの可能性を疑ってください。",
+                    en: "⚠ This file is old (>30 days). A signed old file can look valid even after the sender rotated their key — treat it as a possible replay."
+                ))
+            }
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.red)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(6)
+            .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        case .fresh, nil:
+            EmptyView()
+        }
+    }
+
+    /// 経過時間を人間可読な相対表現にする（例: "3 days ago"）。
+    private func ageText(_ created: Date) -> String {
+        let fmt = RelativeDateTimeFormatter()
+        fmt.unitsStyle = .full
+        return fmt.localizedString(for: created, relativeTo: Date())
     }
 
     @ViewBuilder
@@ -657,9 +743,9 @@ private struct ReceiveTab: View {
             Toggle(isOn: $fingerprintConfirmed) {
                 // 未認証(v1)は照合すべき指紋自体が無いので、確認対象を「送信者本人への
                 // 直接確認」に変える（finding 7）。
-                Text(share.isAuthenticated
-                     ? L10n.s(ja: "送信者のフィンガープリントを信頼できる経路で確認しました", en: "I verified the sender's fingerprint via a trusted channel")
-                     : L10n.s(ja: "送信者本人に、このファイルを送ったことを信頼できる経路で直接確認しました", en: "I directly confirmed with the sender, over a trusted channel, that they sent this file"))
+                // 既知（TOFU 確認済み）の送信者でも、安全側に倒して明示的なチェックは
+                // 引き続き必須とし、文言だけ「再確認」に和らげる（#126 の設計判断）。
+                Text(fingerprintGateLabel(share))
                     .font(.system(size: 11))
             }
 
@@ -680,6 +766,27 @@ private struct ReceiveTab: View {
             }
         }
         .toggleStyle(.checkbox)
+    }
+
+    /// 指紋確認ゲートの文言。認証済み×既知は「再確認」、認証済み×初見は「照合」、
+    /// 未認証は「送信者本人への直接確認」に切り替える。
+    private func fingerprintGateLabel(_ share: KeyShareService.DecryptedShare) -> String {
+        guard share.isAuthenticated else {
+            return L10n.s(
+                ja: "送信者本人に、このファイルを送ったことを信頼できる経路で直接確認しました",
+                en: "I directly confirmed with the sender, over a trusted channel, that they sent this file"
+            )
+        }
+        if senderTrust?.isKnown == true {
+            return L10n.s(
+                ja: "既知の送信者です。フィンガープリントが以前と同じであることを再確認しました",
+                en: "This is a known sender. I re-confirmed the fingerprint matches the one I trusted before"
+            )
+        }
+        return L10n.s(
+            ja: "送信者のフィンガープリントを信頼できる経路で確認しました",
+            en: "I verified the sender's fingerprint via a trusted channel"
+        )
     }
 
     // MARK: Complete
@@ -715,6 +822,8 @@ private struct ReceiveTab: View {
         fingerprintConfirmed = false
         unsignedAck = false
         overwriteConfirmed = false
+        senderTrust = nil
+        freshness = nil
     }
 
     private func decryptFile() {
@@ -735,6 +844,13 @@ private struct ReceiveTab: View {
                 entries = deduped
                 overwriteNames = owNames
                 share = decrypted
+                // TOFU 分類 & 鮮度（#126）を復号時に一度だけ算出。
+                if decrypted.isAuthenticated, let fp = decrypted.senderFingerprint {
+                    senderTrust = tofu.classify(fp)
+                } else {
+                    senderTrust = nil
+                }
+                freshness = decrypted.createdAt.map { KeyShareService.classifyFreshness(createdAt: $0) }
                 errorMessage = nil
             } catch {
                 errorMessage = error.localizedDescription
@@ -744,6 +860,11 @@ private struct ReceiveTab: View {
 
     private func importDecrypted() {
         guard canImport else { return }
+        // 認証済みインポートを確定したら、このフィンガープリントを確認済みとして
+        // ピン留めする（TOFU / #126）。次回以降は「既知の送信者」として扱える。
+        if let share, share.isAuthenticated, let fp = share.senderFingerprint {
+            tofu.confirm(fp)
+        }
         var count = 0
         for entry in entries {
             // 外部由来の .aikeychain ファイルの envVarName は信頼できない。
