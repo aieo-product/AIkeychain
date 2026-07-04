@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Security
 
 /// 公開鍵暗号方式による Keychain 共有サービス
 /// P-256 + ECDH + AES-256-GCM（機密性）に加え、
@@ -62,26 +63,72 @@ enum KeyShareService {
 
     // MARK: - Signing Identity
 
-    /// 署名鍵を取得（無ければ生成して保存 = 既存ユーザーにも透過的に付与）
+    /// 署名鍵を取得（無ければ生成して保存 = 既存ユーザーにも透過的に付与）。
+    /// 返り値は SE / ソフトウェアを隠蔽する `SigningIdentity`。
     @discardableResult
-    static func ensureSigningKey() throws -> P256.Signing.PrivateKey {
-        if let existing = loadSigningPrivateKey() {
-            return existing
+    static func ensureSigningKey() throws -> SigningIdentity {
+        try resolveSigningIdentity(
+            load: { loadSigningIdentity() },
+            create: { try makeNewSigningIdentity() },
+            add: { addSigningBlob($0) }
+        )
+    }
+
+    /// get-or-create の純粋（テスト可能）な解決ロジック。Keychain 非依存。
+    ///
+    /// レース解消（#127）: `add` が `errSecDuplicateItem` を返した場合は、
+    /// 別スレッド／別プロセスが先に鍵を作成したとみなし、**既存を再読込して採用**する。
+    /// 決して上書き（＝フィンガープリントのローテーション）はしない。
+    static func resolveSigningIdentity(
+        load: () -> SigningIdentity?,
+        create: () throws -> (identity: SigningIdentity, blob: Data),
+        add: (Data) -> OSStatus
+    ) throws -> SigningIdentity {
+        if let existing = load() { return existing }
+        let fresh = try create()
+        let status = add(fresh.blob)
+        switch status {
+        case errSecSuccess:
+            return fresh.identity
+        case errSecDuplicateItem:
+            // レース: 先行書き込みが勝った。既存を採用し、自分の新規鍵は捨てる。
+            if let existing = load() { return existing }
+            throw ShareError.keychainError(status)
+        default:
+            throw ShareError.keychainError(status)
         }
-        let key = P256.Signing.PrivateKey()
-        try saveSigningPrivateKey(key)
-        return key
+    }
+
+    /// 新しい署名アイデンティティを生成する。
+    /// SE が利用可能なら Secure Enclave 鍵（`dataRepresentation` は不透明ブロブ）、
+    /// 無ければ従来のソフトウェア P256 鍵（`rawRepresentation`）を作る。
+    static func makeNewSigningIdentity() throws -> (identity: SigningIdentity, blob: Data) {
+        if SecureEnclave.isAvailable {
+            // .privateKeyUsage + AfterFirstUnlockThisDeviceOnly のアクセス制御を付与。
+            var acError: Unmanaged<CFError>?
+            if let access = SecAccessControlCreateWithFlags(
+                nil,
+                kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+                [.privateKeyUsage],
+                &acError
+            ), let seKey = try? SecureEnclave.P256.Signing.PrivateKey(accessControl: access) {
+                return (.secureEnclave(seKey), seKey.dataRepresentation)
+            }
+            // SE 生成に失敗したらソフトウェアへフォールバック（可用性優先）。
+        }
+        let sw = P256.Signing.PrivateKey()
+        return (.software(sw), sw.rawRepresentation)
     }
 
     /// 署名用公開鍵を取得（存在する場合のみ。無ければ nil）
     static func getSigningPublicKey() -> P256.Signing.PublicKey? {
-        loadSigningPrivateKey()?.publicKey
+        loadSigningIdentity()?.signingPublicKey
     }
 
     /// 自分の署名フィンガープリント（無ければ生成して算出）
     static func ownSigningFingerprint() -> String? {
-        guard let key = try? ensureSigningKey() else { return nil }
-        return fingerprint(of: key.publicKey)
+        guard let identity = try? ensureSigningKey() else { return nil }
+        return fingerprint(of: identity.signingPublicKey)
     }
 
     /// 署名公開鍵の SHA256(x963) を 256bit フル長で、4桁ずつスペース区切りの
@@ -189,13 +236,63 @@ enum KeyShareService {
         return publicKey.isValidSignature(sig, for: message)
     }
 
+    // MARK: - Freshness (#126, pure / testable)
+
+    /// 署名済み `createdAt` の鮮度分類。しきい値より古いものは replay（古い署名済み
+    /// ファイルを、既にローテーション済みの鍵で再送）の疑いとして stale とする。
+    enum Freshness: Equatable {
+        case fresh(age: TimeInterval)
+        case stale(age: TimeInterval)
+
+        var age: TimeInterval {
+            switch self {
+            case .fresh(let a), .stale(let a): return a
+            }
+        }
+        var isStale: Bool {
+            if case .stale = self { return true }
+            return false
+        }
+    }
+
+    /// 既定の陳腐化しきい値（30 日）。
+    static let stalenessThreshold: TimeInterval = 30 * 24 * 60 * 60
+
+    /// `createdAt` の鮮度を分類する純粋関数（基準時刻を引数で受け取りテスト可能）。
+    /// age は `now - createdAt`。しきい値超過で stale。未来日付（負の age）は fresh 扱い。
+    static func classifyFreshness(
+        createdAt: Date,
+        now: Date = Date(),
+        threshold: TimeInterval = stalenessThreshold
+    ) -> Freshness {
+        let age = now.timeIntervalSince(createdAt)
+        return age > threshold ? .stale(age: age) : .fresh(age: age)
+    }
+
     // MARK: - Encrypt (送信者)
 
     /// 暗号化 + 署名済みの EncryptedFile を構築する（純粋・鍵引数。Keychain 非依存）。
+    /// ソフトウェア鍵版（既存テスト・呼び出し互換）。内部で汎用実装へ委譲する。
     static func makeEncryptedFile(
         keys: [(envVarName: String, value: String)],
         recipientPublicKey: P256.KeyAgreement.PublicKey,
         signingPrivateKey: P256.Signing.PrivateKey,
+        createdAt: Date = Date()
+    ) throws -> ShareFileFormat.EncryptedFile {
+        try makeEncryptedFile(
+            keys: keys,
+            recipientPublicKey: recipientPublicKey,
+            signer: signingPrivateKey,
+            createdAt: createdAt
+        )
+    }
+
+    /// 暗号化 + 署名済みの EncryptedFile を構築する（汎用版）。
+    /// 署名は `MessageSigner` に抽象化されており、SE / ソフトウェアどちらでも同一経路。
+    static func makeEncryptedFile<S: MessageSigner>(
+        keys: [(envVarName: String, value: String)],
+        recipientPublicKey: P256.KeyAgreement.PublicKey,
+        signer: S,
         createdAt: Date = Date()
     ) throws -> ShareFileFormat.EncryptedFile {
         // 1. エフェメラル鍵ペアを生成
@@ -209,7 +306,7 @@ enum KeyShareService {
         //    失敗するため、他人の暗号文を自分の鍵で「再署名」して自分のものとして
         //    提示する attribution swap を防げる。送信者は自分の署名鍵を知っているので
         //    この sharedInfo を導出できる。
-        let signPubData = signingPrivateKey.publicKey.x963Representation
+        let signPubData = signer.signingPublicKey.x963Representation
         let symmetricKey = deriveSymmetricKey(from: sharedSecret, sharedInfo: signPubData)
 
         // 4. キーデータを JSON 化
@@ -237,7 +334,7 @@ enum KeyShareService {
             senderSigningPublicKeyB64: signPubB64,
             createdAt: createdAtStr
         )
-        let signature = try signMessage(message, with: signingPrivateKey)
+        let signature = try signer.signRaw(message)
 
         return ShareFileFormat.EncryptedFile(
             version: version,
@@ -261,7 +358,7 @@ enum KeyShareService {
         let file = try makeEncryptedFile(
             keys: keys,
             recipientPublicKey: recipientPublicKey,
-            signingPrivateKey: signingKey
+            signer: signingKey
         )
         let json = try JSONEncoder().encode(file)
         try json.write(to: url)
@@ -378,13 +475,38 @@ enum KeyShareService {
         return try? P256.KeyAgreement.PrivateKey(rawRepresentation: data)
     }
 
-    private static func saveSigningPrivateKey(_ key: P256.Signing.PrivateKey) throws {
-        try saveRawKey(key.rawRepresentation, service: signKeyTag, account: "signing_key")
+    /// 保存済みの署名アイデンティティを読み込む。
+    ///
+    /// 後方互換（#127）: 保存ブロブは
+    ///   - Secure Enclave 鍵の `dataRepresentation`（不透明・可変長, 通常 32B 超）、または
+    ///   - ソフトウェア鍵の `rawRepresentation`（厳密に 32B）
+    /// のどちらか。SE を先に試し、失敗したら raw を試す。これにより #125 で作られた
+    /// 既存のソフトウェア署名鍵はローテーションされず（＝フィンガープリント不変で）
+    /// そのまま使い続けられる。SE init は 32B のソフトウェア raw を弾くため誤判定しない。
+    private static func loadSigningIdentity() -> SigningIdentity? {
+        guard let data = loadRawKey(service: signKeyTag, account: "signing_key") else { return nil }
+        if SecureEnclave.isAvailable,
+           let se = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data) {
+            return .secureEnclave(se)
+        }
+        if let sw = try? P256.Signing.PrivateKey(rawRepresentation: data) {
+            return .software(sw)
+        }
+        return nil
     }
 
-    private static func loadSigningPrivateKey() -> P256.Signing.PrivateKey? {
-        guard let data = loadRawKey(service: signKeyTag, account: "signing_key") else { return nil }
-        return try? P256.Signing.PrivateKey(rawRepresentation: data)
+    /// 署名ブロブを **非破壊** で追加する（`ensureSigningKey` のレース解消用）。
+    /// 既存を消さず SecItemAdd のみ実行し、その OSStatus をそのまま返す。
+    /// `errSecDuplicateItem` の場合は呼び出し側（resolveSigningIdentity）が既存を採用する。
+    private static func addSigningBlob(_ blob: Data) -> OSStatus {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: signKeyTag,
+            kSecAttrAccount as String: "signing_key",
+            kSecValueData as String: blob,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        return SecItemAdd(query as CFDictionary, nil)
     }
 
     private static func saveRawKey(_ rawKey: Data, service: String, account: String) throws {
@@ -495,5 +617,49 @@ enum ShareFileFormat {
     struct KeyEntry: Codable {
         let envVarName: String
         let value: String
+    }
+}
+
+// MARK: - Signing Abstraction (#127)
+
+/// 正規メッセージへ署名できる主体の抽象。SE / ソフトウェアの差を暗号化・検証コードから隠す。
+protocol MessageSigner {
+    var signingPublicKey: P256.Signing.PublicKey { get }
+    /// 正規メッセージへ署名し raw representation を返す。
+    func signRaw(_ message: Data) throws -> Data
+}
+
+extension P256.Signing.PrivateKey: MessageSigner {
+    var signingPublicKey: P256.Signing.PublicKey { publicKey }
+    func signRaw(_ message: Data) throws -> Data {
+        try signature(for: message).rawRepresentation
+    }
+}
+
+/// 署名アイデンティティ。Secure Enclave 鍵（利用可能時）とソフトウェア鍵を統一的に扱う。
+/// SE 鍵は秘密鍵素材が Enclave 内にあり `rawRepresentation` を持たないため、
+/// 永続化には不透明な `dataRepresentation` を Keychain に保存する。
+enum SigningIdentity: MessageSigner {
+    case secureEnclave(SecureEnclave.P256.Signing.PrivateKey)
+    case software(P256.Signing.PrivateKey)
+
+    var signingPublicKey: P256.Signing.PublicKey {
+        switch self {
+        case .secureEnclave(let k): return k.publicKey
+        case .software(let k): return k.publicKey
+        }
+    }
+
+    func signRaw(_ message: Data) throws -> Data {
+        switch self {
+        case .secureEnclave(let k): return try k.signature(for: message).rawRepresentation
+        case .software(let k): return try k.signature(for: message).rawRepresentation
+        }
+    }
+
+    /// Secure Enclave に格納された鍵か（UI 表示・テスト用）。
+    var isSecureEnclave: Bool {
+        if case .secureEnclave = self { return true }
+        return false
     }
 }
