@@ -65,7 +65,7 @@ struct KeyShareServiceTests {
             createdAt: file.createdAt
         )
 
-        #expect(throws: KeyShareService.ShareError.self) {
+        #expect(throws: KeyShareService.ShareError.signatureInvalid) {
             _ = try KeyShareService.decrypt(file: tampered, recipientPrivateKey: recipient)
         }
     }
@@ -86,7 +86,7 @@ struct KeyShareServiceTests {
             signature: file.signature,
             createdAt: file.createdAt
         )
-        #expect(throws: KeyShareService.ShareError.self) {
+        #expect(throws: KeyShareService.ShareError.signatureInvalid) {
             _ = try KeyShareService.decrypt(file: tampered, recipientPrivateKey: recipient)
         }
     }
@@ -108,9 +108,181 @@ struct KeyShareServiceTests {
             signature: file.signature,
             createdAt: file.createdAt
         )
-        #expect(throws: KeyShareService.ShareError.self) {
+        #expect(throws: KeyShareService.ShareError.signatureInvalid) {
             _ = try KeyShareService.decrypt(file: tampered, recipientPrivateKey: recipient)
         }
+    }
+
+    @Test("Tampering with createdAt throws signatureInvalid")
+    func tamperCreatedAt() throws {
+        let recipient = P256.KeyAgreement.PrivateKey()
+        let signing = P256.Signing.PrivateKey()
+        let file = try KeyShareService.makeEncryptedFile(
+            keys: sampleKeys, recipientPublicKey: recipient.publicKey, signingPrivateKey: signing
+        )
+        let tampered = ShareFileFormat.EncryptedFile(
+            version: file.version,
+            ephemeralPublicKey: file.ephemeralPublicKey,
+            encryptedData: file.encryptedData,
+            keyCount: file.keyCount,
+            senderSigningPublicKey: file.senderSigningPublicKey,
+            signature: file.signature,
+            createdAt: "2000-01-01T00:00:00Z"        // ← 改ざん
+        )
+        #expect(throws: KeyShareService.ShareError.signatureInvalid) {
+            _ = try KeyShareService.decrypt(file: tampered, recipientPrivateKey: recipient)
+        }
+    }
+
+    // MARK: fail-closed structural checks (#112 Fable review)
+
+    @Test("Signature-stripping (drop sig fields from a v2 file) throws signatureInvalid")
+    func signatureStripping() throws {
+        let recipient = P256.KeyAgreement.PrivateKey()
+        let signing = P256.Signing.PrivateKey()
+        let file = try KeyShareService.makeEncryptedFile(
+            keys: sampleKeys, recipientPublicKey: recipient.publicKey, signingPrivateKey: signing
+        )
+        // version は 2 のまま署名フィールドを除去 → strip 攻撃
+        let stripped = ShareFileFormat.EncryptedFile(
+            version: 2,
+            ephemeralPublicKey: file.ephemeralPublicKey,
+            encryptedData: file.encryptedData,
+            keyCount: file.keyCount,
+            senderSigningPublicKey: nil,
+            signature: nil,
+            createdAt: file.createdAt
+        )
+        #expect(throws: KeyShareService.ShareError.signatureInvalid) {
+            _ = try KeyShareService.decrypt(file: stripped, recipientPrivateKey: recipient)
+        }
+    }
+
+    @Test("Version downgrade 2→1 while keeping signature throws signatureInvalid")
+    func versionDowngrade() throws {
+        let recipient = P256.KeyAgreement.PrivateKey()
+        let signing = P256.Signing.PrivateKey()
+        let file = try KeyShareService.makeEncryptedFile(
+            keys: sampleKeys, recipientPublicKey: recipient.publicKey, signingPrivateKey: signing
+        )
+        // version を 1 に書き換え（署名は残す）→ 正規メッセージの version が食い違い署名不一致
+        let downgraded = ShareFileFormat.EncryptedFile(
+            version: 1,
+            ephemeralPublicKey: file.ephemeralPublicKey,
+            encryptedData: file.encryptedData,
+            keyCount: file.keyCount,
+            senderSigningPublicKey: file.senderSigningPublicKey,
+            signature: file.signature,
+            createdAt: file.createdAt
+        )
+        #expect(throws: KeyShareService.ShareError.signatureInvalid) {
+            _ = try KeyShareService.decrypt(file: downgraded, recipientPrivateKey: recipient)
+        }
+    }
+
+    @Test("Structural inconsistency: only one of signature/senderSigningPublicKey present throws signatureInvalid")
+    func inconsistentSignatureFields() throws {
+        let recipient = P256.KeyAgreement.PrivateKey()
+        let signing = P256.Signing.PrivateKey()
+        let file = try KeyShareService.makeEncryptedFile(
+            keys: sampleKeys, recipientPublicKey: recipient.publicKey, signingPrivateKey: signing
+        )
+        // signature だけ present（senderSigningPublicKey を落とす）
+        let onlySig = ShareFileFormat.EncryptedFile(
+            version: file.version,
+            ephemeralPublicKey: file.ephemeralPublicKey,
+            encryptedData: file.encryptedData,
+            keyCount: file.keyCount,
+            senderSigningPublicKey: nil,
+            signature: file.signature,
+            createdAt: file.createdAt
+        )
+        #expect(throws: KeyShareService.ShareError.signatureInvalid) {
+            _ = try KeyShareService.decrypt(file: onlySig, recipientPrivateKey: recipient)
+        }
+        // senderSigningPublicKey だけ present（signature を落とす）
+        let onlyKey = ShareFileFormat.EncryptedFile(
+            version: file.version,
+            ephemeralPublicKey: file.ephemeralPublicKey,
+            encryptedData: file.encryptedData,
+            keyCount: file.keyCount,
+            senderSigningPublicKey: file.senderSigningPublicKey,
+            signature: nil,
+            createdAt: file.createdAt
+        )
+        #expect(throws: KeyShareService.ShareError.signatureInvalid) {
+            _ = try KeyShareService.decrypt(file: onlyKey, recipientPrivateKey: recipient)
+        }
+    }
+
+    @Test("Unknown version is rejected (invalidFile)")
+    func unknownVersion() throws {
+        let recipient = P256.KeyAgreement.PrivateKey()
+        let signing = P256.Signing.PrivateKey()
+        let file = try KeyShareService.makeEncryptedFile(
+            keys: sampleKeys, recipientPublicKey: recipient.publicKey, signingPrivateKey: signing
+        )
+        let future = ShareFileFormat.EncryptedFile(
+            version: 99,
+            ephemeralPublicKey: file.ephemeralPublicKey,
+            encryptedData: file.encryptedData,
+            keyCount: file.keyCount,
+            senderSigningPublicKey: file.senderSigningPublicKey,
+            signature: file.signature,
+            createdAt: file.createdAt
+        )
+        #expect(throws: KeyShareService.ShareError.invalidFile) {
+            _ = try KeyShareService.decrypt(file: future, recipientPrivateKey: recipient)
+        }
+    }
+
+    @Test("Attribution swap: re-sign with attacker key over another's ciphertext fails GCM decryption")
+    func attributionSwap() throws {
+        let recipient = P256.KeyAgreement.PrivateKey()
+        let sender = P256.Signing.PrivateKey()
+        let legit = try KeyShareService.makeEncryptedFile(
+            keys: sampleKeys, recipientPublicKey: recipient.publicKey, signingPrivateKey: sender
+        )
+        // 攻撃者は他人の暗号文をそのまま流用し、senderSigningPublicKey を自分の鍵に
+        // 差し替えて「自分の鍵で有効に署名し直す」。署名検証は通ってしまうが、
+        // HKDF sharedInfo が送信者署名公開鍵に束縛されているため、対称鍵が食い違い
+        // GCM 復号自体が失敗する。
+        let attacker = P256.Signing.PrivateKey()
+        let attackerPubB64 = attacker.publicKey.x963Representation.base64EncodedString()
+        let message = KeyShareService.canonicalMessage(
+            version: legit.version,
+            ephemeralPublicKeyB64: legit.ephemeralPublicKey,
+            encryptedDataB64: legit.encryptedData,
+            keyCount: legit.keyCount,
+            senderSigningPublicKeyB64: attackerPubB64,
+            createdAt: legit.createdAt ?? ""
+        )
+        let attackerSig = try KeyShareService.signMessage(message, with: attacker).base64EncodedString()
+        let swapped = ShareFileFormat.EncryptedFile(
+            version: legit.version,
+            ephemeralPublicKey: legit.ephemeralPublicKey,
+            encryptedData: legit.encryptedData,
+            keyCount: legit.keyCount,
+            senderSigningPublicKey: attackerPubB64,
+            signature: attackerSig,
+            createdAt: legit.createdAt
+        )
+        #expect(throws: (any Error).self) {
+            _ = try KeyShareService.decrypt(file: swapped, recipientPrivateKey: recipient)
+        }
+    }
+
+    @Test("Empty key list round trip")
+    func emptyRoundTrip() throws {
+        let recipient = P256.KeyAgreement.PrivateKey()
+        let signing = P256.Signing.PrivateKey()
+        let file = try KeyShareService.makeEncryptedFile(
+            keys: [], recipientPublicKey: recipient.publicKey, signingPrivateKey: signing
+        )
+        #expect(file.keyCount == 0)
+        let share = try KeyShareService.decrypt(file: file, recipientPrivateKey: recipient)
+        #expect(share.isAuthenticated == true)
+        #expect(share.entries.isEmpty)
     }
 
     // MARK: Forgery-with-different-key

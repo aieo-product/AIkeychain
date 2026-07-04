@@ -165,6 +165,17 @@ enum KeyShareService {
         return Data(s.utf8)
     }
 
+    /// ECDH 共有秘密から AES-256-GCM 用の対称鍵を導出する。
+    /// `sharedInfo` は v2 で送信者署名公開鍵に束縛される（v1 は空）。salt は固定。
+    private static func deriveSymmetricKey(from sharedSecret: SharedSecret, sharedInfo: Data) -> SymmetricKey {
+        sharedSecret.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: Data("AIKeyChain-v1".utf8),
+            sharedInfo: sharedInfo,
+            outputByteCount: 32
+        )
+    }
+
     /// 正規メッセージへ署名し rawRepresentation を返す（純粋・鍵引数）
     static func signMessage(_ message: Data, with signingKey: P256.Signing.PrivateKey) throws -> Data {
         try signingKey.signature(for: message).rawRepresentation
@@ -193,13 +204,13 @@ enum KeyShareService {
         // 2. ECDH で共有秘密を導出
         let sharedSecret = try ephemeralKey.sharedSecretFromKeyAgreement(with: recipientPublicKey)
 
-        // 3. 共有秘密から対称鍵を導出
-        let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
-            using: SHA256.self,
-            salt: Data("AIKeyChain-v1".utf8),
-            sharedInfo: Data(),
-            outputByteCount: 32
-        )
+        // 3. 送信者署名公開鍵を HKDF の sharedInfo に束縛して対称鍵を導出（v2）。
+        //    こうすると senderSigningPublicKey を後から差し替えると GCM 復号自体が
+        //    失敗するため、他人の暗号文を自分の鍵で「再署名」して自分のものとして
+        //    提示する attribution swap を防げる。送信者は自分の署名鍵を知っているので
+        //    この sharedInfo を導出できる。
+        let signPubData = signingPrivateKey.publicKey.x963Representation
+        let symmetricKey = deriveSymmetricKey(from: sharedSecret, sharedInfo: signPubData)
 
         // 4. キーデータを JSON 化
         let payload = keys.map { ShareFileFormat.KeyEntry(envVarName: $0.envVarName, value: $0.value) }
@@ -215,7 +226,7 @@ enum KeyShareService {
         let version = 2
         let ephB64 = ephemeralKey.publicKey.x963Representation.base64EncodedString()
         let encB64 = combined.base64EncodedString()
-        let signPubB64 = signingPrivateKey.publicKey.x963Representation.base64EncodedString()
+        let signPubB64 = signPubData.base64EncodedString()
         let createdAtStr = iso8601.string(from: createdAt)
 
         let message = canonicalMessage(
@@ -271,6 +282,21 @@ enum KeyShareService {
         file: ShareFileFormat.EncryptedFile,
         recipientPrivateKey: P256.KeyAgreement.PrivateKey
     ) throws -> DecryptedShare {
+        // 0. バージョン & 構造整合性チェック（crypto 層で fail-closed）。
+        //    この関数は GUI 以外（将来 CLI 等）からも再利用される想定のため、
+        //    人間ゲートに依存せずここで不整合を弾く。
+        //    - 未知バージョンは best-effort 処理せず拒否。
+        //    - signature と senderSigningPublicKey は「両方あり／両方なし」のみ許容
+        //      （片方だけ present は構造改ざんの兆候）。
+        //    - v2 以降で署名フィールドが欠落しているのは署名 strip 攻撃 → 拒否。
+        guard (1...2).contains(file.version) else { throw ShareError.invalidFile }
+        if (file.signature == nil) != (file.senderSigningPublicKey == nil) {
+            throw ShareError.signatureInvalid
+        }
+        if file.version >= 2 && file.signature == nil {
+            throw ShareError.signatureInvalid
+        }
+
         // 1. エフェメラル公開鍵を復元
         guard let ephemeralKeyData = Data(base64Encoded: file.ephemeralPublicKey) else {
             throw ShareError.invalidFile
@@ -278,8 +304,10 @@ enum KeyShareService {
         let ephemeralPublicKey = try P256.KeyAgreement.PublicKey(x963Representation: ephemeralKeyData)
 
         // 2. 署名検証（v2: senderSigningPublicKey + signature が両方存在する場合）
+        //    併せて HKDF の sharedInfo を決定する（v2 は送信者署名公開鍵に束縛、v1 は空）。
         var isAuthenticated = false
         var senderFingerprint: String?
+        var sharedInfo = Data() // v1: 空（後方互換）
         if let sigB64 = file.signature, let senderPubB64 = file.senderSigningPublicKey {
             guard
                 let sigData = Data(base64Encoded: sigB64),
@@ -301,18 +329,14 @@ enum KeyShareService {
             }
             isAuthenticated = true
             senderFingerprint = fingerprint(of: senderKey)
+            sharedInfo = senderPubData // v2: 送信者署名公開鍵を束縛（attribution swap 防止）
         }
 
         // 3. ECDH で共有秘密を導出
         let sharedSecret = try recipientPrivateKey.sharedSecretFromKeyAgreement(with: ephemeralPublicKey)
 
-        // 4. 対称鍵を導出
-        let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
-            using: SHA256.self,
-            salt: Data("AIKeyChain-v1".utf8),
-            sharedInfo: Data(),
-            outputByteCount: 32
-        )
+        // 4. 対称鍵を導出（v2 は senderSigningPublicKey を sharedInfo に束縛）
+        let symmetricKey = deriveSymmetricKey(from: sharedSecret, sharedInfo: sharedInfo)
 
         // 5. 復号
         guard let encryptedData = Data(base64Encoded: file.encryptedData) else {
@@ -404,7 +428,7 @@ enum KeyShareService {
 
     // MARK: - Errors
 
-    enum ShareError: LocalizedError {
+    enum ShareError: LocalizedError, Equatable {
         case noKeyPair
         case invalidPublicKey
         case invalidFile

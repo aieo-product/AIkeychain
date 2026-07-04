@@ -74,6 +74,7 @@ private struct KeyPairManagementTab: View {
     @State private var hasKeyPair = KeyShareService.hasKeyPair()
     @State private var publicKeyDisplay: String = ""
     @State private var errorMessage: String?
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         ScrollView {
@@ -114,9 +115,24 @@ private struct KeyPairManagementTab: View {
                         .buttonStyle(.borderedProminent)
 
                         Button("Delete Key Pair", role: .destructive) {
-                            KeyShareService.deleteKeyPair()
-                            hasKeyPair = false
-                            publicKeyDisplay = ""
+                            showDeleteConfirm = true
+                        }
+                        .confirmationDialog(
+                            L10n.s(ja: "鍵ペアを削除しますか？", en: "Delete key pair?"),
+                            isPresented: $showDeleteConfirm,
+                            titleVisibility: .visible
+                        ) {
+                            Button(L10n.s(ja: "削除する", en: "Delete"), role: .destructive) {
+                                KeyShareService.deleteKeyPair()
+                                hasKeyPair = false
+                                publicKeyDisplay = ""
+                            }
+                            Button(L10n.s(ja: "キャンセル", en: "Cancel"), role: .cancel) {}
+                        } message: {
+                            Text(L10n.s(
+                                ja: "鍵共有鍵に加えて署名アイデンティティも破棄されます。再生成すると署名フィンガープリントが変わり、以前あなたの指紋を確認した相手は改めて照合し直す必要があります。",
+                                en: "This also destroys your signing identity, not just the key-agreement key. Regenerating produces a NEW signing fingerprint, so anyone who previously verified your fingerprint must re-verify it."
+                            ))
                         }
                     }
                 } else {
@@ -197,6 +213,10 @@ private struct SendTab: View {
     @State private var exported = false
     @State private var cachedValues: [String: String] = [:] // 一括取得キャッシュ
     @State private var isLoading = false
+    // 署名フィンガープリントは Keychain I/O（初回は鍵生成）を伴うので body 内で毎回
+    // 呼ばず、onAppear で一度だけ解決して state に持つ（finding 6）。
+    @State private var ownSigningFingerprint: String?
+    @State private var signingKeyError = false
 
     private var configuredKeys: [APIKey] {
         keys.filter(\.isConfigured)
@@ -273,7 +293,7 @@ private struct SendTab: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
 
-                    if let ownFP = KeyShareService.ownSigningFingerprint() {
+                    if let ownFP = ownSigningFingerprint {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L10n.s(ja: "あなたの署名フィンガープリント（受信者に帯域外で伝えてください）:", en: "Your signing fingerprint (share it out-of-band with the recipient):"))
                                 .font(.system(size: 9))
@@ -286,6 +306,12 @@ private struct SendTab: View {
                         .padding(8)
                         .background(Color(.textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                         .padding(.horizontal, 16)
+                    } else if signingKeyError {
+                        Text(L10n.s(ja: "署名鍵を準備できませんでした（Keychain アクセスを確認してください）。", en: "Could not prepare the signing key (check Keychain access)."))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
                     }
 
                     HStack {
@@ -350,6 +376,14 @@ private struct SendTab: View {
                     .disabled(selectedKeys.isEmpty)
                 }
                 .padding(12)
+            }
+        }
+        .onAppear {
+            // 署名鍵の解決（初回は生成）を一度だけ実行。失敗時はエラー行を出す。
+            if let fp = KeyShareService.ownSigningFingerprint() {
+                ownSigningFingerprint = fp
+            } else {
+                signingKeyError = true
             }
         }
     }
@@ -432,12 +466,12 @@ private struct ReceiveTab: View {
     @State private var imported = false
     @State private var importCount = 0
     @State private var errorMessage: String?
+    // 復号時に envVarName で重複排除（先勝ち）した表示用エントリ（finding 10）と、
+    // その時点で一度だけ Keychain を引いて数えた上書き件数（finding 11）。
+    @State private var entries: [(envVarName: String, value: String)] = []
+    @State private var overwriteNames: Set<String> = []
 
-    private var entries: [(envVarName: String, value: String)] { share?.entries ?? [] }
-
-    private var overwriteCount: Int {
-        entries.filter { KeychainService.shared.exists(for: $0.envVarName) }.count
-    }
+    private var overwriteCount: Int { overwriteNames.count }
 
     /// インポート可能条件: 指紋照合済み ∧ (認証済み ∨ 未署名承諾) ∧ (上書き無し ∨ 上書き承諾)
     private var canImport: Bool {
@@ -575,7 +609,7 @@ private struct ReceiveTab: View {
     private func keyRow(_ entry: (envVarName: String, value: String)) -> some View {
         let service = ServiceType.allCases.first { $0.envVarName == entry.envVarName }
         let isRevealed = revealed.contains(entry.envVarName)
-        let overwrites = KeychainService.shared.exists(for: entry.envVarName)
+        let overwrites = overwriteNames.contains(entry.envVarName)
         HStack {
             Image(systemName: service?.systemImage ?? "key")
                 .foregroundStyle(service?.category.color ?? .secondary)
@@ -621,7 +655,11 @@ private struct ReceiveTab: View {
     private func gates(_ share: KeyShareService.DecryptedShare) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: $fingerprintConfirmed) {
-                Text(L10n.s(ja: "送信者のフィンガープリントを信頼できる経路で確認しました", en: "I verified the sender's fingerprint via a trusted channel"))
+                // 未認証(v1)は照合すべき指紋自体が無いので、確認対象を「送信者本人への
+                // 直接確認」に変える（finding 7）。
+                Text(share.isAuthenticated
+                     ? L10n.s(ja: "送信者のフィンガープリントを信頼できる経路で確認しました", en: "I verified the sender's fingerprint via a trusted channel")
+                     : L10n.s(ja: "送信者本人に、このファイルを送ったことを信頼できる経路で直接確認しました", en: "I directly confirmed with the sender, over a trusted channel, that they sent this file"))
                     .font(.system(size: 11))
             }
 
@@ -671,6 +709,8 @@ private struct ReceiveTab: View {
 
     private func resetPreview() {
         share = nil
+        entries = []
+        overwriteNames = []
         revealed = []
         fingerprintConfirmed = false
         unsignedAck = false
@@ -684,7 +724,17 @@ private struct ReceiveTab: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             do {
-                share = try KeyShareService.decryptAndImport(from: url)
+                let decrypted = try KeyShareService.decryptAndImport(from: url)
+                // envVarName で重複排除（先勝ち）。ForEach の ID 衝突と、
+                // 後勝ちで意図せぬ値を保存する事故を防ぐ（finding 10）。
+                var seen = Set<String>()
+                let deduped = decrypted.entries.filter { seen.insert($0.envVarName).inserted }
+                // 上書き対象は decrypt 時に一度だけ Keychain を引いて確定（毎描画で
+                // 引かない / finding 11）。
+                let owNames = Set(deduped.map(\.envVarName).filter { KeychainService.shared.exists(for: $0) })
+                entries = deduped
+                overwriteNames = owNames
+                share = decrypted
                 errorMessage = nil
             } catch {
                 errorMessage = error.localizedDescription
