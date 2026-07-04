@@ -100,6 +100,15 @@ iconutil -c icns "$ICONSET" -o "$APP_DIR/Resources/AppIcon.icns"
 Developer ID がない場合の署名（「壊れているため開けません」エラーを防止）。
 **Proxy モードの outbound TLS 接続には network entitlements が必須。**
 
+::: warning 正典レシピは CI 側
+実際に出荷されるアーティファクトは **CI（`.github/workflows/auto-release.yml`）が生成する DMG** であり、
+CI の ad-hoc 署名は **network entitlements を付けていない**。この §5 の手動署名（entitlements 付き）は
+ローカル動作確認用であり、出荷物とは署名内容が異なる。**Hardened Runtime の実機起動テストは
+必ず CI 生成物（Release にアップロードされた DMG）に対して行うこと**。
+Proxy モードの upstream TLS 挙動は entitlements の有無で変わるため、手動署名版で
+「動いた／動かない」を CI 生成物の判断材料にしないこと。
+:::
+
 ```bash
 # network entitlements を作成（初回のみ）
 cat > /tmp/aikeychain.entitlements << 'ENTITLEMENTS'
@@ -115,8 +124,9 @@ cat > /tmp/aikeychain.entitlements << 'ENTITLEMENTS'
 </plist>
 ENTITLEMENTS
 
-# entitlements 付きで署名
-codesign --force --deep --sign - \
+# entitlements 付きで署名 (+ Hardened Runtime: DYLD_INSERT_LIBRARIES 注入や
+# デコード済みシークレットを保持するプロセスへのデバッガアタッチへの防御。#114)
+codesign --force --deep --options runtime --sign - \
   --entitlements /tmp/aikeychain.entitlements \
   "build/AI KeyChain.app"
 ```
@@ -124,6 +134,14 @@ codesign --force --deep --sign - \
 ::: warning entitlements なしの場合
 `--entitlements` を省略すると Proxy モードの upstream TLS 接続がブロックされ、
 API 呼び出しがタイムアウトします（Standard / Secret Reference モードは影響なし）。
+:::
+
+::: warning Hardened Runtime + Ad-hoc 署名について
+Hardened Runtime の library validation は、Ad-hoc 署名との組み合わせで
+署名されていないサードパーティ dylib の読み込みに影響する可能性がある。
+本アプリはシステムフレームワークと自前の SwiftPM コードのみをリンクしているため
+基本的に問題ないはずだが、**CI では実機起動確認ができないため、リリースごとに
+実機でアプリを起動して動作確認すること**（#114 フォローアップ）。
 :::
 
 ### 6. グラフィカル DMG 作成
@@ -205,7 +223,7 @@ cp "$SRC/icon_512x512.png" "$ICONSET/icon_256x256@2x.png" && \
 cp "$SRC/icon_512x512.png" "$ICONSET/icon_512x512.png" && \
 cp "$SRC/icon_1024x1024.png" "$ICONSET/icon_512x512@2x.png" && \
 iconutil -c icns "$ICONSET" -o "$APP/Resources/AppIcon.icns" && \
-codesign --force --deep --sign - "build/AI KeyChain.app" && \
+codesign --force --deep --options runtime --sign - "build/AI KeyChain.app" && \
 create-dmg \
   --volname "AI KeyChain" \
   --volicon "$APP/Resources/AppIcon.icns" \
