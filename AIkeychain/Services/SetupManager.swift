@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 
 /// プロキシの環境変数設定を管理する
 ///
@@ -48,22 +51,74 @@ enum SetupManager {
         try writeProxyEnvFile(at: proxyEnvPath, content: content)
     }
 
-    /// プロキシ設定ファイルを 0600 (rw-------) で書き込む
+    /// プロキシ設定ファイルの書き込みで発生しうるエラー
+    enum ProxyEnvWriteError: Error {
+        case open(errno: Int32)
+        case write(errno: Int32)
+        case rename(errno: Int32)
+        case encoding
+    }
+
+    /// プロキシ設定ファイルを 0600 (rw-------) で atomic に書き込む
     ///
     /// このファイルには `AIKEYCHAIN_SESSION_TOKEN`（ループバックプロキシの唯一の
-    /// 認証情報。ユーザーの Keychain API キーで署名を行う）が含まれる。
-    /// umask 022 環境ではデフォルト 0644 (world-readable) になり、macOS では
-    /// 全ローカルアカウントが group `staff` に属するため、他アカウントから読み取れて
-    /// しまう。書き込み後に明示的に 0600 を適用してトークンの漏洩を防ぐ。
+    /// 認証情報。ユーザーの Keychain API キーで署名を行う）が含まれる。macOS では
+    /// 全ローカルアカウントが group `staff` に属するため、0644 で一瞬でも公開されると
+    /// co-resident 攻撃者がトークンを読み取れてしまう (#113 / TOCTOU)。
     ///
-    /// `String.write(atomically:true)` は一時ファイルへ書いて rename するため、
-    /// mode がリセットされうる。したがって **書き込み後** に chmod する。
+    /// 実装: 同ディレクトリ内の一時ファイルを
+    /// `open(O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, 0o600)` で作成する。mode 0600 は
+    /// umask で緩む方向にしか作用しないため、**umask に依存せず確実に 0600** で生成
+    /// される（0644 になる瞬間が一切存在しない）。content を書き込んでから
+    /// `rename(2)` で最終パスへ atomic に差し替える。.zshrc が source するため
+    /// atomic 性が必要だが、rename の前後どちらのパスにも 0600 より緩いモードの
+    /// ファイルは一度も現れない。
+    ///
+    /// fail-closed: 途中で失敗した場合は一時ファイルを unlink し、0644 の残骸を
+    /// 残さず throw する。
     static func writeProxyEnvFile(at path: String, content: String) throws {
-        try content.write(toFile: path, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o600],
-            ofItemAtPath: path
-        )
+        guard let data = content.data(using: .utf8) else {
+            throw ProxyEnvWriteError.encoding
+        }
+
+        let dir = (path as NSString).deletingLastPathComponent
+        let base = (path as NSString).lastPathComponent
+        let tmpPath = "\(dir)/.\(base).tmp.\(getpid()).\(UInt32.random(in: 0..<UInt32.max))"
+
+        // 一時ファイルを umask 非依存の 0600 で排他作成。シンボリックリンク攻撃も拒否。
+        let fd = open(tmpPath, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        if fd < 0 {
+            throw ProxyEnvWriteError.open(errno: errno)
+        }
+
+        do {
+            try data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+                var written = 0
+                let total = raw.count
+                let bytes = raw.bindMemory(to: UInt8.self).baseAddress
+                while written < total {
+                    let n = Darwin.write(fd, bytes!.advanced(by: written), total - written)
+                    if n < 0 {
+                        if errno == EINTR { continue }
+                        throw ProxyEnvWriteError.write(errno: errno)
+                    }
+                    written += n
+                }
+            }
+        } catch {
+            close(fd)
+            unlink(tmpPath)   // fail-closed: 中途半端な 0600 ファイルも残さない
+            throw error
+        }
+
+        close(fd)
+
+        // atomic に最終パスへ。失敗したら一時ファイルを掃除して throw。
+        if rename(tmpPath, path) != 0 {
+            let err = errno
+            unlink(tmpPath)
+            throw ProxyEnvWriteError.rename(errno: err)
+        }
     }
 
     /// プロキシ停止時に設定ファイルを削除
