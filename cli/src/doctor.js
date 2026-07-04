@@ -4,8 +4,12 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { collectRefs, resolveRefs } from './run.js';
 import { listKeys, resolveKey, listAmbiguousDuplicates, KeychainError } from './keychain.js';
+
+const pExecFile = promisify(execFile);
 
 /** Extract keychain://KEY and `security find-generic-password -s "KEY"` keys from shell config text. */
 export function scanShellConfig(text) {
@@ -41,7 +45,51 @@ export function scanShellConfig(text) {
   return { keys: [...keys].sort(), warnings };
 }
 
-export async function runDoctor({ env = process.env, zshrcPath } = {}) {
+/** Detect a bare (PATH-dependent, issue #131) `akc` MCP registration for Codex. */
+async function checkCodexMcpRegistration(check, codexTomlPath) {
+  let text = '';
+  try {
+    text = await readFile(codexTomlPath, 'utf8');
+  } catch {
+    return; // no Codex config — nothing to check
+  }
+  if (/^\s*command\s*=\s*"akc"\s*$/m.test(text)) {
+    check(
+      'mcp registration (codex)',
+      false,
+      `${codexTomlPath} registers aikeychain with a bare "akc" command (PATH-dependent — ` +
+        'may fail from launchd/cron or after a Node version switch). Re-run `akc init` to ' +
+        'switch to an absolute path.'
+    );
+  } else if (text.includes('[mcp_servers.aikeychain]')) {
+    check('mcp registration (codex)', true, 'aikeychain registered with a PATH-independent absolute path');
+  }
+}
+
+/** Detect a bare (PATH-dependent, issue #131) `akc` MCP registration for Claude Code. */
+async function checkClaudeMcpRegistration(check) {
+  let stdout;
+  try {
+    ({ stdout } = await pExecFile('claude', ['mcp', 'list'], { timeout: 15000 }));
+  } catch {
+    return; // claude CLI not installed / not on PATH — nothing to check
+  }
+  const line = stdout.split('\n').find((l) => /^\s*aikeychain[:\s]/.test(l));
+  if (!line) return; // not registered — orthogonal to this check
+  if (/\bakc\s+mcp\b/.test(line) && !line.includes('/')) {
+    check(
+      'mcp registration (claude)',
+      false,
+      'Claude Code registers aikeychain with a bare "akc" command (PATH-dependent — may fail ' +
+        'from GUI apps/cron or after a Node version switch). Re-run `akc init` to switch to an ' +
+        'absolute path.'
+    );
+  } else {
+    check('mcp registration (claude)', true, 'aikeychain registered with a PATH-independent absolute path');
+  }
+}
+
+export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath } = {}) {
   const report = { platform: process.platform, checks: [], warnings: [], ok: true };
   const check = (name, ok, detail) => {
     report.checks.push({ name, ok, detail });
@@ -91,6 +139,10 @@ export async function runDoctor({ env = process.env, zshrcPath } = {}) {
     if (!(err instanceof KeychainError)) throw err;
     // keychain access already reported above; skip duplicate scan on failure
   }
+
+  // MCP registration path-independence (issue #131): warn on bare `akc`.
+  await checkCodexMcpRegistration(check, codexTomlPath ?? join(homedir(), '.codex', 'config.toml'));
+  await checkClaudeMcpRegistration(check);
 
   // Environment keychain:// references
   const refs = collectRefs(env);

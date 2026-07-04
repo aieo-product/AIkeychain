@@ -10,6 +10,9 @@ import {
   upsertManagedBlock,
   upsertCodexBlock,
   renderManagedBlock,
+  renderCodexBlock,
+  resolveAkcLaunch,
+  shellQuote,
   BLOCK_BEGIN,
   BLOCK_END,
   CODEX_BLOCK_BEGIN,
@@ -17,6 +20,11 @@ import {
 } from '../src/agent-setup.js';
 
 const AKC = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'akc.js');
+// The real, resolvable launch info for this checkout — used to assert that
+// `akc init` registers with absolute paths, not the bare `akc` command
+// (issue #131: bare `akc` is PATH-dependent and fails from GUI apps / cron /
+// after a Node version switch).
+const REAL_LAUNCH = resolveAkcLaunch();
 
 test('AGENT_INSTRUCTIONS teaches the core rules', () => {
   assert.match(AGENT_INSTRUCTIONS, /keychain:\/\//);
@@ -118,12 +126,66 @@ test('upsertCodexBlock refuses to append when a marker-less aikeychain table alr
   assert.equal((content.match(/\[mcp_servers\.aikeychain\]/g) || []).length, 1);
 });
 
-test('akc init --print previews machine-wide setup without writing', async () => {
+// --- issue #131: PATH-independent (absolute path) MCP registration ---
+
+test('resolveAkcLaunch resolves this checkout\'s own node binary + bin/akc.js', () => {
+  assert.ok(REAL_LAUNCH, 'resolveAkcLaunch should succeed inside this checkout');
+  assert.equal(REAL_LAUNCH.nodeBin, process.execPath);
+  assert.equal(REAL_LAUNCH.akcJs, AKC);
+  assert.ok(REAL_LAUNCH.akcJs.endsWith(join('bin', 'akc.js')));
+});
+
+test('renderCodexBlock uses absolute paths (process.execPath + bin/akc.js) when given launch info', () => {
+  const launch = { nodeBin: '/opt/homebrew/bin/node', akcJs: '/Users/me/aikeychain/bin/akc.js' };
+  const block = renderCodexBlock(launch);
+  assert.ok(block.includes('command = "/opt/homebrew/bin/node"'));
+  assert.ok(block.includes('args = ["/Users/me/aikeychain/bin/akc.js", "mcp"]'));
+  assert.ok(!block.includes('command = "akc"'));
+  assert.match(block, /re-run `akc init`/i);
+});
+
+test('renderCodexBlock falls back to bare "akc" when no launch info is given', () => {
+  const block = renderCodexBlock();
+  assert.ok(block.includes('command = "akc"'));
+  assert.ok(block.includes('args = ["mcp"]'));
+});
+
+test('renderCodexBlock TOML-escapes paths containing quotes/backslashes', () => {
+  const launch = { nodeBin: 'C:\\weird"node.exe', akcJs: '/tmp/akc.js' };
+  const block = renderCodexBlock(launch);
+  assert.ok(block.includes('command = "C:\\\\weird\\"node.exe"'));
+});
+
+test('upsertCodexBlock threads launch info through to the rendered block', () => {
+  const launch = { nodeBin: '/abs/node', akcJs: '/abs/bin/akc.js' };
+  const { content, action } = upsertCodexBlock('', launch);
+  assert.equal(action, 'created');
+  assert.ok(content.includes('command = "/abs/node"'));
+  assert.ok(content.includes('args = ["/abs/bin/akc.js", "mcp"]'));
+});
+
+test('shellQuote leaves plain paths bare and single-quotes paths with spaces/specials', () => {
+  assert.equal(shellQuote('/usr/local/bin/node'), '/usr/local/bin/node');
+  assert.equal(shellQuote('/Users/a b/akc.js'), "'/Users/a b/akc.js'");
+  assert.equal(shellQuote("/it's/here"), "'/it'\\''s/here'");
+});
+
+test('akc init --print previews machine-wide setup without writing, using absolute paths (#131)', async () => {
   const r = await runAkc(['init', '--print']);
   assert.equal(r.code, 0);
   assert.match(r.stdout, new RegExp(BLOCK_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(r.stdout, /claude mcp add --scope user aikeychain -- akc mcp/);
   assert.match(r.stdout, /\[mcp_servers\.aikeychain\]/);
+  // Not the old PATH-dependent bare command:
+  assert.doesNotMatch(r.stdout, /claude mcp add --scope user aikeychain -- akc mcp/);
+  // Absolute paths for both the Claude add command and the Codex TOML block:
+  assert.ok(REAL_LAUNCH, 'this checkout should resolve a real launch');
+  const claudeLine = r.stdout.split('\n').find((l) => l.includes('claude mcp add'));
+  assert.ok(claudeLine, 'expected a `claude mcp add` preview line');
+  assert.ok(claudeLine.includes(REAL_LAUNCH.nodeBin));
+  assert.ok(claudeLine.includes(REAL_LAUNCH.akcJs));
+  assert.match(claudeLine, /\bmcp$/);
+  assert.ok(r.stdout.includes(`command = "${REAL_LAUNCH.nodeBin}"`));
+  assert.ok(r.stdout.includes(`args = ["${REAL_LAUNCH.akcJs}", "mcp"]`));
 });
 
 test('akc init (default machine-wide) writes ~/.claude + ~/.codex under HOME, idempotently', async () => {
@@ -138,6 +200,11 @@ test('akc init (default machine-wide) writes ~/.claude + ~/.codex under HOME, id
   assert.ok(claudeMd.includes(BLOCK_BEGIN));
   assert.ok(codexAgents.includes(BLOCK_BEGIN));
   assert.ok(codexToml.includes('[mcp_servers.aikeychain]'));
+  // Registered with an absolute path, not the bare, PATH-dependent `akc` (#131).
+  assert.ok(REAL_LAUNCH, 'this checkout should resolve a real launch');
+  assert.ok(codexToml.includes(`command = "${REAL_LAUNCH.nodeBin}"`));
+  assert.ok(codexToml.includes(`args = ["${REAL_LAUNCH.akcJs}", "mcp"]`));
+  assert.ok(!codexToml.includes('command = "akc"'));
 
   // Re-run is idempotent: still exactly one block in each.
   await runAkc(['init', '--no-register'], { env });

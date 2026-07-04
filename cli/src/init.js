@@ -16,6 +16,8 @@ import {
   renderCodexBlock,
   upsertManagedBlock,
   upsertCodexBlock,
+  resolveAkcLaunch,
+  shellQuote,
 } from './agent-setup.js';
 
 const pExecFile = promisify(execFile);
@@ -58,14 +60,20 @@ async function claudeMcpRegistered() {
   }
 }
 
-async function registerClaudeMcp(scope) {
+async function registerClaudeMcp(scope, launch) {
+  // Prefer an absolute-path launch (issue #131): PATH-independent, works from
+  // GUI apps / cron / launchd and survives Node version switches. Fall back
+  // to the bare `akc` command only when resolution failed.
+  const launchArgs = launch ? [launch.nodeBin, launch.akcJs, 'mcp'] : ['akc', 'mcp'];
   // Add first. If that fails, it is almost always "already registered" — verify
   // and leave the existing one in place. Never remove a working registration
   // (a transient re-add failure must not leave the user with nothing).
   try {
-    await pExecFile('claude', ['mcp', 'add', '--scope', scope, 'aikeychain', '--', 'akc', 'mcp'], {
-      timeout: 15000,
-    });
+    await pExecFile(
+      'claude',
+      ['mcp', 'add', '--scope', scope, 'aikeychain', '--', ...launchArgs],
+      { timeout: 15000 }
+    );
     return;
   } catch {
     // fall through to verification
@@ -93,15 +101,24 @@ export async function cmdInit(argv) {
   const noRegister = argv.includes('--no-register');
   const local = argv.includes('--local');
   const out = process.stdout;
+  const launch = resolveAkcLaunch();
 
   if (printOnly) {
     out.write('# Instructions block written to CLAUDE.md / AGENTS.md:\n\n');
     out.write(`${renderManagedBlock()}\n\n`);
     out.write('# Claude Code MCP registration (machine-wide):\n');
-    out.write('  claude mcp add --scope user aikeychain -- akc mcp\n\n');
+    out.write(`  ${claudeAddPreview('user', launch)}\n\n`);
     out.write('# Codex block appended to ~/.codex/config.toml:\n');
-    out.write(`${renderCodexBlock()}\n`);
+    out.write(`${renderCodexBlock(launch)}\n`);
     return 0;
+  }
+
+  if (!launch) {
+    out.write(
+      '  ⚠️  could not resolve an absolute path to this akc install — falling back to the\n' +
+        '      bare `akc` command (PATH-dependent; may fail from GUI apps, cron, or after a\n' +
+        '      Node version switch). Re-run `akc init` after fixing the install to upgrade.\n'
+    );
   }
 
   let failed = false;
@@ -117,13 +134,13 @@ export async function cmdInit(argv) {
         out.write(`  ⚠️  could not write ${path}: ${err.message}\n`);
       }
     }
-    if (!noRegister) await registerClaude(out, 'local');
+    if (!noRegister) await registerClaude(out, 'local', launch);
   } else {
     // Machine-wide (default).
     const targets = [
       { path: join(home, '.claude', 'CLAUDE.md'), upsert: upsertManagedBlock },
       { path: join(home, '.codex', 'AGENTS.md'), upsert: upsertManagedBlock },
-      { path: join(home, '.codex', 'config.toml'), upsert: upsertCodexBlock },
+      { path: join(home, '.codex', 'config.toml'), upsert: (content) => upsertCodexBlock(content, launch) },
     ];
     for (const { path, upsert } of targets) {
       try {
@@ -133,7 +150,7 @@ export async function cmdInit(argv) {
         out.write(`  ⚠️  could not write ${path}: ${err.message}\n`);
       }
     }
-    if (!noRegister) await registerClaude(out, 'user');
+    if (!noRegister) await registerClaude(out, 'user', launch);
   }
 
   out.write('\nDone. New AI sessions discover AI KeyChain via the MCP tools and the\n');
@@ -144,12 +161,20 @@ export async function cmdInit(argv) {
   return failed ? 1 : 0;
 }
 
-async function registerClaude(out, scope) {
+/** Render the `claude mcp add ...` command as shell-quoted text for display/copy-paste. */
+function claudeAddPreview(scope, launch) {
+  const launchArgs = launch
+    ? `${shellQuote(launch.nodeBin)} ${shellQuote(launch.akcJs)} mcp`
+    : 'akc mcp';
+  return `claude mcp add --scope ${scope} aikeychain -- ${launchArgs}`;
+}
+
+async function registerClaude(out, scope, launch) {
   try {
-    await registerClaudeMcp(scope);
+    await registerClaudeMcp(scope, launch);
     out.write(`  ✅ registered MCP server with Claude Code (aikeychain, ${scope} scope)\n`);
   } catch {
     out.write('  ⏭️  Claude Code CLI not found — register manually:\n');
-    out.write(`       claude mcp add --scope ${scope} aikeychain -- akc mcp\n`);
+    out.write(`       ${claudeAddPreview(scope, launch)}\n`);
   }
 }
