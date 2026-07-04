@@ -32,9 +32,16 @@ enum SecretMask {
 enum EnvVarName {
     private static let pattern = #"^[A-Za-z_][A-Za-z0-9_]*$"#
 
+    /// 渡された文字列を **そのまま**（トリムせず）検証する。
+    ///
+    /// トリムして検証すると「`isValid(x)` が true でも、実際に保存/補間するのは
+    /// 別の文字列（トリム後）」という不整合が生じ、"`isValid(x)` ⇒ x は安全" の
+    /// 不変条件が崩れる。したがってここでは正規化しない。呼び出し側は
+    /// **保存する文字列そのもの**（必要ならトリム済み）を渡すこと。
+    /// パターンは複数行アンカーを使わない（`^`/`$` は文字列全体の端）ため、
+    /// 改行を含む名前（例 "A\nB"）は確実に false になる。
     static func isValid(_ name: String) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        return trimmed.range(of: pattern, options: .regularExpression) != nil
+        guard !name.isEmpty else { return false }
+        return name.range(of: pattern, options: .regularExpression) != nil
     }
 }

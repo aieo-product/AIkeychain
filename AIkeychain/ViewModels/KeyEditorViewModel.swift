@@ -61,8 +61,9 @@ final class KeyEditorViewModel {
     }
 
     /// envVarName が安全なシェル変数名パターンに一致するか
+    /// （保存時は trim 後の値を保存するため、検証も trim 後で行う）
     var isValidEnvVarName: Bool {
-        EnvVarName.isValid(envVarName)
+        EnvVarName.isValid(envVarName.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// 保存可能条件。Service は任意のプリセット（クイック補完）に過ぎないため

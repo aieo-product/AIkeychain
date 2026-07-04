@@ -88,16 +88,19 @@ struct KeyListView: View {
     }
 
     /// シークレット値をクリップボードへコピーする。
-    /// クリップボード履歴ツール（Maccy/Raycast 等）や Universal Clipboard に
-    /// 秘密情報が残留しないよう `org.nspasteboard.ConcealedType` を付与し、
-    /// 30秒後にユーザーが別の内容を上書きコピーしていない場合のみクリアする。
+    /// `org.nspasteboard.ConcealedType` を付与して、これを尊重するクリップボード履歴
+    /// ツール（Maccy/Raycast/Alfred 等）が値を履歴に残さないようにする。
+    /// これはコミュニティ規約であり、マーカー「型の存在」だけが意味を持つため、
+    /// 秘密値の複製を増やさないよう concealed 側の内容は空にする（実ペーストは .string を使う）。
+    /// なお Universal Clipboard/Handoff はこの規約を尊重しないため防げない。
+    /// 30秒後、ユーザーが別の内容を上書きコピーしていない場合のみクリアする。
     private func copySecretToPasteboard(_ value: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
         let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
         pb.declareTypes([.string, concealed], owner: nil)
         pb.setString(value, forType: .string)
-        pb.setString(value, forType: concealed)
+        pb.setString("", forType: concealed)
         let writeCount = pb.changeCount
         DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
             if NSPasteboard.general.changeCount == writeCount {
