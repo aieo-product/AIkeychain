@@ -51,13 +51,29 @@ AI developers juggle dozens of API keys. Most store them in `.env` or `.zshrc` i
 Download the latest release from [Releases](https://github.com/aieo-product/AIkeychain/releases).
 
 1. Open the DMG and drag **AI KeyChain.app** to **Applications**
-2. Run the following command to trust the app (required before first launch):
+2. **Verify the download's checksum first** — see [Verify your download](#verify-your-download) below.
+3. Run the following command to trust the app (required before first launch):
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/AI\ KeyChain.app
+xattr -dr com.apple.quarantine "/Applications/AI KeyChain.app"
 ```
 
-> **Note:** This app is not yet notarized with Apple Developer Program. The command above removes the Gatekeeper quarantine attribute so the app can launch without a security warning.
+> **Note:** This app is not yet notarized with the Apple Developer Program, so macOS Gatekeeper quarantines it on download (tracking: [#114](https://github.com/aieo-product/AIkeychain/issues/114), [#34](https://github.com/aieo-product/AIkeychain/issues/34)). The command above removes the quarantine attribute so the app can launch without a security warning. **Never run this with `sudo`** — removing a quarantine attribute never requires root, and running it as root only widens the blast radius if the downloaded file were ever tampered with. Always verify the checksum (below) before running it.
+
+### Verify your download
+
+Each release publishes a `.sha256` checksum file alongside the DMG (e.g. `AIKeyChain-v1.6.1.dmg.sha256`). Download both files from the same [release](https://github.com/aieo-product/AIkeychain/releases) and verify before opening:
+
+```bash
+shasum -a 256 -c "AIKeyChain-v1.6.1.dmg.sha256"
+```
+
+Or compare manually:
+
+```bash
+shasum -a 256 "AIKeyChain-v1.6.1.dmg"
+# compare the printed hash against the value in AIKeyChain-v1.6.1.dmg.sha256 from the same release
+```
 
 ### Build from Source
 
@@ -216,13 +232,29 @@ AI 開発では多数の API キーを扱います。多くの開発者はこれ
 [Releases](https://github.com/aieo-product/AIkeychain/releases) から最新版をダウンロードしてください。
 
 1. DMG を開き、**AI KeyChain.app** を **Applications** フォルダにドラッグ
-2. 初回起動前に以下のコマンドを実行してアプリを信頼させてください:
+2. **先にダウンロードのチェックサムを検証してください**（下記「ダウンロードの検証」参照）。
+3. 初回起動前に以下のコマンドを実行してアプリを信頼させてください:
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/AI\ KeyChain.app
+xattr -dr com.apple.quarantine "/Applications/AI KeyChain.app"
 ```
 
-> **注意:** Apple Developer Program 未登録のため、このコマンドなしでは macOS Gatekeeper の警告が表示されます。
+> **注意:** Apple Developer Program 未登録のため（トラッキング: [#114](https://github.com/aieo-product/AIkeychain/issues/114), [#34](https://github.com/aieo-product/AIkeychain/issues/34)）、macOS Gatekeeper がダウンロード時に quarantine（検疫）属性を付与します。上記コマンドはその検疫属性を削除し、警告なしで起動できるようにします。**`sudo` は絶対に付けないでください** — 検疫属性の削除に root 権限は不要であり、`sudo` を付けると万一ダウンロードしたファイルが改ざんされていた場合の被害が拡大するだけです。実行前に必ずチェックサムを検証してください（下記）。
+
+#### ダウンロードの検証
+
+各リリースには DMG と同時に `.sha256` チェックサムファイルが公開されます（例: `AIKeyChain-v1.6.1.dmg.sha256`）。同じ[リリース](https://github.com/aieo-product/AIkeychain/releases)から両方をダウンロードし、開く前に検証してください:
+
+```bash
+shasum -a 256 -c "AIKeyChain-v1.6.1.dmg.sha256"
+```
+
+または手動で比較:
+
+```bash
+shasum -a 256 "AIKeyChain-v1.6.1.dmg"
+# 出力されたハッシュ値を同リリースの AIKeyChain-v1.6.1.dmg.sha256 の値と比較する
+```
 
 #### ソースからビルド
 

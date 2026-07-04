@@ -115,8 +115,9 @@ cat > /tmp/aikeychain.entitlements << 'ENTITLEMENTS'
 </plist>
 ENTITLEMENTS
 
-# entitlements 付きで署名
-codesign --force --deep --sign - \
+# entitlements 付きで署名 (+ Hardened Runtime: DYLD_INSERT_LIBRARIES 注入や
+# デコード済みシークレットを保持するプロセスへのデバッガアタッチへの防御。#114)
+codesign --force --deep --options runtime --sign - \
   --entitlements /tmp/aikeychain.entitlements \
   "build/AI KeyChain.app"
 ```
@@ -124,6 +125,14 @@ codesign --force --deep --sign - \
 ::: warning entitlements なしの場合
 `--entitlements` を省略すると Proxy モードの upstream TLS 接続がブロックされ、
 API 呼び出しがタイムアウトします（Standard / Secret Reference モードは影響なし）。
+:::
+
+::: warning Hardened Runtime + Ad-hoc 署名について
+Hardened Runtime の library validation は、Ad-hoc 署名との組み合わせで
+署名されていないサードパーティ dylib の読み込みに影響する可能性がある。
+本アプリはシステムフレームワークと自前の SwiftPM コードのみをリンクしているため
+基本的に問題ないはずだが、**CI では実機起動確認ができないため、リリースごとに
+実機でアプリを起動して動作確認すること**（#114 フォローアップ）。
 :::
 
 ### 6. グラフィカル DMG 作成
@@ -205,7 +214,7 @@ cp "$SRC/icon_512x512.png" "$ICONSET/icon_256x256@2x.png" && \
 cp "$SRC/icon_512x512.png" "$ICONSET/icon_512x512.png" && \
 cp "$SRC/icon_1024x1024.png" "$ICONSET/icon_512x512@2x.png" && \
 iconutil -c icns "$ICONSET" -o "$APP/Resources/AppIcon.icns" && \
-codesign --force --deep --sign - "build/AI KeyChain.app" && \
+codesign --force --deep --options runtime --sign - "build/AI KeyChain.app" && \
 create-dmg \
   --volname "AI KeyChain" \
   --volicon "$APP/Resources/AppIcon.icns" \
