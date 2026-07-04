@@ -212,27 +212,42 @@ enum SetupManager {
         try result.write(toFile: zshrcPath, atomically: true, encoding: .utf8)
     }
 
-    /// macOS Keychain (システム) から指定キーの値を読み取る
-    /// security find-generic-password で保存された値を取得
+    /// macOS Keychain (システム) から指定キーの値を読み取る。
+    ///
+    /// scripts/akc / npm CLI (cli/src/keychain.js) と同じ 2 段ルックアップに整合させる:
+    ///   1. GUI 保存形式 `-s "com.aieo.aikeychain" -a "<KEY>"` を厳密一致で引く
+    ///   2. 見つからなければ手動登録キーとして `-s "<KEY>"`（service 名のみ）で引く
+    /// 手動登録キーは acct (-a) の値が一定しないため account は指定しない
+    /// （acct 不整合による古い/無効な値の誤取得を防止 / issue #91）。
     static func readSystemKeychainValue(for account: String) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-s", account, "-a", NSUserName(), "-w"]
+        func lookup(_ arguments: [String]) -> String? {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+            process.arguments = arguments
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = Pipe()
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else { return nil }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            return nil
+            do {
+                try process.run()
+                process.waitUntilExit()
+                guard process.terminationStatus == 0 else { return nil }
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let value = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return (value?.isEmpty == false) ? value : nil
+            } catch {
+                return nil
+            }
         }
+
+        // 1. GUI 保存形式（service + account を厳密一致）
+        if let value = lookup(["find-generic-password", "-s", "com.aieo.aikeychain", "-a", account, "-w"]) {
+            return value
+        }
+        // 2. 手動登録キー（service 名のみ / -a は付けない）
+        return lookup(["find-generic-password", "-s", account, "-w"])
     }
 
     /// .zshrc から AI KeyChain 管理ブロック全体を削除（マーカー間 + レガシー行）

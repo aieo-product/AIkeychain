@@ -87,10 +87,15 @@ swift build -c release
 
 ### Standard Mode
 ```
-Terminal                     API Server
-  │  export API_KEY=$(security ...)  │
-  │─────── API key in request ──────▶│
+Terminal                                                          API Server
+  │  export API_KEY=$(security find-generic-password \            │
+  │    -s "com.aieo.aikeychain" -a "API_KEY" -w)                   │
+  │────────────────────── API key in request ────────────────────▶│
 ```
+
+> The generated `.zshrc` line pins **both** the service (`com.aieo.aikeychain`) and
+> the account (the key name), matching exactly how the GUI stores the entry — this
+> avoids the `-a "$USER"` pitfall of stale or duplicate `acct` values.
 
 ### Proxy Mode
 ```

@@ -19,7 +19,16 @@ export function scanShellConfig(text) {
     const find = line.match(/security\s+find-generic-password\s+([^\n]*)/);
     if (!find) continue;
     const svc = find[1].match(/-s\s+"?([A-Za-z0-9_.-]+)"?/);
-    if (svc) keys.add(svc[1]);
+    if (svc) {
+      if (svc[1] === 'com.aieo.aikeychain') {
+        // GUI 保存形式で pin された行 (`-s "com.aieo.aikeychain" -a "KEY"`) では
+        // 実際のキー名は -a 側にある。-s の値 (共通サービス名) ではなく -a を採る。
+        const acct = find[1].match(/-a\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/);
+        if (acct) keys.add(acct[1]);
+      } else {
+        keys.add(svc[1]);
+      }
+    }
     if (/-a\s+"\$USER"|-a\s+\$USER/.test(find[1])) {
       // Report the service name only — never echo the raw shell line, which
       // could contain inline secrets or other sensitive content.

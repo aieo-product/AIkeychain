@@ -122,7 +122,7 @@ struct CleanupView: View {
                     # SSH 経由でも使いたい場合は ACL を事前許可
                     # （ログインパスワードの入力が必要）
                     security set-generic-password-partition-list \\
-                      -s "GITHUB_TOKEN" -a "$USER" \\
+                      -s "GITHUB_TOKEN" -a "GITHUB_TOKEN" \\
                       -S "apple-tool:,apple:" -k "ログインパスワード"
                     """,
                     note: L10n.s(ja: "ACL 設定はローカルの GUI セッションで実行してください。", en: "Run ACL configuration in a local GUI session.")
