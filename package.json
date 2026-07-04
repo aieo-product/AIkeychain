@@ -1,8 +1,8 @@
 {
-  "name": "aikeychain",
+  "name": "aikeychain-docs",
   "version": "1.0.0",
-  "description": "<p align=\"center\">   <img src=\"https://img.shields.io/badge/platform-macOS%2014+-blue?style=for-the-badge&logo=apple\" />   <img src=\"https://img.shields.io/badge/Swift-5.9+-orange?style=for-the-badge&logo=swift\" />   <img src=\"https://img.shields.io/badge/SwiftUI-Native-purple?style=for-the-badge\" />   <img src=\"https://img.shields.io/badge/license-MIT-green?style=for-the-badge\" /> </p>",
-  "main": "index.js",
+  "private": true,
+  "description": "Docs/tooling scaffold for AI KeyChain (private; the published CLI is in cli/).",
   "scripts": {
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
@@ -14,7 +14,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/aieo-product/AIkeychain/issues"
   },

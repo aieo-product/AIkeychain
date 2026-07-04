@@ -1,13 +1,16 @@
 {
   "name": "aikeychain",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "aikeychain",
-      "version": "0.1.0",
+      "version": "0.5.0",
       "license": "MIT",
+      "os": [
+        "darwin"
+      ],
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "zod": "^3.25.0"

@@ -9,6 +9,18 @@ akc init                    # teach the AI agents on this machine to use it
 
 > macOS only (uses the `security` command). Node.js 18+.
 
+### Supply-chain hardening (optional)
+
+`aikeychain` ships an `npm-shrinkwrap.json` so `npm install -g` resolves the exact,
+integrity-checked dependency tree that was tested and published — not a floating
+range. This package defines no `preinstall`/`postinstall`/`prepare` scripts, so you
+can additionally install with scripts disabled for defense-in-depth against a
+compromised transitive dependency:
+
+```bash
+npm install -g aikeychain --ignore-scripts
+```
+
 ## For AI agents (Claude, Codex, …)
 
 Run **`akc init`** once. It sets up **every AI session on this machine** (AI KeyChain is not a per-project tool):
