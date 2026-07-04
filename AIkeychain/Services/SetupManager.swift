@@ -45,7 +45,25 @@ enum SetupManager {
         if !sessionToken.isEmpty {
             content += "\nexport AIKEYCHAIN_SESSION_TOKEN=\(sessionToken)"
         }
-        try content.write(toFile: proxyEnvPath, atomically: true, encoding: .utf8)
+        try writeProxyEnvFile(at: proxyEnvPath, content: content)
+    }
+
+    /// プロキシ設定ファイルを 0600 (rw-------) で書き込む
+    ///
+    /// このファイルには `AIKEYCHAIN_SESSION_TOKEN`（ループバックプロキシの唯一の
+    /// 認証情報。ユーザーの Keychain API キーで署名を行う）が含まれる。
+    /// umask 022 環境ではデフォルト 0644 (world-readable) になり、macOS では
+    /// 全ローカルアカウントが group `staff` に属するため、他アカウントから読み取れて
+    /// しまう。書き込み後に明示的に 0600 を適用してトークンの漏洩を防ぐ。
+    ///
+    /// `String.write(atomically:true)` は一時ファイルへ書いて rename するため、
+    /// mode がリセットされうる。したがって **書き込み後** に chmod する。
+    static func writeProxyEnvFile(at path: String, content: String) throws {
+        try content.write(toFile: path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: path
+        )
     }
 
     /// プロキシ停止時に設定ファイルを削除
