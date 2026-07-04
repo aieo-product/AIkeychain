@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,8 +16,10 @@ import {
   BLOCK_BEGIN,
   BLOCK_END,
   CODEX_BLOCK_BEGIN,
+  CODEX_BLOCK_END,
   AGENT_INSTRUCTIONS,
 } from '../src/agent-setup.js';
+import { launchArgv, registrationMatches } from '../src/init.js';
 
 const AKC = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'akc.js');
 // The real, resolvable launch info for this checkout — used to assert that
@@ -103,17 +105,53 @@ function runAkc(args, opts = {}) {
   );
 }
 
-test('upsertCodexBlock appends once and is idempotent (never reformats existing TOML)', () => {
+test('upsertCodexBlock appends once and is idempotent when the launch is identical', () => {
   const existing = `[mcp_servers.node_repl]\ncommand = "node"\n`;
   const first = upsertCodexBlock(existing);
   assert.equal(first.action, 'created');
-  assert.ok(first.content.startsWith(existing)); // existing config untouched
+  assert.ok(first.content.startsWith(existing)); // existing config preserved
   assert.ok(first.content.includes(CODEX_BLOCK_BEGIN));
   assert.ok(first.content.includes('[mcp_servers.aikeychain]'));
-  // re-run leaves it completely unchanged
+  // re-run with the same launch re-renders in place → no change
   const second = upsertCodexBlock(first.content);
   assert.equal(second.action, 'unchanged');
   assert.equal(second.content, first.content);
+});
+
+test('upsertCodexBlock UPDATES a stale bare `akc` managed block to absolute paths (#131)', () => {
+  // The exact issue-#131 population: a machine that already ran the OLD init,
+  // so its config.toml holds a managed block with the bare `command = "akc"`.
+  // Re-running init MUST refresh it — the old no-op behavior left it broken.
+  const stale =
+    `[mcp_servers.node_repl]\ncommand = "node"\n\n` +
+    `${CODEX_BLOCK_BEGIN}\n[mcp_servers.aikeychain]\ncommand = "akc"\nargs = ["mcp"]\n${CODEX_BLOCK_END}\n`;
+  const launch = { nodeBin: '/opt/homebrew/bin/node', akcJs: '/pkg/bin/akc.js' };
+  const { content, action } = upsertCodexBlock(stale, launch);
+  assert.equal(action, 'updated');
+  assert.ok(content.includes('command = "/opt/homebrew/bin/node"'));
+  assert.ok(content.includes('args = ["/pkg/bin/akc.js", "mcp"]'));
+  assert.ok(!content.includes('command = "akc"'));
+  assert.ok(content.includes('[mcp_servers.node_repl]')); // surrounding TOML preserved
+  assert.equal(content.split(CODEX_BLOCK_BEGIN).length - 1, 1); // still exactly one block
+  // stable on a second identical run
+  assert.equal(upsertCodexBlock(content, launch).action, 'unchanged');
+});
+
+test('upsertCodexBlock UPDATES a stale absolute path (e.g. after a Node upgrade) to the new one (#131)', () => {
+  const old = { nodeBin: '/nvm/v18/bin/node', akcJs: '/nvm/v18/pkg/bin/akc.js' };
+  const seeded = upsertCodexBlock('', old).content;
+  const fresh = { nodeBin: '/nvm/v22/bin/node', akcJs: '/nvm/v22/pkg/bin/akc.js' };
+  const { content, action } = upsertCodexBlock(seeded, fresh);
+  assert.equal(action, 'updated');
+  assert.ok(content.includes('/nvm/v22/bin/node'));
+  assert.ok(!content.includes('/nvm/v18/'));
+});
+
+test('upsertCodexBlock refuses to edit a dangling BEGIN marker (never truncates user TOML)', () => {
+  const broken = `[keep.me]\nx = 1\n\n${CODEX_BLOCK_BEGIN}\n[mcp_servers.aikeychain]\ncommand = "akc"\n`;
+  const { content, action } = upsertCodexBlock(broken, { nodeBin: '/n', akcJs: '/a' });
+  assert.equal(action, 'malformed');
+  assert.equal(content, broken);
 });
 
 test('upsertCodexBlock refuses to append when a marker-less aikeychain table already exists', () => {
@@ -170,6 +208,32 @@ test('shellQuote leaves plain paths bare and single-quotes paths with spaces/spe
   assert.equal(shellQuote("/it's/here"), "'/it'\\''s/here'");
 });
 
+test('renderCodexBlock escapes control characters (newline/tab) in a TOML basic string', () => {
+  const launch = { nodeBin: '/n\tode\npath', akcJs: '/tmp/akc.js' };
+  const block = renderCodexBlock(launch);
+  assert.ok(block.includes('command = "/n\\tode\\npath"'));
+  // no raw control char leaked into the TOML
+  assert.ok(!/command = "[^"]*\t/.test(block));
+});
+
+test('launchArgv uses absolute node + akc.js when launch resolves, bare `akc` otherwise', () => {
+  assert.deepEqual(launchArgv({ nodeBin: '/n', akcJs: '/a/akc.js' }), ['/n', '/a/akc.js', 'mcp']);
+  assert.deepEqual(launchArgv(null), ['akc', 'mcp']);
+});
+
+test('registrationMatches: a `claude mcp get` output matches only when every launch token is present', () => {
+  const absolute = ['/opt/homebrew/bin/node', '/pkg/bin/akc.js', 'mcp'];
+  // A matching absolute registration → keep it (no replace).
+  const good = 'aikeychain:\n  Command: /opt/homebrew/bin/node\n  Args: /pkg/bin/akc.js mcp\n';
+  assert.equal(registrationMatches(good, absolute), true);
+  // The OLD bare registration → mismatch → must be replaced.
+  const bare = 'aikeychain:\n  Command: akc\n  Args: mcp\n';
+  assert.equal(registrationMatches(bare, absolute), false);
+  // A STALE absolute path from an old Node version dir → mismatch → replace.
+  const stale = 'aikeychain:\n  Command: /nvm/v18/bin/node\n  Args: /nvm/v18/pkg/bin/akc.js mcp\n';
+  assert.equal(registrationMatches(stale, absolute), false);
+});
+
 test('akc init --print previews machine-wide setup without writing, using absolute paths (#131)', async () => {
   const r = await runAkc(['init', '--print']);
   assert.equal(r.code, 0);
@@ -212,6 +276,29 @@ test('akc init (default machine-wide) writes ~/.claude + ~/.codex under HOME, id
   const codexToml2 = await readFile(join(home, '.codex', 'config.toml'), 'utf8');
   assert.equal(claudeMd2.split(BLOCK_BEGIN).length - 1, 1);
   assert.equal(codexToml2.split(CODEX_BLOCK_BEGIN).length - 1, 1);
+});
+
+test('akc init upgrades an OLD bare-`akc` Codex block to absolute paths on re-run (#131)', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'akc-home-'));
+  const env = { ...process.env, HOME: home };
+  // Simulate a machine that ran the OLD init: a managed Codex block with the
+  // bare, PATH-dependent `command = "akc"`.
+  const codexDir = join(home, '.codex');
+  await mkdir(codexDir, { recursive: true });
+  const staleBlock =
+    `${CODEX_BLOCK_BEGIN}\n[mcp_servers.aikeychain]\ncommand = "akc"\nargs = ["mcp"]\n${CODEX_BLOCK_END}\n`;
+  await writeFile(join(codexDir, 'config.toml'), `[mcp_servers.keep]\ncommand = "x"\n\n${staleBlock}`);
+
+  const r = await runAkc(['init', '--no-register'], { env });
+  assert.equal(r.code, 0);
+  const codexToml = await readFile(join(codexDir, 'config.toml'), 'utf8');
+  assert.ok(REAL_LAUNCH, 'this checkout should resolve a real launch');
+  // The stale bare command is gone, replaced by the absolute paths.
+  assert.ok(!codexToml.includes('command = "akc"'));
+  assert.ok(codexToml.includes(`command = "${REAL_LAUNCH.nodeBin}"`));
+  assert.ok(codexToml.includes(`args = ["${REAL_LAUNCH.akcJs}", "mcp"]`));
+  assert.ok(codexToml.includes('[mcp_servers.keep]')); // unrelated table preserved
+  assert.equal(codexToml.split(CODEX_BLOCK_BEGIN).length - 1, 1); // still one block
 });
 
 test('akc init --local writes cwd CLAUDE.md + AGENTS.md, preserving existing content', async () => {

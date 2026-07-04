@@ -140,7 +140,20 @@ export function shellQuote(value) {
 
 /** Escape a value for inclusion in a TOML basic string ("..."). */
 function tomlEscape(value) {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const named = { '\\': '\\\\', '"': '\\"', '\b': '\\b', '\t': '\\t', '\n': '\\n', '\f': '\\f', '\r': '\\r' };
+  let out = '';
+  for (const ch of value) {
+    const code = ch.codePointAt(0);
+    if (named[ch]) {
+      out += named[ch];
+    } else if (code < 0x20 || code === 0x7f) {
+      // Other control chars are illegal literally in a TOML basic string.
+      out += `\\u${code.toString(16).padStart(4, '0')}`;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
 }
 
 // --- Codex MCP server block (~/.codex/config.toml) ---
@@ -171,15 +184,28 @@ export function renderCodexBlock(launch) {
 }
 
 /**
- * Ensure the Codex MCP block is present in a config.toml. Append-only and
- * idempotent: if the marker is already there it leaves the file completely
- * untouched (never reformats the user's hand-written TOML).
- * Returns { content, action: 'created' | 'unchanged' }.
+ * Ensure the Codex MCP block is present — and current — in a config.toml.
+ * Idempotent and re-render-on-change:
+ *  - no block                → append one (`created`)
+ *  - our managed block exists → re-render in place, so a stale bare-`akc` or a
+ *    stale absolute path (e.g. after a Node upgrade) gets refreshed to the
+ *    current `launch` (`updated`, or `unchanged` if already identical). This
+ *    matches the CLAUDE.md side (`upsertDelimitedBlock`) — the old behavior of
+ *    leaving an existing block untouched meant re-`akc init` on the very
+ *    machines issue #131 targets was a no-op.
+ *  - unbalanced markers       → refuse to edit (`malformed`)
+ *  - hand-written aikeychain table without our markers → refuse (`conflict`)
+ * Surrounding TOML is preserved.
+ * Returns { content, action: 'created' | 'updated' | 'unchanged' | 'malformed' | 'conflict' }.
  */
 export function upsertCodexBlock(content, launch) {
   const existing = content ?? '';
-  if (existing.includes(CODEX_BLOCK_BEGIN)) {
-    return { content: existing, action: 'unchanged' };
+  const fullBlock = renderCodexBlock(launch);
+  // If our managed markers are present (in any balance), let the delimited-block
+  // upsert re-render/canonicalize them. It also reports 'malformed' on a
+  // dangling marker, so we never truncate the user's TOML.
+  if (existing.includes(CODEX_BLOCK_BEGIN) || existing.includes(CODEX_BLOCK_END)) {
+    return upsertDelimitedBlock(existing, CODEX_BLOCK_BEGIN, CODEX_BLOCK_END, fullBlock);
   }
   // A hand-written [mcp_servers.aikeychain] table (without our markers) would
   // become a duplicate table key — invalid TOML — if we appended ours. Refuse
@@ -188,5 +214,5 @@ export function upsertCodexBlock(content, launch) {
     return { content: existing, action: 'conflict' };
   }
   const sep = existing.length === 0 ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
-  return { content: `${existing}${sep}${renderCodexBlock(launch)}\n`, action: 'created' };
+  return { content: `${existing}${sep}${fullBlock}\n`, action: 'created' };
 }

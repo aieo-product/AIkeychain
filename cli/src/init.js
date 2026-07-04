@@ -60,25 +60,63 @@ async function claudeMcpRegistered() {
   }
 }
 
-async function registerClaudeMcp(scope, launch) {
+/** Build the launch argv (`command`, then args) for a `claude mcp add -- ...`. */
+export function launchArgv(launch) {
   // Prefer an absolute-path launch (issue #131): PATH-independent, works from
-  // GUI apps / cron / launchd and survives Node version switches. Fall back
-  // to the bare `akc` command only when resolution failed.
-  const launchArgs = launch ? [launch.nodeBin, launch.akcJs, 'mcp'] : ['akc', 'mcp'];
-  // Add first. If that fails, it is almost always "already registered" — verify
-  // and leave the existing one in place. Never remove a working registration
-  // (a transient re-add failure must not leave the user with nothing).
+  // GUI apps / cron / launchd and survives Node version switches. Fall back to
+  // the bare `akc` command only when resolution failed.
+  return launch ? [launch.nodeBin, launch.akcJs, 'mcp'] : ['akc', 'mcp'];
+}
+
+/**
+ * Does an existing `claude mcp get aikeychain` output already describe the
+ * desired launch? Every launch token (the node binary, akc.js and `mcp`, or
+ * bare `akc mcp`) must appear as a substring. The node bin + akc.js are
+ * distinctive absolute paths, so a stale registration (bare `akc`, or an
+ * absolute path from an old Node version dir) fails to match and gets replaced.
+ */
+export function registrationMatches(getOutput, argv) {
+  return argv.every((token) => getOutput.includes(token));
+}
+
+/** Read the current `claude mcp get aikeychain` output, or null if unregistered / no CLI. */
+async function claudeMcpGet() {
   try {
-    await pExecFile(
-      'claude',
-      ['mcp', 'add', '--scope', scope, 'aikeychain', '--', ...launchArgs],
-      { timeout: 15000 }
-    );
+    const { stdout } = await pExecFile('claude', ['mcp', 'get', 'aikeychain'], { timeout: 15000 });
+    return stdout;
+  } catch {
+    return null;
+  }
+}
+
+async function registerClaudeMcp(scope, launch) {
+  const argv = launchArgv(launch);
+
+  // Inspect the current registration. If it already matches the desired launch,
+  // keep it. If it exists but differs (bare `akc`, or a stale absolute path
+  // after a Node upgrade — the exact population issue #131 targets), it must be
+  // replaced: `claude mcp add` refuses to overwrite an existing name, so remove
+  // first, then re-add.
+  const current = await claudeMcpGet();
+  if (current !== null && registrationMatches(current, argv)) return; // already current
+  if (current !== null) {
+    try {
+      await pExecFile('claude', ['mcp', 'remove', '--scope', scope, 'aikeychain'], { timeout: 15000 });
+    } catch {
+      // Removal can fail if the entry lives in a different scope; try add anyway.
+    }
+  }
+
+  try {
+    await pExecFile('claude', ['mcp', 'add', '--scope', scope, 'aikeychain', '--', ...argv], {
+      timeout: 15000,
+    });
     return;
   } catch {
-    // fall through to verification
+    // Add failed. Never leave the user unregistered: if *some* registration
+    // still exists (e.g. remove failed and add hit "already exists"), keep it.
   }
-  if (await claudeMcpRegistered()) return; // already there — keep it
+  if (await claudeMcpRegistered()) return;
   throw new Error('claude mcp add failed and aikeychain is not registered');
 }
 
@@ -163,10 +201,8 @@ export async function cmdInit(argv) {
 
 /** Render the `claude mcp add ...` command as shell-quoted text for display/copy-paste. */
 function claudeAddPreview(scope, launch) {
-  const launchArgs = launch
-    ? `${shellQuote(launch.nodeBin)} ${shellQuote(launch.akcJs)} mcp`
-    : 'akc mcp';
-  return `claude mcp add --scope ${scope} aikeychain -- ${launchArgs}`;
+  const args = launchArgv(launch).map(shellQuote).join(' ');
+  return `claude mcp add --scope ${scope} aikeychain -- ${args}`;
 }
 
 async function registerClaude(out, scope, launch) {
