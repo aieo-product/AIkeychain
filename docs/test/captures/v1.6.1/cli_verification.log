@@ -1,0 +1,59 @@
+# AI KeyChain CLI 動作確認 (main b253597) 2026-07-06
+## 1. version
+akc 0.5.0
+
+## 2. help(抜粋)
+akc — AI KeyChain CLI (secret references, key management, MCP server)
+
+Usage:
+  akc init [--print] [--no-register] [--local]
+  akc run [--dry-run] -- <command> [args...]
+  akc list
+  akc check <KEY>
+  akc get <KEY> [--reveal]
+  akc set <KEY> [--manual]
+  akc delete <KEY>
+  akc doctor
+  akc guide
+  akc mcp
+  akc version
+  akc help
+
+Commands:
+  init     Set up agent discoverability machine-wide: write ~/.claude/CLAUDE.md
+
+## 3. ダミーキー登録
+  登録OK
+
+## 4. list (キー名のみ)
+  AIKC_VERIFY_DUMMY  [app]
+  → ダミーキーが名前で一覧表示（値なし）
+
+## 5. check
+✅ AIKC_VERIFY_DUMMY exists (AI KeyChain store)
+
+## 6. get (参照返却/値は出さない)
+keychain://AIKC_VERIFY_DUMMY
+
+## 7. run --dry-run (マスク)
+  ✅ AIKC_VERIFY_DUMMY = ****** (30 chars) (from keychain://AIKC_VERIFY_DUMMY)
+
+Resolved: 1, Failed: 0
+
+## 8. run 実行(子にのみ注入・argvに値が出ない)
+  child受領 len=30
+  ps に値が出た数(自grep込み)=6
+
+## 9. doctor
+  ✅ platform: macOS
+  ✅ keychain access: 33 key(s) visible (18 in AI KeyChain store)
+  ✅ duplicate entries: no ambiguous duplicate keychain entries
+  ✅ mcp registration (codex): aikeychain registered with an existing absolute path (PATH-independent)
+  ✅ mcp registration (claude): aikeychain registered with an existing absolute path (PATH-independent)
+  ✅ env references: no keychain:// references in current environment
+  ✅ shell config: 2/2 key(s) in /Users/takehiro/.zshrc resolvable
+  ⚠️  CLOUDFLARE_ACCOUNT_ID: lookup uses -a "$USER" — account attributes are inconsistent; look up by service only (issue #91)
+
+All checks passed.
+
+  cleanup: ダミー削除OK

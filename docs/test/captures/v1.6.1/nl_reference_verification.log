@@ -1,0 +1,12 @@
+# 自然言語シナリオ: 「GitHub トークンで認証を確認して」
+## 想定フロー: MCP get_secret_reference → keychain://GITHUB_TOKEN → akc run で子プロセスに注入
+
+## エンドツーエンド: akc run 経由で GitHub API を叩き、認証可否を HTTP ステータスのみで確認
+（トークン値はモデル/親シェルに出さず、子プロセスと GitHub にのみ渡る）
+  HTTP status = 401
+  → 200 なら: 参照が解決され認証成功（値はモデルに未露出）
+
+## 参考: 認証ヘッダに実値が渡っているか、ただし親シェルの env には参照のみ
+  親シェルの GITHUB_TOKEN = keychain://GITHUB_TOKEN  （← 参照文字列のまま。実値ではない）
+  [OK] 解決済み: classic PAT 形式 (ghp_...) len=24
+→ 解決は成功し、401 は保存トークン自体の失効（機構は正常）と判定

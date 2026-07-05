@@ -159,7 +159,8 @@ test('run --dry-run masks values and reports counts', async () => {
     BAD: 'keychain://MISSING_KEY',
   });
   assert.equal(r.code, 0);
-  assert.match(r.stdout, /\*{6} \(\d+ chars\)/);
+  assert.match(r.stdout, /\*{8}/); // 固定長マスク
+  assert.doesNotMatch(r.stdout, /\d+ chars/); // 桁数は漏らさない (#115/#123 統一)
   assert.doesNotMatch(r.stdout, /stub-good-value/);
   assert.match(r.stdout, /Resolved: 1, Failed: 1/);
 });

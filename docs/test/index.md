@@ -6,7 +6,27 @@ outline: [2, 3]
 
 AI KeyChain の動作確認テスト結果を掲載しています。
 
-## v1.6.0 最終リリース確認 (最新)
+## v1.6.1 セキュリティ強化 総合確認 (最新)
+
+- [試験仕様書・結果](/test/v1.6.1)
+- GitHub Issue: 監査対応 [#112](https://github.com/aieo-product/AIkeychain/issues/112)〜[#134](https://github.com/aieo-product/AIkeychain/issues/134)、本試験発見 [#135](https://github.com/aieo-product/AIkeychain/issues/135)
+
+| 項目 | 内容 |
+|------|------|
+| 試験日 | 2026-07-06 |
+| Swift ユニット | 139 / 139 PASS |
+| CLI ユニット/統合 | 60 / 60 PASS |
+| CLI コマンド | 9 項目 PASS |
+| 自然言語 / MCP 参照 | 6 項目 PASS |
+| GUI エビデンス | 7 画面 |
+| 判定 | **ALL PASS**（発見1件は同PRで修正、1件は #135 follow-up） |
+
+### 実施内容
+- CLI / 自然言語（MCP）/ GUI の 3 系統で秘密値の非露出導線を実機検証
+- 監査対応（送信者認証・トークン権限・PATH 固定・マスク・キー名検証・MCP 絶対パス化）の動作確認
+- 発見: Node CLI マスク桁数漏洩を修正、My Keys 指紋表示を #135 起票
+
+## v1.6.0 最終リリース確認
 
 - [試験仕様書・結果](/test/v1.6.0-final)
 - GitHub Issue: [#64](https://github.com/aieo-product/AIkeychain/issues/64), [#84](https://github.com/aieo-product/AIkeychain/issues/84)
