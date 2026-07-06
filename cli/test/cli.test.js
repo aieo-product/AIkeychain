@@ -190,6 +190,26 @@ test('check reports store and missing keys', async () => {
   assert.equal(missing.code, 1);
 });
 
+test('check on a store-only key hints the correct `security` form (issue #137)', async () => {
+  // GOOD_KEY exists only under service="com.aieo.aikeychain" account="GOOD_KEY"
+  // (the stub reports it found ONLY for that query, not for the bare -s
+  // GOOD_KEY form). That mismatch is exactly the #137 false-negative: an agent
+  // running `security find-generic-password -s "GOOD_KEY" -w` gets exit 44 and
+  // wrongly concludes the key is unregistered. `akc check` must append a hint
+  // so the correct two-attribute form (or `akc get`) is discoverable.
+  const good = await runAkc(['check', 'GOOD_KEY']);
+  assert.equal(good.code, 0);
+  assert.match(good.stdout, /-s "com\.aieo\.aikeychain" -a "GOOD_KEY"/);
+  assert.match(good.stdout, /akc get GOOD_KEY/);
+
+  // A manual-only key must NOT get the hint — the bare `-s <KEY>` form already
+  // works for it, so the extra line would be noise.
+  const manual = await runAkc(['check', 'MANUAL_KEY']);
+  assert.equal(manual.code, 0);
+  assert.match(manual.stdout, /manual entry/);
+  assert.doesNotMatch(manual.stdout, /security CLI: use/);
+});
+
 test('get prints a reference by default, raw value only with --reveal', async () => {
   const ref = await runAkc(['get', 'GOOD_KEY']);
   assert.equal(ref.code, 0);

@@ -115,6 +115,14 @@ Terminal                                                          API Server
 > the account (the key name), matching exactly how the GUI stores the entry — this
 > avoids the `-a "$USER"` pitfall of stale or duplicate `acct` values.
 
+> **Common AI-agent mistake:** looking up a GUI-stored key with the bare
+> `security find-generic-password -s "API_KEY" -w` (service name only, no `-a`)
+> returns "could not be found" (exit 44). That is **not** proof the key is
+> unregistered — it just means the wrong lookup form was used for a GUI-store
+> key. Use `akc get API_KEY` / `akc check API_KEY` (see [CLI & MCP
+> Server](#cli--mcp-server-npm) below), or the two-attribute `security` form
+> shown above, instead of concluding the key is missing.
+
 ### Proxy Mode
 ```
 Terminal               AI KeyChain Proxy          API Server
@@ -226,6 +234,14 @@ AI 開発では多数の API キーを扱います。多くの開発者はこれ
 | SDK 直接実行 | 可能 | `akc run` 必要 | 可能 |
 | セキュリティレベル | ★☆☆ | ★★☆ | ★★★ |
 | 向いている用途 | シンプルに使いたい | 1Password 方式（`op://` 同等） | セキュリティ重視の環境 |
+
+> **AI エージェントによくある誤り:** GUI ストアに保存したキーを `security
+> find-generic-password -s "API_KEY" -w`（サービス名のみ、`-a` なし）で引くと
+> "could not be found"（exit 44）になりますが、これは**「未登録」の証拠ではありません**。
+> GUI ストアのキーには誤ったルックアップ方法を使っているだけです。
+> `akc get API_KEY` / `akc check API_KEY`（後述の「CLI & MCP サーバー」）か、
+> `security find-generic-password -s "com.aieo.aikeychain" -a "API_KEY" -w`
+> （service + account の両方を指定する形）を使ってください。
 
 ### インストール
 

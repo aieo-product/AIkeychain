@@ -31,9 +31,25 @@ const REAL_LAUNCH = resolveAkcLaunch();
 test('AGENT_INSTRUCTIONS teaches the core rules', () => {
   assert.match(AGENT_INSTRUCTIONS, /keychain:\/\//);
   assert.match(AGENT_INSTRUCTIONS, /akc run/);
-  assert.match(AGENT_INSTRUCTIONS, /-s "ENV_VAR_NAME" -w/);
-  assert.match(AGENT_INSTRUCTIONS, /do NOT pin `-a "\$USER"`/);
   assert.match(AGENT_INSTRUCTIONS, /usage_guide/);
+});
+
+test('AGENT_INSTRUCTIONS recommends `akc get` and presents both security lookup forms (#137)', () => {
+  // Root cause of #137: the old guidance taught a single `-s ENV_VAR_NAME -w`
+  // form. That form only works for [manual] keys; for AI KeyChain GUI ("app"
+  // store) keys it returns exit 44, so agents falsely concluded the key was
+  // unregistered. `akc get` handles both stores and must be the primary
+  // recommendation; if raw `security` is shown, both forms must be present
+  // and labeled, with a warning that exit 44 on the bare -s form is not proof
+  // of "unregistered".
+  assert.match(AGENT_INSTRUCTIONS, /akc get <KEY>/);
+  assert.match(AGENT_INSTRUCTIONS, /-s "com\.aieo\.aikeychain" -a "<KEY>" -w/); // [app] store form
+  assert.match(AGENT_INSTRUCTIONS, /-s "<KEY>" -w/); // [manual] form
+  assert.match(AGENT_INSTRUCTIONS, /exit 44/);
+  assert.match(AGENT_INSTRUCTIONS, /akc check <KEY>/);
+  assert.match(AGENT_INSTRUCTIONS, /do NOT pin[\s\S]*-a "\$USER"/);
+  // The bare single-service form must no longer be presented as the sole method.
+  assert.doesNotMatch(AGENT_INSTRUCTIONS, /-s "ENV_VAR_NAME" -w/);
 });
 
 test('upsertManagedBlock creates a block in empty content', () => {

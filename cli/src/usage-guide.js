@@ -15,11 +15,20 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
    - Launch tools through akc:                  akc run -- <command>
    - akc resolves the references from the macOS Keychain and injects the real
      values ONLY into the child process. The parent shell never sees them.
-3. When reading a key manually with the security CLI, look it up by SERVICE
-   NAME ONLY — do NOT pin the account with -a "$USER":
-     security find-generic-password -s "ENV_VAR_NAME" -w
-   Account attributes are inconsistent across entries; pinning -a can return a
-   stale/invalid duplicate (AIkeychain issue #91).
+3. To read a key manually, prefer \`akc get <KEY>\`: it checks both stores and
+   never exposes the value beyond the child process. If you must use the raw
+   security CLI directly, use the form that matches where the key lives:
+     [app] store keys (saved via the AI KeyChain GUI):
+       security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w
+     [manual] keys (registered by hand) — service name only, do NOT pin the
+     account with -a "$USER":
+       security find-generic-password -s "<KEY>" -w
+   ⚠️ The bare -s "<KEY>" form (no -a) returns "could not be found" (exit 44)
+   for [app] store keys — that is NOT proof the key is unregistered. Confirm
+   with \`akc check <KEY>\` / \`akc get <KEY>\` before concluding a key is
+   missing. (Account attributes on [manual] entries are inconsistent across
+   entries; pinning -a there can return a stale/invalid duplicate — AIkeychain
+   issue #91.)
 4. To save/update a key, overwrite with -U so no duplicate entries are created:
      security add-generic-password -s "KEY_NAME" -a "KEY_NAME" -w "<value>" -U
    (prefer \`akc set KEY_NAME\`: the value is read from a hidden prompt or stdin
