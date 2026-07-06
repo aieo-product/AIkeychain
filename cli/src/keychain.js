@@ -236,6 +236,9 @@ export async function listAmbiguousDuplicates() {
   return findAmbiguousDuplicates(parseDump(r.stdout));
 }
 
-export function maskValue(value) {
-  return `****** (${value.length} chars)`;
+// 固定長マスク。桁数（value.length）は出さない: 正確な長さは総当たりコストを
+// 下げる・キー種別/世代を識別できるメタデータで、端末スクロールバックや
+// エビデンスキャプチャに残る（scripts/akc は #115/#123 で対応済み。CLI 側も統一）。
+export function maskValue(_value) {
+  return '********';
 }

@@ -55,8 +55,14 @@ test('MANUAL_NAME_PATTERN accepts env-var names and rejects bundle ids', () => {
   assert.ok(!MANUAL_NAME_PATTERN.test('lowercase_token'));
 });
 
-test('maskValue never includes the value', () => {
-  assert.equal(maskValue('super-secret'), '****** (12 chars)');
+test('maskValue never includes the value nor its length', () => {
+  // 固定長マスク: 値そのものも、正確な桁数も漏らさない (#115/#123 と統一)
+  assert.equal(maskValue('super-secret'), '********');
+  assert.equal(maskValue('a'), '********');
+  assert.equal(maskValue('a-much-longer-secret-value-0123456789'), '********');
+  // 桁数が出力に含まれないこと
+  assert.doesNotMatch(maskValue('super-secret'), /\d/);
+  assert.doesNotMatch(maskValue('super-secret'), /chars/);
 });
 
 test('findAmbiguousDuplicates flags same-service multi-acct entries (issue #91)', () => {
