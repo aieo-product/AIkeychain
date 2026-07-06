@@ -20,10 +20,12 @@ value into \`.env\`, source code, logs, or commits.
   export OPENAI_API_KEY=keychain://OPENAI_API_KEY
   akc run -- <command>            # resolves keychain:// refs into the child process only
   \`\`\`
-- Read a key manually — prefer \`akc get <KEY>\`: it checks both stores (AI
-  KeyChain GUI + manually-registered) and never exposes the value beyond the
-  child process. If you must use the raw \`security\` CLI, pick the form that
-  matches where the key lives:
+- Check / read a key — prefer \`akc get <KEY>\`: it checks both stores (AI
+  KeyChain GUI + manually-registered) and by default prints only the
+  \`keychain://\` reference (never the value). Add \`--reveal\` only when you
+  truly need the raw value on stdout; to inject it into a process instead, use
+  \`akc run -- <command>\`. If you must use the raw \`security\` CLI, pick the
+  form that matches where the key lives:
   \`\`\`bash
   # [app] store keys (saved via the AI KeyChain GUI):
   security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w

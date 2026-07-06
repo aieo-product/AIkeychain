@@ -130,7 +130,7 @@ async function cmdCheck(name) {
       // Store-only key: the bare `security -s <KEY> -w` form (no -a) returns
       // exit 44 for these — a false "not registered" signal (issue #137).
       process.stdout.write(
-        `   ↳ security CLI: use -s "${GUI_SERVICE}" -a "${name}"  (or: akc get ${name})\n`
+        `   ↳ security CLI: use -s "${GUI_SERVICE}" -a "${name}" -w  (or: akc get ${name})\n`
       );
     }
     return 0;

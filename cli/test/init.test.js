@@ -266,6 +266,14 @@ test('akc init --print previews machine-wide setup without writing, using absolu
   assert.match(claudeLine, /\bmcp$/);
   assert.ok(r.stdout.includes(`command = "${REAL_LAUNCH.nodeBin}"`));
   assert.ok(r.stdout.includes(`args = ["${REAL_LAUNCH.akcJs}", "mcp"]`));
+  // End-to-end: the rendered template shows BOTH security lookup forms
+  // (store + manual) and recommends `akc get`, so the #137 correction is
+  // guaranteed at the CLI-output level, not just in the AGENT_INSTRUCTIONS
+  // constant.
+  assert.match(r.stdout, /-s "com\.aieo\.aikeychain" -a "<KEY>" -w/); // [app] store form
+  assert.match(r.stdout, /-s "<KEY>" -w/); // [manual] form
+  assert.match(r.stdout, /akc get <KEY>/);
+  assert.doesNotMatch(r.stdout, /-s "ENV_VAR_NAME" -w/); // old sole-method form is gone
 });
 
 test('akc init (default machine-wide) writes ~/.claude + ~/.codex under HOME, idempotently', async () => {

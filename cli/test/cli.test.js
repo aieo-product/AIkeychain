@@ -199,7 +199,7 @@ test('check on a store-only key hints the correct `security` form (issue #137)',
   // so the correct two-attribute form (or `akc get`) is discoverable.
   const good = await runAkc(['check', 'GOOD_KEY']);
   assert.equal(good.code, 0);
-  assert.match(good.stdout, /-s "com\.aieo\.aikeychain" -a "GOOD_KEY"/);
+  assert.match(good.stdout, /-s "com\.aieo\.aikeychain" -a "GOOD_KEY" -w/);
   assert.match(good.stdout, /akc get GOOD_KEY/);
 
   // A manual-only key must NOT get the hint — the bare `-s <KEY>` form already

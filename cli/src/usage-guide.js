@@ -15,8 +15,10 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
    - Launch tools through akc:                  akc run -- <command>
    - akc resolves the references from the macOS Keychain and injects the real
      values ONLY into the child process. The parent shell never sees them.
-3. To read a key manually, prefer \`akc get <KEY>\`: it checks both stores and
-   never exposes the value beyond the child process. If you must use the raw
+3. To check/read a key, prefer \`akc get <KEY>\`: it checks both stores and by
+   default prints only the keychain:// reference (never the value). Add
+   --reveal only when you truly need the raw value on stdout; to inject it into
+   a process instead, use \`akc run -- <command>\`. If you must use the raw
    security CLI directly, use the form that matches where the key lives:
      [app] store keys (saved via the AI KeyChain GUI):
        security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w
