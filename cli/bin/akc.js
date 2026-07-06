@@ -12,6 +12,7 @@ import {
   deleteKey,
   maskValue,
   KeychainError,
+  GUI_SERVICE,
 } from '../src/keychain.js';
 import { cmdRun } from '../src/run.js';
 import { runDoctor, formatReport } from '../src/doctor.js';
@@ -125,6 +126,13 @@ async function cmdCheck(name) {
       .filter(Boolean)
       .join(', ');
     process.stdout.write(`✅ ${name} exists (${stores})\n`);
+    if (result.app && !result.manual) {
+      // Store-only key: the bare `security -s <KEY> -w` form (no -a) returns
+      // exit 44 for these — a false "not registered" signal (issue #137).
+      process.stdout.write(
+        `   ↳ security CLI: use -s "${GUI_SERVICE}" -a "${name}" -w  (or: akc get ${name})\n`
+      );
+    }
     return 0;
   }
   process.stdout.write(`❌ ${name} not found in Keychain\n`);
