@@ -2,6 +2,14 @@
 
 All notable changes to AI KeyChain are documented in this file.
 
+## npm `aikeychain@0.5.1` - 2026-07-09
+
+Republish carrying fixes merged to `main` after the `0.5.0` release.
+
+### Fixed
+- **CLI mask leak** — `cli/src/keychain.js` `maskValue` printed `****** (N chars)`, leaking the secret's character count. Now emits a fixed-length `********` mask, matching the `scripts/akc` behavior fixed earlier under #115/#123 (#136)
+- **Manual key-retrieval guidance** — `akc init` template, MCP `usage_guide`, and README taught only the `security find-generic-password -s "ENV_VAR_NAME" -w` form, which returns exit 44 for keys stored via the AI KeyChain GUI (`service=com.aieo.aikeychain`) and falsely suggested the key was missing. `akc get <KEY>` is now the primary recommendation everywhere; both `security` lookup forms are documented with an explicit warning that exit 44 on the bare form is not proof of "unregistered" (#137, #138)
+
 ## [1.6.1] - 2026-05-13
 
 ### Fixed
