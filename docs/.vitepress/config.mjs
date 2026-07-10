@@ -5,6 +5,19 @@ export default defineConfig({
   description: "AI開発者のための macOS ネイティブ鍵管理アプリ - 設計書",
   lang: 'ja-JP',
   base: '/AIkeychain/',
+  ignoreDeadLinks: [
+    // .log エビデンスは docs/public/ 配下から同一 URL で配信される（dead-link チェッカーは public/ を参照しないため除外指定）
+    '/test/captures/v1.6.0-secretref-e2e/akc_e2e_test.log',
+    '/test/captures/v1.6.1/cli_verification.log',
+    '/test/captures/v1.6.1/nl_reference_verification.log',
+  ],
+  vite: {
+    build: {
+      // esbuild 0.28 は vitepress 1.6 デフォルトのブラウザターゲット群への
+      // destructuring 変換を未サポート（"not supported yet" でビルド失敗）
+      target: 'es2020',
+    },
+  },
   themeConfig: {
     nav: [
       { text: 'ホーム', link: '/' },
