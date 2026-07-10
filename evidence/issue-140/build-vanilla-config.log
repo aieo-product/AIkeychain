@@ -1,0 +1,29 @@
+
+> aikeychain-docs@1.0.0 docs:build
+> vitepress build docs
+
+
+  vitepress v1.6.4
+
+- building client + server bundles...
+
+
+(!) Found dead link /test/captures/v1.6.0-secretref-e2e/akc_e2e_test.log in file test/v1.6.0-final.md
+(!) Found dead link /test/captures/v1.6.1/cli_verification.log in file test/v1.6.1.md
+(!) Found dead link /test/captures/v1.6.1/nl_reference_verification.log in file test/v1.6.1.md
+
+If this is expected, you can disable this check via config. Refer: https://vitepress.dev/reference/site-config#ignoredeadlinks
+
+✗ Build failed in 889ms
+[31m✖[0m building client + server bundles...
+build error:
+[vitepress] 3 dead link(s) found.
+[vitepress] 3 dead link(s) found.
+    at Object.renderStart (file:///Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/vitepress/dist/node/chunk-D3CUZ4fa.js:45027:15)
+    at Object.handler (file:///Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:46688:15)
+    at file:///Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/rollup/dist/es/shared/node-entry.js:22967:40
+    at async Promise.all (index 0)
+    at async PluginDriver.hookParallel (file:///Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/rollup/dist/es/shared/node-entry.js:22877:9)
+    at async Bundle.generate (file:///Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/rollup/dist/es/shared/node-entry.js:20991:13)
+    at async file:///Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/rollup/dist/es/shared/node-entry.js:23954:27
+    at async catchUnfinishedHookActions (file:///Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/rollup/dist/es/shared/node-entry.js:23321:16)

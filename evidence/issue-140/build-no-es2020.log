@@ -1,0 +1,63 @@
+
+> aikeychain-docs@1.0.0 docs:build
+> vitepress build docs
+
+
+  vitepress v1.6.4
+
+- building client + server bundles...
+✗ Build failed in 883ms
+[31m✖[0m building client + server bundles...
+build error:
+[vite:esbuild-transpile] Transform failed with 2 errors:
+assets/app.!~{001}~.js:24:10: ERROR: Transforming destructuring to the configured target environment ("chrome87", "edge88", "es2020", "firefox78", "safari14" + 2 overrides) is not supported yet
+assets/app.!~{001}~.js:97:20: ERROR: Transforming destructuring to the configured target environment ("chrome87", "edge88", "es2020", "firefox78", "safari14" + 2 overrides) is not supported yet
+file: assets/app.!~{001}~.js:24:10
+
+Transforming destructuring to the configured target environment ("chrome87", "edge88", "es2020", "firefox78", "safari14" + 2 overrides) is not supported yet
+22 |    name: "VitePressApp",
+23 |    setup() {
+24 |      const { site, lang, dir } = useData();
+   |            ^
+25 |      onMounted(() => {
+26 |        watchEffect(() => {
+
+Transforming destructuring to the configured target environment ("chrome87", "edge88", "es2020", "firefox78", "safari14" + 2 overrides) is not supported yet
+95 |  }
+96 |  if (inBrowser) {
+97 |    createApp().then(({ app, router, data }) => {
+   |                      ^
+98 |      router.go().then(() => {
+99 |        useUpdateHead(router.route, data.site);
+
+[vite:esbuild-transpile] Transform failed with 2 errors:
+assets/app.!~{001}~.js:24:10: ERROR: Transforming destructuring to the configured target environment ("chrome87", "edge88", "es2020", "firefox78", "safari14" + 2 overrides) is not supported yet
+assets/app.!~{001}~.js:97:20: ERROR: Transforming destructuring to the configured target environment ("chrome87", "edge88", "es2020", "firefox78", "safari14" + 2 overrides) is not supported yet
+file: assets/app.!~{001}~.js:24:10
+
+Transforming destructuring to the configured target environment ("chrome87", "edge88", "es2020", "firefox78", "safari14" + 2 overrides) is not supported yet
+22 |    name: "VitePressApp",
+23 |    setup() {
+24 |      const { site, lang, dir } = useData();
+   |            ^
+25 |      onMounted(() => {
+26 |        watchEffect(() => {
+
+Transforming destructuring to the configured target environment ("chrome87", "edge88", "es2020", "firefox78", "safari14" + 2 overrides) is not supported yet
+95 |  }
+96 |  if (inBrowser) {
+97 |    createApp().then(({ app, router, data }) => {
+   |                      ^
+98 |      router.go().then(() => {
+99 |        useUpdateHead(router.route, data.site);
+
+    at failureErrorWithLog (/Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/esbuild/lib/main.js:1748:15)
+    at /Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/esbuild/lib/main.js:1017:50
+    at responseCallbacks.<computed> (/Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/esbuild/lib/main.js:884:9)
+    at handleIncomingPacket (/Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/esbuild/lib/main.js:939:12)
+    at Socket.readFromStdout (/Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-worktrees/issue-140/node_modules/esbuild/lib/main.js:862:7)
+    at Socket.emit (node:events:508:28)
+    at addChunk (node:internal/streams/readable:563:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:514:3)
+    at Readable.push (node:internal/streams/readable:394:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
