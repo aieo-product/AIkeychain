@@ -1,0 +1,18 @@
+
+> aikeychain-docs@1.0.0 docs:build
+> vitepress build docs
+
+
+  vitepress v1.6.4
+
+- building client + server bundles...
+[32m✓[0m building client + server bundles...
+- rendering pages...
+[32m✓[0m rendering pages...
+build complete in 1.41s.
+
+--- dist/test/captures verification ---
+./docs/.vitepress/dist/test/captures/v1.6.1/cli_verification.log
+./docs/.vitepress/dist/test/captures/v1.6.1/nl_reference_verification.log
+./docs/.vitepress/dist/test/captures/v1.6.0-secretref-e2e/akc_e2e_test.log
+(3 files confirmed present)
