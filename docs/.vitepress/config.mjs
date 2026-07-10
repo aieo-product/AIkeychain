@@ -5,6 +5,13 @@ export default defineConfig({
   description: "AI開発者のための macOS ネイティブ鍵管理アプリ - 設計書",
   lang: 'ja-JP',
   base: '/AIkeychain/',
+  vite: {
+    build: {
+      // esbuild 0.28 は vitepress 1.6 デフォルトのブラウザターゲット群への
+      // destructuring 変換を未サポート（"not supported yet" でビルド失敗）
+      target: 'es2020',
+    },
+  },
   themeConfig: {
     nav: [
       { text: 'ホーム', link: '/' },
