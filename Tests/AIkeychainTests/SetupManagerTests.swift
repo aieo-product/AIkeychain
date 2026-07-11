@@ -6,9 +6,64 @@ import Testing
 @Suite("SetupManager Tests", .serialized)
 struct SetupManagerTests {
 
-    /// テスト用の一時ファイルで検証するためのヘルパー
-    /// 注意: SetupManager は直接 ~/.zshrc を操作するため、
-    /// ここでは生成されるコンフィグブロックの内容を検証する
+    @Test("configure migrates a stale managed block")
+    func configureMigratesStaleManagedBlock() throws {
+        let path = temporaryZshrcPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let oldContent = """
+        export EDITOR=vim
+
+        # >>> AI KeyChain >>>
+        if [ -n "$_aikp" ] && (echo >/dev/tcp/127.0.0.1/$_aikp) 2>/dev/null; then
+          source ~/.aikeychain_proxy
+        fi
+        # <<< AI KeyChain <<<
+
+        alias k=kubectl
+        """
+        try oldContent.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(result.contains("/usr/bin/nc -z"))
+        #expect(!result.contains("/dev/tcp"))
+        #expect(result.contains("export EDITOR=vim"))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(result.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
+    }
+
+    @Test("configure is idempotent when managed block is current")
+    func configureIsIdempotentWhenCurrent() throws {
+        let path = temporaryZshrcPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let userLine = "export EDITOR=vim\n"
+        try userLine.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+        let first = try String(contentsOfFile: path, encoding: .utf8)
+        try SetupManager.configure(zshrcPath: path)
+        let second = try String(contentsOfFile: path, encoding: .utf8)
+
+        #expect(second == first)
+        #expect(second.contains("export EDITOR=vim"))
+        #expect(second.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
+    }
+
+    @Test("configure adds current managed block to a fresh zshrc")
+    func configureAddsCurrentBlockToFreshZshrc() throws {
+        let path = temporaryZshrcPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let userLine = "alias k=kubectl\n"
+        try userLine.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(result.contains("/usr/bin/nc -z"))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(result.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
+    }
 
     @Test("Config block contains BASE_URL for all supported services")
     func configBlockContent() {
@@ -180,6 +235,10 @@ struct SetupManagerTests {
 
     private func temporaryProxyEnvPath() -> String {
         NSTemporaryDirectory() + "aikeychain_proxy_zsh_test_\(UUID().uuidString)"
+    }
+
+    private func temporaryZshrcPath() -> String {
+        NSTemporaryDirectory() + "aikeychain_zshrc_test_\(UUID().uuidString)"
     }
 
     private func writeProxyEnvFile(at path: String, port: UInt16) throws {

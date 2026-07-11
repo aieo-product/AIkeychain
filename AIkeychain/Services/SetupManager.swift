@@ -142,6 +142,10 @@ enum SetupManager {
 
     /// .zshrc に AI KeyChain ブロックが設定済みか確認
     static func isConfigured() -> Bool {
+        isConfigured(zshrcPath: zshrcPath)
+    }
+
+    static func isConfigured(zshrcPath: String) -> Bool {
         guard let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8) else {
             return false
         }
@@ -149,7 +153,7 @@ enum SetupManager {
     }
 
     /// レガシー形式かどうか（マーカーなしの旧バージョン）
-    private static var hasLegacyFormat: Bool {
+    private static func hasLegacyFormat(zshrcPath: String) -> Bool {
         guard let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8) else { return false }
         return content.contains(".aikeychain_proxy") && !content.contains(markerBegin)
     }
@@ -157,15 +161,23 @@ enum SetupManager {
     /// .zshrc にフックを追記（BEGIN/END マーカーで囲む）
     /// レガシー形式が存在する場合は先に削除してからマーカー形式で再追加
     static func configure() throws {
+        try configure(zshrcPath: zshrcPath)
+    }
+
+    static func configure(zshrcPath: String) throws {
         // レガシー形式 → マーカー形式にアップグレード
-        if hasLegacyFormat {
-            try unconfigure()
+        if hasLegacyFormat(zshrcPath: zshrcPath) {
+            try unconfigure(zshrcPath: zshrcPath)
         }
 
-        // マーカー形式が既に存在する場合はスキップ
+        // 現行のマーカー形式が既に存在する場合はスキップ。古い形式は置き換える。
         if let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8),
            content.contains(markerBegin) {
-            return
+            let currentBlock = "\(markerBegin)\n\(zshrcSourceLine)\n\(markerEnd)"
+            if content.contains(currentBlock) {
+                return
+            }
+            try unconfigure(zshrcPath: zshrcPath)
         }
 
         var content = (try? String(contentsOfFile: zshrcPath, encoding: .utf8)) ?? ""
@@ -256,7 +268,11 @@ enum SetupManager {
 
     /// .zshrc から AI KeyChain 管理ブロック全体を削除（マーカー間 + レガシー行）
     static func unconfigure() throws {
-        guard isConfigured() else { return }
+        try unconfigure(zshrcPath: zshrcPath)
+    }
+
+    static func unconfigure(zshrcPath: String) throws {
+        guard isConfigured(zshrcPath: zshrcPath) else { return }
 
         let content = try String(contentsOfFile: zshrcPath, encoding: .utf8)
         let lines = content.components(separatedBy: "\n")
