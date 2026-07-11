@@ -1,0 +1,14 @@
+✔ scripts/akc resolve_keychain fails closed on GUI exit 51 (237.789917ms)
+✔ scripts/akc resolve_keychain fails closed on successful empty GUI value (23.12775ms)
+✔ scripts/akc resolve_keychain falls back to manual only on GUI exit 44 (7.12075ms)
+✔ scripts/akc resolve_keychain returns nonzero on GUI exit 44 and successful empty manual value (7.336042ms)
+✔ scripts/akc resolve_keychain returns a nonempty GUI value without manual fallback (4.707042ms)
+✔ scripts/akc cmd_run rejects nonempty resolver output when its exit status is nonzero (167.29475ms)
+✔ resolveKey fails closed on a non-44 GUI lookup error (#147) (156.6275ms)
+✔ resolveKey falls back to manual storage when GUI lookup exits 44 (9.579833ms)
+✔ resolveKey returns null when GUI lookup exits 44 and manual value is empty (8.967ms)
+✔ resolveKey treats an empty successful GUI value as authoritative failure (4.864166ms)
+✔ resolveKey returns the GUI storage value without manual fallback (12.082375ms)
+ℹ tests 70
+ℹ pass 70
+ℹ fail 0
