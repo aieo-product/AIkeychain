@@ -37,8 +37,41 @@ struct SetupManagerTests {
         #expect(!result.contains(".aikeychain_proxy"))
     }
 
-    @Test("unconfigure preserves user lines after a dangling BEGIN")
-    func unconfigurePreservesUserLinesAfterDanglingBegin() throws {
+    @Test("unconfigure fails safely for a dangling BEGIN around the current hook")
+    func unconfigureFailsSafelyForDanglingCurrentHook() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        let original = """
+        export PATH="$HOME/bin:$PATH"
+
+        # >>> AI KeyChain >>>
+        \(SetupManager.proxySourceSnippet(proxyEnvPath: "~/.aikeychain_proxy"))
+
+        export OPENAI_BASE_URL=https://user.example
+        alias k=kubectl
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+        let originalData = try Data(contentsOf: URL(fileURLWithPath: path))
+
+        #expect(throws: SetupManager.SetupError.malformedMarkers) {
+            try SetupManager.unconfigure(zshrcPath: path)
+        }
+
+        let resultData = try Data(contentsOf: URL(fileURLWithPath: path))
+        #expect(resultData == originalData)
+        #expect(try zshSyntaxIsValid(at: path))
+
+        #expect(FileManager.default.fileExists(atPath: backupPath))
+        let backupData = try Data(contentsOf: URL(fileURLWithPath: backupPath))
+        #expect(backupData == originalData)
+    }
+
+    @Test("unconfigure leaves a simple dangling BEGIN byte-identical")
+    func unconfigureLeavesSimpleDanglingBeginUnchanged() throws {
         let path = temporaryZshrcPath()
         let backupPath = path + ".aikeychain.bak"
         defer {
@@ -53,19 +86,21 @@ struct SetupManagerTests {
         source ~/.secrets
         """
         try original.write(toFile: path, atomically: true, encoding: .utf8)
+        let originalData = try Data(contentsOf: URL(fileURLWithPath: path))
 
-        try SetupManager.unconfigure(zshrcPath: path)
+        #expect(throws: SetupManager.SetupError.malformedMarkers) {
+            try SetupManager.unconfigure(zshrcPath: path)
+        }
 
-        let result = try String(contentsOfFile: path, encoding: .utf8)
-        #expect(result.contains("export PATH="))
-        #expect(result.contains("export EDITOR=vim"))
-        #expect(result.contains("alias k=kubectl"))
-        #expect(result.contains("source ~/.secrets"))
-        #expect(!result.contains("# >>> AI KeyChain >>>"))
+        let resultData = try Data(contentsOf: URL(fileURLWithPath: path))
+        #expect(resultData == originalData)
+        #expect(FileManager.default.fileExists(atPath: backupPath))
+        let backupData = try Data(contentsOf: URL(fileURLWithPath: backupPath))
+        #expect(backupData == originalData)
     }
 
-    @Test("unconfigure backs up original content for a malformed block")
-    func unconfigureBacksUpOriginalContentForMalformedBlock() throws {
+    @Test("unconfigure backup has 0600 permissions")
+    func unconfigureBackupHasPrivatePermissions() throws {
         let path = temporaryZshrcPath()
         let backupPath = path + ".aikeychain.bak"
         defer {
@@ -73,17 +108,45 @@ struct SetupManagerTests {
             try? FileManager.default.removeItem(atPath: backupPath)
         }
         let original = """
-        export PATH="$HOME/bin:$PATH"
         # >>> AI KeyChain >>>
-        export EDITOR=vim
+        source ~/.aikeychain_proxy
+        # <<< AI KeyChain <<<
         """
         try original.write(toFile: path, atomically: true, encoding: .utf8)
 
         try SetupManager.unconfigure(zshrcPath: path)
 
-        #expect(FileManager.default.fileExists(atPath: backupPath))
-        let backup = try String(contentsOfFile: backupPath, encoding: .utf8)
-        #expect(backup == original)
+        let attributes = try FileManager.default.attributesOfItem(atPath: backupPath)
+        let permissions = (attributes[.posixPermissions] as? NSNumber)?.intValue
+        #expect(permissions == 0o600)
+    }
+
+    @Test("unconfigure recognizes and removes a well-formed CRLF block")
+    func unconfigureRemovesWellFormedCRLFBlock() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        let original = [
+            "export PATH=\"$HOME/bin:$PATH\"",
+            "# >>> AI KeyChain >>>",
+            "source ~/.aikeychain_proxy",
+            "# <<< AI KeyChain <<<",
+            "alias k=kubectl",
+            "",
+        ].joined(separator: "\r\n")
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.unconfigure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(result.contains("export PATH="))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(!result.contains("# >>> AI KeyChain >>>"))
+        #expect(!result.contains("# <<< AI KeyChain <<<"))
+        #expect(!result.contains(".aikeychain_proxy"))
     }
 
     @Test("configure migrates a stale managed block")
@@ -323,6 +386,17 @@ struct SetupManagerTests {
 
     private func temporaryZshrcPath() -> String {
         NSTemporaryDirectory() + "aikeychain_zshrc_test_\(UUID().uuidString)"
+    }
+
+    private func zshSyntaxIsValid(at path: String) throws -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-n", path]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus == 0
     }
 
     private func writeProxyEnvFile(at path: String, port: UInt16) throws {
