@@ -1,0 +1,25 @@
+◇ Test "All keys start as unconfigured" started.
+◇ Test "Delete key makes it unconfigured" started.
+◇ Test "Unconfigured keys are excluded from all formats" started.
+◇ Test "unconfigure removes a well-formed block and preserves user lines" started.
+✔ Test "All keys start as unconfigured" passed after 0.329 seconds.
+✔ Test "Delete key makes it unconfigured" passed after 0.329 seconds.
+✔ Test "Unconfigured keys are excluded from all formats" passed after 0.329 seconds.
+✔ Test "unconfigure removes a well-formed block and preserves user lines" passed after 0.329 seconds.
+◇ Test "unconfigure fails safely for a dangling BEGIN around the current hook" started.
+✔ Test "unconfigure fails safely for a dangling BEGIN around the current hook" passed after 0.005 seconds.
+◇ Test "unconfigure leaves a simple dangling BEGIN byte-identical" started.
+✔ Test "unconfigure leaves a simple dangling BEGIN byte-identical" passed after 0.001 seconds.
+◇ Test "unconfigure fails safely for a lone END marker" started.
+✔ Test "unconfigure fails safely for a lone END marker" passed after 0.001 seconds.
+◇ Test "unconfigure backup has 0600 permissions" started.
+✔ Test "unconfigure backup has 0600 permissions" passed after 0.001 seconds.
+◇ Test "unconfigure recognizes and removes a well-formed CRLF block" started.
+✔ Test "unconfigure recognizes and removes a well-formed CRLF block" passed after 0.001 seconds.
+◇ Test "writeProxyEnvFile creates file with 0600 permissions (token not world-readable)" started.
+✔ Test "writeProxyEnvFile creates file with 0600 permissions (token not world-readable)" passed after 0.007 seconds.
+◇ Test "writeProxyEnvFile yields 0600 even under umask 022 (TOCTOU: no 0644 window)" started.
+✔ Test "writeProxyEnvFile yields 0600 even under umask 022 (TOCTOU: no 0644 window)" passed after 0.001 seconds.
+◇ Test "activateProxy writes proxy env file with 0600 permissions" started.
+✔ Test "activateProxy writes proxy env file with 0600 permissions" passed after 0.001 seconds.
+✔ Test run with 150 tests in 21 suites passed after 2.012 seconds.
