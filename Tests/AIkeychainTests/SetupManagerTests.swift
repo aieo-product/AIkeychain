@@ -99,6 +99,37 @@ struct SetupManagerTests {
         #expect(backupData == originalData)
     }
 
+    @Test("unconfigure fails safely for a lone END marker")
+    func unconfigureFailsSafelyForLoneEndMarker() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        let original = """
+        export PATH="$HOME/bin:$PATH"
+        # <<< AI KeyChain <<<
+        export EDITOR=vim
+        alias k=kubectl
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+        let originalData = try Data(contentsOf: URL(fileURLWithPath: path))
+
+        #expect(throws: SetupManager.SetupError.malformedMarkers) {
+            try SetupManager.unconfigure(zshrcPath: path)
+        }
+
+        let resultData = try Data(contentsOf: URL(fileURLWithPath: path))
+        #expect(resultData == originalData)
+        #expect(FileManager.default.fileExists(atPath: backupPath))
+        let backupData = try Data(contentsOf: URL(fileURLWithPath: backupPath))
+        #expect(backupData == originalData)
+        let attributes = try FileManager.default.attributesOfItem(atPath: backupPath)
+        let permissions = (attributes[.posixPermissions] as? NSNumber)?.intValue
+        #expect(permissions == 0o600)
+    }
+
     @Test("unconfigure backup has 0600 permissions")
     func unconfigureBackupHasPrivatePermissions() throws {
         let path = temporaryZshrcPath()

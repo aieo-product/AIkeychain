@@ -284,10 +284,15 @@ enum SetupManager {
     }
 
     static func unconfigure(zshrcPath: String) throws {
-        guard isConfigured(zshrcPath: zshrcPath) else { return }
-
-        let content = try String(contentsOfFile: zshrcPath, encoding: .utf8)
+        guard let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8) else { return }
         let lines = content.components(separatedBy: "\n")
+        let hasManagedMarker = lines.contains { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed == markerBegin || trimmed == markerEnd
+        }
+        let hasLegacyContent = content.contains(".aikeychain_proxy")
+            || content.contains("AI KeyChain — proxy env")
+        guard hasManagedMarker || hasLegacyContent else { return }
 
         var hasOpenBlock = false
         var markerStructureIsWellFormed = true
