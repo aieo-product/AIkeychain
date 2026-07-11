@@ -277,19 +277,49 @@ enum SetupManager {
         let content = try String(contentsOfFile: zshrcPath, encoding: .utf8)
         let lines = content.components(separatedBy: "\n")
 
+        var markerStructureIsWellFormed = true
+        var hasOpenBlock = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == markerBegin {
+                if hasOpenBlock {
+                    markerStructureIsWellFormed = false
+                }
+                hasOpenBlock = true
+            } else if trimmed == markerEnd {
+                if !hasOpenBlock {
+                    markerStructureIsWellFormed = false
+                }
+                hasOpenBlock = false
+            }
+        }
+
+        if hasOpenBlock {
+            markerStructureIsWellFormed = false
+        }
+
+        // 書き換え前の内容を退避する
+        let backupPath = zshrcPath + ".aikeychain.bak"
+        try content.write(toFile: backupPath, atomically: true, encoding: .utf8)
+
         var result: [String] = []
         var inBlock = false
 
         for line in lines {
             if line.trimmingCharacters(in: .whitespaces) == markerBegin {
-                inBlock = true
+                if markerStructureIsWellFormed {
+                    inBlock = true
+                }
                 continue
             }
             if line.trimmingCharacters(in: .whitespaces) == markerEnd {
-                inBlock = false
+                if markerStructureIsWellFormed {
+                    inBlock = false
+                }
                 continue
             }
-            if !inBlock {
+            if !markerStructureIsWellFormed || !inBlock {
                 // レガシー形式のフォールバック削除
                 if line.contains(".aikeychain_proxy") || line.contains("AI KeyChain — proxy env") {
                     continue

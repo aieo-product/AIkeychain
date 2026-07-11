@@ -6,10 +6,94 @@ import Testing
 @Suite("SetupManager Tests", .serialized)
 struct SetupManagerTests {
 
+    @Test("unconfigure removes a well-formed block and preserves user lines")
+    func unconfigureRemovesWellFormedBlockAndPreservesUserLines() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        let original = """
+        export PATH="$HOME/bin:$PATH"
+
+        # >>> AI KeyChain >>>
+        source ~/.aikeychain_proxy
+        # <<< AI KeyChain <<<
+
+        export EDITOR=vim
+        alias k=kubectl
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.unconfigure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(result.contains("export PATH="))
+        #expect(result.contains("export EDITOR=vim"))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(!result.contains("# >>> AI KeyChain >>>"))
+        #expect(!result.contains("# <<< AI KeyChain <<<"))
+        #expect(!result.contains(".aikeychain_proxy"))
+    }
+
+    @Test("unconfigure preserves user lines after a dangling BEGIN")
+    func unconfigurePreservesUserLinesAfterDanglingBegin() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        let original = """
+        export PATH="$HOME/bin:$PATH"
+        # >>> AI KeyChain >>>
+        export EDITOR=vim
+        alias k=kubectl
+        source ~/.secrets
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.unconfigure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(result.contains("export PATH="))
+        #expect(result.contains("export EDITOR=vim"))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(result.contains("source ~/.secrets"))
+        #expect(!result.contains("# >>> AI KeyChain >>>"))
+    }
+
+    @Test("unconfigure backs up original content for a malformed block")
+    func unconfigureBacksUpOriginalContentForMalformedBlock() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        let original = """
+        export PATH="$HOME/bin:$PATH"
+        # >>> AI KeyChain >>>
+        export EDITOR=vim
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.unconfigure(zshrcPath: path)
+
+        #expect(FileManager.default.fileExists(atPath: backupPath))
+        let backup = try String(contentsOfFile: backupPath, encoding: .utf8)
+        #expect(backup == original)
+    }
+
     @Test("configure migrates a stale managed block")
     func configureMigratesStaleManagedBlock() throws {
         let path = temporaryZshrcPath()
-        defer { try? FileManager.default.removeItem(atPath: path) }
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
         let oldContent = """
         export EDITOR=vim
 
