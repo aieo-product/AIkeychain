@@ -1,13 +1,69 @@
 import Foundation
+import Darwin
 import Testing
 @testable import AIkeychain
 
 @Suite("SetupManager Tests", .serialized)
 struct SetupManagerTests {
 
-    /// テスト用の一時ファイルで検証するためのヘルパー
-    /// 注意: SetupManager は直接 ~/.zshrc を操作するため、
-    /// ここでは生成されるコンフィグブロックの内容を検証する
+    @Test("configure migrates a stale managed block")
+    func configureMigratesStaleManagedBlock() throws {
+        let path = temporaryZshrcPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let oldContent = """
+        export EDITOR=vim
+
+        # >>> AI KeyChain >>>
+        if [ -n "$_aikp" ] && (echo >/dev/tcp/127.0.0.1/$_aikp) 2>/dev/null; then
+          source ~/.aikeychain_proxy
+        fi
+        # <<< AI KeyChain <<<
+
+        alias k=kubectl
+        """
+        try oldContent.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(result.contains("/usr/bin/nc -z"))
+        #expect(!result.contains("/dev/tcp"))
+        #expect(result.contains("export EDITOR=vim"))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(result.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
+    }
+
+    @Test("configure is idempotent when managed block is current")
+    func configureIsIdempotentWhenCurrent() throws {
+        let path = temporaryZshrcPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let userLine = "export EDITOR=vim\n"
+        try userLine.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+        let first = try String(contentsOfFile: path, encoding: .utf8)
+        try SetupManager.configure(zshrcPath: path)
+        let second = try String(contentsOfFile: path, encoding: .utf8)
+
+        #expect(second == first)
+        #expect(second.contains("export EDITOR=vim"))
+        #expect(second.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
+    }
+
+    @Test("configure adds current managed block to a fresh zshrc")
+    func configureAddsCurrentBlockToFreshZshrc() throws {
+        let path = temporaryZshrcPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let userLine = "alias k=kubectl\n"
+        try userLine.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(result.contains("/usr/bin/nc -z"))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(result.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
+    }
 
     @Test("Config block contains BASE_URL for all supported services")
     func configBlockContent() {
@@ -141,5 +197,108 @@ struct SetupManagerTests {
         // deactivate → ファイル削除 → inactive
         SetupManager.deactivateProxy()
         #expect(!SetupManager.isProxyActive())
+    }
+
+    @Test("zsh proxy hook keeps live config and sources it")
+    func zshProxyHookLive() throws {
+        let listener = try makeListeningSocket()
+        defer { close(listener.fd) }
+
+        let path = temporaryProxyEnvPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try writeProxyEnvFile(at: path, port: listener.port)
+
+        let snippet = SetupManager.proxySourceSnippet(proxyEnvPath: path)
+        let result = try runZsh("\(snippet)\nprintf '%s\\n' \"$OPENAI_BASE_URL\"")
+
+        #expect(result.status == 0, "zsh failed: \(result.stderr)")
+        #expect(FileManager.default.fileExists(atPath: path))
+        #expect(result.stdout.contains("http://localhost:\(listener.port)"))
+    }
+
+    @Test("zsh proxy hook deletes config for closed port")
+    func zshProxyHookClosed() throws {
+        let reserved = try makeListeningSocket()
+        let port = reserved.port
+        close(reserved.fd)
+
+        let path = temporaryProxyEnvPath()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try writeProxyEnvFile(at: path, port: port)
+
+        let snippet = SetupManager.proxySourceSnippet(proxyEnvPath: path)
+        let result = try runZsh(snippet)
+
+        #expect(result.status == 0, "zsh failed: \(result.stderr)")
+        #expect(!FileManager.default.fileExists(atPath: path))
+    }
+
+    private func temporaryProxyEnvPath() -> String {
+        NSTemporaryDirectory() + "aikeychain_proxy_zsh_test_\(UUID().uuidString)"
+    }
+
+    private func temporaryZshrcPath() -> String {
+        NSTemporaryDirectory() + "aikeychain_zshrc_test_\(UUID().uuidString)"
+    }
+
+    private func writeProxyEnvFile(at path: String, port: UInt16) throws {
+        let content = """
+        export OPENAI_BASE_URL=http://localhost:\(port)
+        export AIKEYCHAIN_SESSION_TOKEN=tok
+        """
+        try content.write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
+    private func makeListeningSocket() throws -> (fd: Int32, port: UInt16) {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { throw POSIXError(.EIO) }
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = 0
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+
+        let bindResult = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bindResult == 0, listen(fd, 1) == 0 else {
+            let error = POSIXErrorCode(rawValue: errno) ?? .EIO
+            close(fd)
+            throw POSIXError(error)
+        }
+
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let nameResult = withUnsafeMutablePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(fd, $0, &length)
+            }
+        }
+        guard nameResult == 0 else {
+            let error = POSIXErrorCode(rawValue: errno) ?? .EIO
+            close(fd)
+            throw POSIXError(error)
+        }
+
+        return (fd, UInt16(bigEndian: address.sin_port))
+    }
+
+    private func runZsh(_ command: String) throws -> (status: Int32, stdout: String, stderr: String) {
+        let process = Process()
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-c", command]
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        process.waitUntilExit()
+
+        let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return (process.terminationStatus, stdoutText, stderrText)
     }
 }

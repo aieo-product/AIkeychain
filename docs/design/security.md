@@ -160,7 +160,7 @@ export AIKEYCHAIN_SESSION_TOKEN=<UUID>
 ```bash
 if [ -f ~/.aikeychain_proxy ]; then
     _aikp=$(grep -om1 'localhost:[0-9]*' ~/.aikeychain_proxy | head -1 | cut -d: -f2)
-    if [ -n "$_aikp" ] && (echo >/dev/tcp/127.0.0.1/$_aikp) 2>/dev/null; then
+    if [ -n "$_aikp" ] && /usr/bin/nc -z -G 1 127.0.0.1 "$_aikp" >/dev/null 2>&1; then
         source ~/.aikeychain_proxy
     else
         rm -f ~/.aikeychain_proxy  # プロキシ未稼働なら設定を削除
