@@ -18,17 +18,21 @@ enum SetupManager {
     /// ファイルが存在し、かつプロキシポートが実際に応答する場合のみ source する。
     /// 強制シャットダウン等でファイルが残っても、プロキシ未稼働なら読み込まれない。
     /// また、残ったファイルを自動削除する（次回起動時にクリーンな状態になる）。
-    private static let zshrcSourceLine = """
-    if [ -f ~/.aikeychain_proxy ]; then
-      _aikp=$(grep -om1 'localhost:[0-9]*' ~/.aikeychain_proxy | head -1 | cut -d: -f2)
-      if [ -n "$_aikp" ] && (echo >/dev/tcp/127.0.0.1/$_aikp) 2>/dev/null; then
-        source ~/.aikeychain_proxy
+    static func proxySourceSnippet(proxyEnvPath: String) -> String {
+        """
+    if [ -f \(proxyEnvPath) ]; then
+      _aikp=$(grep -om1 'localhost:[0-9]*' \(proxyEnvPath) | head -1 | cut -d: -f2)
+      if [ -n "$_aikp" ] && /usr/bin/nc -z -G 1 127.0.0.1 "$_aikp" >/dev/null 2>&1; then
+        source \(proxyEnvPath)
       else
-        rm -f ~/.aikeychain_proxy
+        rm -f \(proxyEnvPath)
       fi
       unset _aikp
     fi
     """
+    }
+
+    private static let zshrcSourceLine = proxySourceSnippet(proxyEnvPath: "~/.aikeychain_proxy")
 
     private static var zshrcPath: String {
         NSHomeDirectory() + "/.zshrc"
