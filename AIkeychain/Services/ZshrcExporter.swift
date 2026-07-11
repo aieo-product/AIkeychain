@@ -42,7 +42,7 @@ struct ZshrcExporter {
                 // GUI の保存形式 (service=com.aieo.aikeychain, account=KEY_NAME) に
                 // 厳密に一致させる。-a "$USER" だと acct のずれ/重複で古い値を
                 // 掴む恐れがあるため使わない。
-                lines.append("export \(key.envVarName)=$(security find-generic-password -s \"com.aieo.aikeychain\" -a \"\(key.envVarName)\" -w)")
+                lines.append("export \(key.envVarName)=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"\(key.envVarName)\" -w)")
             }
             lines.append("")
         }
