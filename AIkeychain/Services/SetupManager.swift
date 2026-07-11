@@ -140,6 +140,17 @@ enum SetupManager {
     private static let markerBegin = "# >>> AI KeyChain >>>"
     private static let markerEnd   = "# <<< AI KeyChain <<<"
 
+    enum SetupError: LocalizedError, Equatable {
+        case malformedMarkers
+
+        var errorDescription: String? {
+            switch self {
+            case .malformedMarkers:
+                return "AI KeyChain の .zshrc マーカー構造が壊れています。ファイルは変更せず、バックアップを作成しました。"
+            }
+        }
+    }
+
     /// .zshrc に AI KeyChain ブロックが設定済みか確認
     static func isConfigured() -> Bool {
         isConfigured(zshrcPath: zshrcPath)
@@ -266,26 +277,64 @@ enum SetupManager {
         return lookup(["find-generic-password", "-s", account, "-w"])
     }
 
-    /// .zshrc から AI KeyChain 管理ブロック全体を削除（マーカー間 + レガシー行）
+    /// .zshrc から AI KeyChain 管理ブロック全体を削除（マーカー間 + レガシー行）。
+    /// マーカー構造が壊れている場合は 0600 のバックアップだけを作り、元ファイルを変更せず throw する。
     static func unconfigure() throws {
         try unconfigure(zshrcPath: zshrcPath)
     }
 
     static func unconfigure(zshrcPath: String) throws {
-        guard isConfigured(zshrcPath: zshrcPath) else { return }
-
-        let content = try String(contentsOfFile: zshrcPath, encoding: .utf8)
+        guard let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8) else { return }
         let lines = content.components(separatedBy: "\n")
+        let hasManagedMarker = lines.contains { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed == markerBegin || trimmed == markerEnd
+        }
+        let hasLegacyContent = content.contains(".aikeychain_proxy")
+            || content.contains("AI KeyChain — proxy env")
+        guard hasManagedMarker || hasLegacyContent else { return }
+
+        var hasOpenBlock = false
+        var markerStructureIsWellFormed = true
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == markerBegin {
+                if hasOpenBlock {
+                    markerStructureIsWellFormed = false
+                }
+                hasOpenBlock = true
+            } else if trimmed == markerEnd {
+                if !hasOpenBlock {
+                    markerStructureIsWellFormed = false
+                }
+                hasOpenBlock = false
+            }
+        }
+
+        if hasOpenBlock {
+            markerStructureIsWellFormed = false
+        }
+
+        // 変更またはエラーを返す前に、秘密情報を含み得る元の内容を 0600 で退避する。
+        let backupPath = zshrcPath + ".aikeychain.bak"
+        try writeProxyEnvFile(at: backupPath, content: content)
+
+        // 壊れたブロックを部分的に削除すると shell 構文まで破壊し得るため、元ファイルは触らない。
+        guard markerStructureIsWellFormed else {
+            throw SetupError.malformedMarkers
+        }
 
         var result: [String] = []
         var inBlock = false
 
         for line in lines {
-            if line.trimmingCharacters(in: .whitespaces) == markerBegin {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == markerBegin {
                 inBlock = true
                 continue
             }
-            if line.trimmingCharacters(in: .whitespaces) == markerEnd {
+            if trimmed == markerEnd {
                 inBlock = false
                 continue
             }
