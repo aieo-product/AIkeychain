@@ -21,10 +21,10 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
    a process instead, use \`akc run -- <command>\`. If you must use the raw
    security CLI directly, use the form that matches where the key lives:
      [app] store keys (saved via the AI KeyChain GUI):
-       security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w
+       /usr/bin/security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w
      [manual] keys (registered by hand) — service name only, do NOT pin the
      account with -a "$USER":
-       security find-generic-password -s "<KEY>" -w
+       /usr/bin/security find-generic-password -s "<KEY>" -w
    ⚠️ The bare -s "<KEY>" form (no -a) returns "could not be found" (exit 44)
    for [app] store keys — that is NOT proof the key is unregistered. Confirm
    with \`akc check <KEY>\` / \`akc get <KEY>\` before concluding a key is

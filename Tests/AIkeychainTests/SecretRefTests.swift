@@ -30,13 +30,32 @@ struct ZshrcExporterSecretRefTests {
         let keys = [makeKey(service: .github)]
         let output = ZshrcExporter.export(keys: keys, format: .zshrc)
         #expect(output.contains("# [AI KeyChain]"))
-        #expect(output.contains("security find-generic-password"))
+        #expect(output.contains("/usr/bin/security find-generic-password"))
         // 生成される .zshrc 行が GUI 保存形式 (service=com.aieo.aikeychain, account=KEY) に
         // 厳密一致していること。acct 不整合による古い/無効な値の誤取得を防ぐ (issue #91)。
         #expect(output.contains(
-            "export GITHUB_TOKEN=$(security find-generic-password -s \"com.aieo.aikeychain\" -a \"GITHUB_TOKEN\" -w)"
+            "export GITHUB_TOKEN=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"GITHUB_TOKEN\" -w)"
         ))
         #expect(!output.contains("-a \"$USER\""))
+    }
+
+    @Test("Standard format uses absolute security path")
+    func standardSecurityPath() {
+        let keys = [
+            makeKey(service: .github),
+            makeKey(service: .openAI),
+        ]
+        let output = ZshrcExporter.export(keys: keys, format: .zshrc)
+        let lookupLines = output.split(separator: "\n").filter {
+            $0.contains("find-generic-password")
+        }
+        #expect(!lookupLines.isEmpty)
+        #expect(lookupLines.allSatisfy {
+            $0.contains("$(/usr/bin/security find-generic-password")
+        })
+        #expect(output.contains("$(/usr/bin/security find-generic-password"))
+        #expect(!output.contains("$(security "))
+        #expect(!output.contains("$( security"))
     }
 
     @Test("Env format includes service name comments")

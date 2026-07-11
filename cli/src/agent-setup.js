@@ -28,11 +28,11 @@ value into \`.env\`, source code, logs, or commits.
   form that matches where the key lives:
   \`\`\`bash
   # [app] store keys (saved via the AI KeyChain GUI):
-  security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w
+  /usr/bin/security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w
   # [manual] keys (registered by hand) — service name only, do NOT pin
   # -a "$USER" (account attributes are inconsistent; pinning can return a
   # stale value):
-  security find-generic-password -s "<KEY>" -w
+  /usr/bin/security find-generic-password -s "<KEY>" -w
   \`\`\`
   ⚠️ The bare \`-s "<KEY>"\` form returns "could not be found" (exit 44) for
   [app] store keys — that is NOT proof the key is unregistered. Confirm with

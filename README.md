@@ -106,7 +106,7 @@ swift build -c release
 ### Standard Mode
 ```
 Terminal                                                          API Server
-  │  export API_KEY=$(security find-generic-password \            │
+  │  export API_KEY=$(/usr/bin/security find-generic-password \   │
   │    -s "com.aieo.aikeychain" -a "API_KEY" -w)                   │
   │────────────────────── API key in request ────────────────────▶│
 ```
@@ -116,7 +116,7 @@ Terminal                                                          API Server
 > avoids the `-a "$USER"` pitfall of stale or duplicate `acct` values.
 
 > **Common AI-agent mistake:** looking up a GUI-stored key with the bare
-> `security find-generic-password -s "API_KEY" -w` (service name only, no `-a`)
+> `/usr/bin/security find-generic-password -s "API_KEY" -w` (service name only, no `-a`)
 > returns "could not be found" (exit 44). That is **not** proof the key is
 > unregistered — it just means the wrong lookup form was used for a GUI-store
 > key. Use `akc get API_KEY` / `akc check API_KEY` (see [CLI & MCP
@@ -235,12 +235,12 @@ AI 開発では多数の API キーを扱います。多くの開発者はこれ
 | セキュリティレベル | ★☆☆ | ★★☆ | ★★★ |
 | 向いている用途 | シンプルに使いたい | 1Password 方式（`op://` 同等） | セキュリティ重視の環境 |
 
-> **AI エージェントによくある誤り:** GUI ストアに保存したキーを `security
+> **AI エージェントによくある誤り:** GUI ストアに保存したキーを `/usr/bin/security
 > find-generic-password -s "API_KEY" -w`（サービス名のみ、`-a` なし）で引くと
 > "could not be found"（exit 44）になりますが、これは**「未登録」の証拠ではありません**。
 > GUI ストアのキーには誤ったルックアップ方法を使っているだけです。
 > `akc get API_KEY` / `akc check API_KEY`（後述の「CLI & MCP サーバー」）か、
-> `security find-generic-password -s "com.aieo.aikeychain" -a "API_KEY" -w`
+> `/usr/bin/security find-generic-password -s "com.aieo.aikeychain" -a "API_KEY" -w`
 > （service + account の両方を指定する形）を使ってください。
 
 ### インストール
