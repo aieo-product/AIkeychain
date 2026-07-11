@@ -30,6 +30,7 @@ if [ "$svc" = "com.aieo.aikeychain" ]; then
     gui_51) exit 51 ;;
     gui_empty) exit 0 ;;
     gui_44_manual) exit 44 ;;
+    gui_44_manual_empty) exit 44 ;;
     manual_output_error) exit 44 ;;
     gui_value) printf '%s\\n' gui-value; exit 0 ;;
   esac
@@ -38,6 +39,7 @@ fi
 printf '%s\\n' manual >> "$CALLS_PATH"
 case "$SCENARIO" in
   gui_44_manual) printf '%s\\n' manual-value; exit 0 ;;
+  gui_44_manual_empty) exit 0 ;;
   manual_output_error) printf '%s\\n' rejected-value; exit 52 ;;
   *) printf '%s\\n' manual-must-not-be-used; exit 0 ;;
 esac
@@ -113,7 +115,14 @@ test('scripts/akc resolve_keychain fails closed on successful empty GUI value', 
 
 test('scripts/akc resolve_keychain falls back to manual only on GUI exit 44', async () => {
   await assertScenario('gui_44_manual', {
-    result: { status: 0, stdout: 'manual-value\n', stderr: '' },
+    result: { status: 0, stdout: 'manual-value', stderr: '' },
+    calls: 'gui\nmanual\n',
+  });
+});
+
+test('scripts/akc resolve_keychain returns nonzero on GUI exit 44 and successful empty manual value', async () => {
+  await assertScenario('gui_44_manual_empty', {
+    result: { status: 1, stdout: '', stderr: '' },
     calls: 'gui\nmanual\n',
   });
 });

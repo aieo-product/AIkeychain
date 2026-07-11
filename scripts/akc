@@ -68,7 +68,8 @@ resolve_keychain() {
 
     # 手動登録キーのフォールバック。-a はあえて指定しない: acct の値が
     # エントリごとに一定しないため、service 名のみで引く方が安定する (issue #91)
-    "$SECURITY_BIN" find-generic-password -s "$key_name" -w 2>/dev/null
+    value=$("$SECURITY_BIN" find-generic-password -s "$key_name" -w 2>/dev/null) && [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+    return 1
 }
 
 mask_value() {

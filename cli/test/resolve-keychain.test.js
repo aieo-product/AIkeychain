@@ -27,6 +27,7 @@ if [ "$svc" = "com.aieo.aikeychain" ]; then
     ERROR_KEY) echo "interaction not allowed" >&2; exit 51 ;;
     EMPTY_KEY) exit 0 ;;
     MISSING_KEY) exit 44 ;;
+    MANUAL_EMPTY_KEY) exit 44 ;;
     GUI_KEY) printf '%s\\n' "gui-value"; exit 0 ;;
   esac
 fi
@@ -35,6 +36,7 @@ case "$svc" in
   ERROR_KEY) printf '%s\\n' "attacker-manual-value"; exit 0 ;;
   EMPTY_KEY) printf '%s\\n' "manual-must-not-be-used"; exit 0 ;;
   MISSING_KEY) printf '%s\\n' "manual-value"; exit 0 ;;
+  MANUAL_EMPTY_KEY) exit 0 ;;
 esac
 exit 44
 `;
@@ -66,6 +68,10 @@ test('resolveKey fails closed on a non-44 GUI lookup error (#147)', async () => 
 
 test('resolveKey falls back to manual storage when GUI lookup exits 44', async () => {
   assert.equal(await resolveKey('MISSING_KEY'), 'manual-value');
+});
+
+test('resolveKey returns null when GUI lookup exits 44 and manual value is empty', async () => {
+  assert.equal(await resolveKey('MANUAL_EMPTY_KEY'), null);
 });
 
 test('resolveKey treats an empty successful GUI value as authoritative failure', async () => {
