@@ -55,9 +55,14 @@ async function security(args) {
     const { stdout, stderr } = await pExecFile(SECURITY_BIN, args, {
       maxBuffer: 16 * 1024 * 1024,
     });
-    return { ok: true, stdout, stderr };
+    return { ok: true, code: 0, stdout, stderr };
   } catch (err) {
-    return { ok: false, stdout: err.stdout ?? '', stderr: err.stderr ?? String(err) };
+    return {
+      ok: false,
+      code: err.code ?? null,
+      stdout: err.stdout ?? '',
+      stderr: err.stderr ?? String(err),
+    };
   }
 }
 
@@ -71,6 +76,8 @@ export async function resolveKey(name) {
   if (r.ok) {
     const value = stripTrailingNewline(r.stdout);
     if (value) return value;
+  } else if (r.code !== 44) {
+    return null;
   }
   r = await security(['find-generic-password', '-s', name, '-w']);
   if (r.ok) {

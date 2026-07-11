@@ -56,9 +56,14 @@ USAGE
 resolve_keychain() {
     local key_name="$1"
     local value
+    local rc
 
-    value=$("$SECURITY_BIN" find-generic-password -s "com.aieo.aikeychain" -a "$key_name" -w 2>/dev/null) \
-        && [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+    if value=$("$SECURITY_BIN" find-generic-password -s "com.aieo.aikeychain" -a "$key_name" -w 2>/dev/null); then
+        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+    else
+        rc=$?
+        [ "$rc" -eq 44 ] || return "$rc"
+    fi
 
     # 手動登録キーのフォールバック。-a はあえて指定しない: acct の値が
     # エントリごとに一定しないため、service 名のみで引く方が安定する (issue #91)
