@@ -1,7 +1,7 @@
 // Thin wrapper around the macOS `security` CLI.
 // Lookup order matches scripts/akc (issue #91):
 //   1. service="com.aieo.aikeychain" account="<KEY>"  (AI KeyChain GUI store)
-//   2. service="<KEY>" with NO account               (manually-registered keys)
+//   2. service="<KEY>" with NO account               (only when GUI exits 44/not-found)
 // Manual keys are looked up by service only because their `acct` attribute is
 // not consistent ($USER or the service name) — pinning -a can grab a stale
 // duplicate entry and return an invalid value.
@@ -72,16 +72,16 @@ function stripTrailingNewline(s) {
 
 /** Resolve a key to its secret value, or null if not found. */
 export async function resolveKey(name) {
-  let r = await security(['find-generic-password', '-s', GUI_SERVICE, '-a', name, '-w']);
-  if (r.ok) {
-    const value = stripTrailingNewline(r.stdout);
-    if (value) return value;
-  } else if (r.code !== 44) {
-    return null;
+  const gui = await security(['find-generic-password', '-s', GUI_SERVICE, '-a', name, '-w']);
+  if (gui.ok) {
+    const value = stripTrailingNewline(gui.stdout);
+    return value || null;
   }
-  r = await security(['find-generic-password', '-s', name, '-w']);
-  if (r.ok) {
-    const value = stripTrailingNewline(r.stdout);
+  if (gui.code !== 44) return null;
+
+  const manual = await security(['find-generic-password', '-s', name, '-w']);
+  if (manual.ok) {
+    const value = stripTrailingNewline(manual.stdout);
     if (value) return value;
   }
   return null;
