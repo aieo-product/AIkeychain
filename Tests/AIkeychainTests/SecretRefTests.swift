@@ -46,8 +46,16 @@ struct ZshrcExporterSecretRefTests {
             makeKey(service: .openAI),
         ]
         let output = ZshrcExporter.export(keys: keys, format: .zshrc)
-        #expect(output.contains("/usr/bin/security find-generic-password"))
+        let lookupLines = output.split(separator: "\n").filter {
+            $0.contains("find-generic-password")
+        }
+        #expect(!lookupLines.isEmpty)
+        #expect(lookupLines.allSatisfy {
+            $0.contains("$(/usr/bin/security find-generic-password")
+        })
+        #expect(output.contains("$(/usr/bin/security find-generic-password"))
         #expect(!output.contains("$(security "))
+        #expect(!output.contains("$( security"))
     }
 
     @Test("Env format includes service name comments")
