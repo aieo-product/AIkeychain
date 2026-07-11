@@ -1,0 +1,6 @@
+=== Red 証跡: 修正前スニペット (/dev/tcp) を live listener(port=64766) に対し zsh 実行 ===
+-- before: proxy file exists --
+proxy_env
+RESULT: DELETED proxy file (live proxy wrongly judged dead)
+-- after: proxy file exists? --
+ls: proxy_env: No such file or directory

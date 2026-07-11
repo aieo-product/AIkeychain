@@ -1,0 +1,11 @@
+◇ Test "configure migrates a stale managed block" started.
+✔ Test "configure migrates a stale managed block" passed after 0.340 seconds.
+◇ Test "configure is idempotent when managed block is current" started.
+✔ Test "configure is idempotent when managed block is current" passed after 0.001 seconds.
+◇ Test "configure adds current managed block to a fresh zshrc" started.
+✔ Test "configure adds current managed block to a fresh zshrc" passed after 0.001 seconds.
+◇ Test "zsh proxy hook keeps live config and sources it" started.
+✔ Test "zsh proxy hook keeps live config and sources it" passed after 0.015 seconds.
+◇ Test "zsh proxy hook deletes config for closed port" started.
+✔ Test "zsh proxy hook deletes config for closed port" passed after 0.011 seconds.
+✔ Test run with 144 tests in 21 suites passed after 2.003 seconds.
