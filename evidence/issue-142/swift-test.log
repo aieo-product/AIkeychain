@@ -1,0 +1,380 @@
+warning: 'wt': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /private/tmp/claude-501/-Volumes-AIWorkSSD-AIWorkSpace-gitlab-aieo-AIkeychain/79f73c4a-0a4a-48ff-88f7-1bdb9796b37d/scratchpad/postmerge-abcd/wt/AIkeychain/Resources/AIkeychain.entitlements
+[0/1] Planning build
+Building for debugging...
+[0/7] Write sources
+[1/8] /private/tmp/claude-501/-Volumes-AIWorkSSD-AIWorkSpace-gitlab-aieo-AIkeychain/79f73c4a-0a4a-48ff-88f7-1bdb9796b37d/scratchpad/postmerge-abcd/wt/.build/arm64-apple-macosx/debug/AIkeychainPackageTests.derived/runner.swift
+[2/8] Write sources
+[3/8] Write swift-version--58304C5D6DBC2206.txt
+[5/15] Compiling AIkeychainTests ModelTests.swift
+[6/15] Compiling AIkeychainTests SetupManagerTests.swift
+[7/15] Compiling AIkeychainTests KeychainServiceTests.swift
+[8/15] Compiling AIkeychainTests SecretRefTests.swift
+[9/15] Compiling AIkeychainTests ViewModelTests.swift
+[10/15] Compiling AIkeychainTests KeyShareServiceTests.swift
+[11/15] Compiling AIkeychainTests ProxyTests.swift
+/private/tmp/claude-501/-Volumes-AIWorkSSD-AIWorkSpace-gitlab-aieo-AIkeychain/79f73c4a-0a4a-48ff-88f7-1bdb9796b37d/scratchpad/postmerge-abcd/wt/Tests/AIkeychainTests/ProxyTests.swift:99:13: warning: initialization of immutable value 'parsed' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 97 |         let raw = "INVALID"
+ 98 |         let data = Data(raw.utf8)
+ 99 |         let parsed = HTTPRequestParser.parse(raw, body: data)
+    |             `- warning: initialization of immutable value 'parsed' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+100 |         // Should still parse the method at least, path might be missing
+101 |         // but won't crash
+[12/15] Emitting module AIkeychainTests
+[13/15] Compiling AIkeychainTests KeyShareHardeningTests.swift
+[14/17] Emitting module AIkeychainPackageTests
+[15/17] Compiling AIkeychainPackageTests runner.swift
+[15/17] Write Objects.LinkFileList
+[16/17] Linking AIkeychainPackageTests
+Build complete! (3.05s)
+Test Suite 'All tests' started at 2026-07-11 17:56:40.596.
+Test Suite 'All tests' passed at 2026-07-11 17:56:40.597.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "KeyShare Hardening (#126 / #127)" started.
+◇ Suite "ProxyRoute Tests" started.
+◇ Suite "EnvParser key validation Tests (#116)" started.
+◇ Suite "KeyCategory Tests" started.
+◇ Suite "HTTPRequestParser Tests" started.
+◇ Suite "KeychainService sink validation Tests (#116)" started.
+◇ Suite "KeyListViewModel Tests" started.
+◇ Suite "Header Injection Security Tests" started.
+◇ Suite "KeyShareService Sender Auth (#112)" started.
+◇ Suite "ProxyServer Tests" started.
+◇ Suite "ZshrcExporter Secret Reference Tests" started.
+◇ Suite "MockKeychainService Tests" started.
+◇ Suite "SecretMask Tests" started.
+◇ Suite "ProxyLog Tests" started.
+◇ Suite "Proxy Hang Regression Tests (issue #96)" started.
+◇ Suite "KeyManagementMode Tests" started.
+◇ Suite "KeyEditorViewModel Tests" started.
+◇ Suite "SetupManager Tests" started.
+◇ Suite "ServiceType Tests" started.
+◇ Suite "Proxy HTTP Streaming & Framing Tests (issue #98)" started.
+◇ Suite "EnvVarName Tests" started.
+◇ Test "xAI route found" started.
+◇ Test "Unknown host returns nil" started.
+◇ Test "Host with port still matches (port stripped)" started.
+◇ Test "Look-alike host does NOT match (exact match, not contains)" started.
+◇ Test "A mixed block only imports the entry with a valid key name" started.
+◇ Test "A line with a valid key name parses normally" started.
+◇ Test "SigningIdentity.software goes through the same encrypt/verify path as a raw key" started.
+◇ Test "Anthropic route found" started.
+◇ Test "Freshness: recent createdAt is fresh, old is stale" started.
+◇ Test "decodeSigningBlob: round-trips a freshly created SE identity when available" started.
+◇ Test "TOFU: confirm records fingerprint, then classifies as known" started.
+◇ Test "resolveSigningIdentity: existing key short-circuits, never creates" started.
+◇ Test "decodeSigningBlob: >32B blob is never mis-decoded as software; SE only tried when available" started.
+◇ Test "A line with an invalid key name is skipped during parsing" started.
+◇ Test "decodeSigningBlob: 32B blob decodes as software (raw first), regardless of SE availability" started.
+◇ Test "Category count is 6" started.
+◇ Test "Freshness: a future createdAt is treated as fresh (non-stale)" started.
+◇ Test "TOFU: unknown fingerprint classifies as first-seen" started.
+◇ Test "Parse simple GET request" started.
+◇ Test "Freshness: threshold boundary — exactly at threshold is fresh, just over is stale" started.
+◇ Test "Configured count updates after save" started.
+◇ Test "OpenAI route found" started.
+◇ Test "All keys start as unconfigured" started.
+◇ Test "Parse POST request with body" started.
+◇ Test "Filter by category" started.
+◇ Test "All categories have unique colors" started.
+◇ Test "Parse extracts all headers" started.
+◇ Test "save rejects an invalid account name before touching the Keychain" started.
+◇ Test "resolveSigningIdentity: race (errSecDuplicateItem) adopts existing, never rotates" started.
+◇ Test "makeNewSigningIdentity produces a usable signer (SE or software)" started.
+◇ Test "Loads all service types as keys" started.
+◇ Test "resolveSigningIdentity: two sequential calls yield a stable fingerprint" started.
+◇ Test "Server can start and stop" started.
+◇ Test "Save overwrites existing value" started.
+◇ Test "Secret Reference format includes service name comments" started.
+◇ Test "Invalid request returns nil" started.
+◇ Test "Starting twice does not crash" started.
+◇ Test "Category count returns correct number" started.
+◇ Test "Retrieve non-existent key returns nil" started.
+◇ Test "Route header value is correctly formatted for Anthropic" started.
+◇ Test "Standard format includes service name comments" started.
+◇ Test "ExportFormat has three cases" started.
+◇ Test "Exists returns true for saved key" started.
+◇ Test "Save and retrieve a key" started.
+◇ Test "v2 round trip: encrypt (sender) → decrypt (recipient) authenticates and matches" started.
+◇ Test "Delete removes key" started.
+◇ Test "Env format includes service name comments" started.
+◇ Test "Secret Reference format outputs keychain:// prefix" started.
+◇ Test "TOFU: re-confirm preserves the original firstSeen date" started.
+◇ Test "Attribution swap: re-sign with attacker key over another's ciphertext fails GCM decryption" started.
+◇ Test "Exists returns false for missing key" started.
+◇ Test "Structural inconsistency: only one of signature/senderSigningPublicKey present throws signatureInvalid" started.
+◇ Test "Tampering with keyCount throws signatureInvalid" started.
+◇ Test "Boundary: value exactly at threshold-1 is fully masked, at threshold reveals prefix" started.
+◇ Test "sign / verify round trip over canonical message" started.
+◇ Test "resolveSigningIdentity: first create (no existing, add succeeds) uses fresh key" started.
+◇ Test "Log entry detects errors" started.
+◇ Test "Route header value is correctly formatted for OpenAI" started.
+◇ Test "Empty key list round trip" started.
+◇ Test "Log does not contain API key or request body" started.
+◇ Test "Long values reveal only a short prefix and never the suffix" started.
+◇ Test "TOFU: a new fingerprint is still first-seen even when the store is non-empty" started.
+◇ Test "Short values are fully masked with no original characters and a fixed width (hides length)" started.
+◇ Test "ProxyLogStore appends and limits entries" started.
+◇ Test "Hand-constructed v1 file (no signature fields) decodes, decrypts, unauthenticated" started.
+◇ Test "Signature-stripping (drop sig fields from a v2 file) throws signatureInvalid" started.
+◇ Test "Log entry formats latency over 1 second" started.
+◇ Test "No prefix warning when service not selected" started.
+◇ Test "Unconfigured keys are excluded from all formats" started.
+◇ Test "Tampering with encryptedData throws signatureInvalid" started.
+◇ Test "Once the user picks an icon, category changes no longer override it" started.
+◇ Test "All three modes are distinct" started.
+◇ Test "ProxyLogStore counts errors" started.
+◇ Test "Standard format uses absolute security path" started.
+◇ Test "Log entry formats time correctly" started.
+◇ Test "Server initializes with default port" started.
+◇ Test "Swapping senderSigningPublicKey (with unchanged signature) throws signatureInvalid" started.
+◇ Test "Multiple keys are grouped by category" started.
+◇ Test "Secret Reference mode exists" started.
+◇ Test "Search filters by display name" started.
+◇ Test "ProxyLogStore clear removes all logs" started.
+◇ Test "Fingerprint is full-length (256-bit) and stable for the same key" started.
+◇ Test "Save with NO service + preset env var + matching default category writes no override" started.
+◇ Test "Delete key makes it unconfigured" started.
+◇ Test "A blocked keychain read returns a timeout error, never hangs forever" started.
+◇ Test "Custom key icon equal to category default is not persisted (follows category)" started.
+◇ Test "Search filters by env var name" started.
+◇ Test "Version downgrade 2→1 while keeping signature throws signatureInvalid" started.
+◇ Test "Tampering with createdAt throws signatureInvalid" started.
+◇ Test "Unknown version is rejected (invalidFile)" started.
+◇ Test "canonicalMessage is deterministic and field-order sensitive" started.
+◇ Test "Idle client connection is dropped after the inbound timeout" started.
+◇ Test "Save with NO service but a preset-named env var preserves the chosen category via override (#102)" started.
+◇ Test "Cannot save with an invalid env var name even with a category" started.
+◇ Test "Circuit breaker: after a timeout, subsequent reads fail fast without re-blocking" started.
+◇ Test "APIKey.systemImage prefers a custom key's explicit icon (#110)" started.
+◇ Test "Can save with valid selection and token" started.
+◇ Test "Forgery with a different signing key verifies but yields a DIFFERENT fingerprint" started.
+◇ Test "Keychain consent-required read returns 503 quickly, no hang" started.
+◇ Test "Unknown host is rejected instantly without touching the keychain" started.
+◇ Test "Can save WITHOUT a service when category + env var + value are set (issue #102)" started.
+◇ Test "No prefix warning for correct prefix" started.
+◇ Test "Cannot save without category selection" started.
+◇ Test "A blocked keychain read does NOT wedge other requests" started.
+◇ Test "New editor starts with no selection" started.
+◇ Test "Save with NO service + custom env var creates a CustomKey with the chosen category (#102)" started.
+◇ Test "Admission cap: concurrent burst during the first timeout window is bounded (fast 503)" started.
+◇ Test "Icon follows the category default until the user picks one" started.
+◇ Test "Editing key loads existing value" started.
+◇ Test "Save stores a user-picked icon on a custom key (#110)" started.
+◇ Test "Save stores an icon override for a preset-named key (#110)" started.
+◇ Test "Save stores value in keychain" started.
+◇ Test "Cannot save with empty token" started.
+◇ Test "Prefix warning shows for wrong prefix" started.
+◇ Test "Old CustomKey JSON without an icon field decodes safely (migration, #110)" started.
+◇ Test "All services have system images" started.
+◇ Test "Token prefix format is correct" started.
+◇ Test "All services have env var names" started.
+◇ Test "All services have categories" started.
+◇ Test "Setup URLs are valid" started.
+◇ Test "Invalid (conflicting) Content-Length is rejected with 400" started.
+◇ Test "All services have display names" started.
+◇ Test "contentLengthField validates: absent/present/invalid (non-numeric, negative, conflicting)" started.
+◇ Test "parseContentLength reads the header case-insensitively" started.
+◇ Test "Oversized request is rejected with 413" started.
+◇ Test "Transfer-Encoding request is rejected with 400 (smuggling defense)" started.
+◇ Test "Full request body is framed before forwarding (split header/body sends)" started.
+◇ Test "Upstream response is streamed to the client, not buffered until completion" started.
+◇ Test "Invalid env var names are rejected" started.
+◇ Test "isValid does not trim: surrounding whitespace makes a name invalid" started.
+◇ Test "Names with embedded newlines are rejected (anchors match whole string, not line)" started.
+◇ Test "Valid env var names are accepted" started.
+✔ Test "Host with port still matches (port stripped)" passed after 0.006 seconds.
+✔ Test "Look-alike host does NOT match (exact match, not contains)" passed after 0.006 seconds.
+◇ Test "unconfigure removes a well-formed block and preserves user lines" started.
+✔ Test "xAI route found" passed after 0.007 seconds.
+✔ Test "Unknown host returns nil" passed after 0.007 seconds.
+✔ Test "Anthropic route found" passed after 0.009 seconds.
+✔ Test "Freshness: a future createdAt is treated as fresh (non-stale)" passed after 0.009 seconds.
+✔ Test "Parse simple GET request" passed after 0.009 seconds.
+✔ Test "Freshness: threshold boundary — exactly at threshold is fresh, just over is stale" passed after 0.009 seconds.
+✔ Test "Category count is 6" passed after 0.009 seconds.
+✔ Test "OpenAI route found" passed after 0.009 seconds.
+✔ Test "Freshness: recent createdAt is fresh, old is stale" passed after 0.009 seconds.
+✔ Test "decodeSigningBlob: >32B blob is never mis-decoded as software; SE only tried when available" passed after 0.009 seconds.
+✔ Test "Parse POST request with body" passed after 0.009 seconds.
+✔ Test "All categories have unique colors" passed after 0.009 seconds.
+✔ Test "Parse extracts all headers" passed after 0.009 seconds.
+✔ Test "resolveSigningIdentity: existing key short-circuits, never creates" passed after 0.009 seconds.
+✔ Test "decodeSigningBlob: 32B blob decodes as software (raw first), regardless of SE availability" passed after 0.010 seconds.
+✔ Test "A line with an invalid key name is skipped during parsing" passed after 0.010 seconds.
+✔ Test "A line with a valid key name parses normally" passed after 0.010 seconds.
+✔ Test "A mixed block only imports the entry with a valid key name" passed after 0.010 seconds.
+✔ Test "save rejects an invalid account name before touching the Keychain" passed after 0.010 seconds.
+✔ Test "Invalid request returns nil" passed after 0.022 seconds.
+✔ Test "Save overwrites existing value" passed after 0.022 seconds.
+✔ Test "resolveSigningIdentity: race (errSecDuplicateItem) adopts existing, never rotates" passed after 0.022 seconds.
+✔ Test "resolveSigningIdentity: two sequential calls yield a stable fingerprint" passed after 0.022 seconds.
+✔ Test "Retrieve non-existent key returns nil" passed after 0.022 seconds.
+✔ Test "Route header value is correctly formatted for Anthropic" passed after 0.022 seconds.
+✔ Test "ExportFormat has three cases" passed after 0.307 seconds.
+✔ Test "All keys start as unconfigured" passed after 0.307 seconds.
+✔ Test "Loads all service types as keys" passed after 0.307 seconds.
+✔ Test "Configured count updates after save" passed after 0.307 seconds.
+✔ Test "Exists returns true for saved key" passed after 0.307 seconds.
+✔ Test "Category count returns correct number" passed after 0.307 seconds.
+✔ Test "Filter by category" passed after 0.307 seconds.
+✔ Test "Delete removes key" passed after 0.307 seconds.
+✔ Test "Save and retrieve a key" passed after 0.307 seconds.
+✔ Test "Env format includes service name comments" passed after 0.307 seconds.
+✔ Test "Secret Reference format includes service name comments" passed after 0.307 seconds.
+✔ Test "Secret Reference format outputs keychain:// prefix" passed after 0.307 seconds.
+✔ Test "Standard format includes service name comments" passed after 0.307 seconds.
+✔ Test "Exists returns false for missing key" passed after 0.307 seconds.
+✔ Test "Boundary: value exactly at threshold-1 is fully masked, at threshold reveals prefix" passed after 0.307 seconds.
+✔ Test "SigningIdentity.software goes through the same encrypt/verify path as a raw key" passed after 0.308 seconds.
+✔ Test "Route header value is correctly formatted for OpenAI" passed after 0.307 seconds.
+✔ Test "Log entry detects errors" passed after 0.307 seconds.
+✔ Test "resolveSigningIdentity: first create (no existing, add succeeds) uses fresh key" passed after 0.307 seconds.
+✔ Test "Log does not contain API key or request body" passed after 0.307 seconds.
+✔ Test "Long values reveal only a short prefix and never the suffix" passed after 0.307 seconds.
+✔ Test "sign / verify round trip over canonical message" passed after 0.307 seconds.
+✔ Test "Short values are fully masked with no original characters and a fixed width (hides length)" passed after 0.307 seconds.
+✔ Test "ProxyLogStore appends and limits entries" passed after 0.307 seconds.
+✔ Test "v2 round trip: encrypt (sender) → decrypt (recipient) authenticates and matches" passed after 0.307 seconds.
+✔ Test "Structural inconsistency: only one of signature/senderSigningPublicKey present throws signatureInvalid" passed after 0.307 seconds.
+✔ Test "Log entry formats latency over 1 second" passed after 0.307 seconds.
+✔ Test "Tampering with keyCount throws signatureInvalid" passed after 0.307 seconds.
+✔ Test "No prefix warning when service not selected" passed after 0.307 seconds.
+✔ Test "TOFU: unknown fingerprint classifies as first-seen" passed after 0.308 seconds.
+✔ Test "Unconfigured keys are excluded from all formats" passed after 0.307 seconds.
+✔ Test "Once the user picks an icon, category changes no longer override it" passed after 0.307 seconds.
+✔ Test "All three modes are distinct" passed after 0.307 seconds.
+✔ Test "ProxyLogStore counts errors" passed after 0.307 seconds.
+✔ Test "Log entry formats time correctly" passed after 0.307 seconds.
+✔ Test "Standard format uses absolute security path" passed after 0.308 seconds.
+✔ Test "Server initializes with default port" passed after 0.307 seconds.
+✔ Test "Empty key list round trip" passed after 0.307 seconds.
+✔ Test "Secret Reference mode exists" passed after 0.307 seconds.
+✔ Test "Attribution swap: re-sign with attacker key over another's ciphertext fails GCM decryption" passed after 0.308 seconds.
+✔ Test "Multiple keys are grouped by category" passed after 0.308 seconds.
+✔ Test "ProxyLogStore clear removes all logs" passed after 0.307 seconds.
+✔ Test "Search filters by display name" passed after 0.307 seconds.
+✔ Test "Delete key makes it unconfigured" passed after 0.307 seconds.
+✔ Test "TOFU: confirm records fingerprint, then classifies as known" passed after 0.308 seconds.
+✔ Test "Hand-constructed v1 file (no signature fields) decodes, decrypts, unauthenticated" passed after 0.308 seconds.
+✔ Test "Signature-stripping (drop sig fields from a v2 file) throws signatureInvalid" passed after 0.308 seconds.
+✔ Test "Search filters by env var name" passed after 0.307 seconds.
+✔ Test "Fingerprint is full-length (256-bit) and stable for the same key" passed after 0.308 seconds.
+✔ Test "TOFU: re-confirm preserves the original firstSeen date" passed after 0.311 seconds.
+✔ Test "Tampering with encryptedData throws signatureInvalid" passed after 0.311 seconds.
+✔ Test "Swapping senderSigningPublicKey (with unchanged signature) throws signatureInvalid" passed after 0.311 seconds.
+✔ Test "canonicalMessage is deterministic and field-order sensitive" passed after 0.311 seconds.
+✔ Test "Version downgrade 2→1 while keeping signature throws signatureInvalid" passed after 0.311 seconds.
+✔ Test "Cannot save with an invalid env var name even with a category" passed after 0.311 seconds.
+✔ Test "APIKey.systemImage prefers a custom key's explicit icon (#110)" passed after 0.311 seconds.
+✔ Test "Can save with valid selection and token" passed after 0.311 seconds.
+✔ Test "Unknown version is rejected (invalidFile)" passed after 0.311 seconds.
+✔ Test "Tampering with createdAt throws signatureInvalid" passed after 0.311 seconds.
+✔ Test "TOFU: a new fingerprint is still first-seen even when the store is non-empty" passed after 0.312 seconds.
+✔ Test "Can save WITHOUT a service when category + env var + value are set (issue #102)" passed after 0.311 seconds.
+✔ Test "No prefix warning for correct prefix" passed after 0.311 seconds.
+✔ Test "Cannot save without category selection" passed after 0.311 seconds.
+✔ Test "Custom key icon equal to category default is not persisted (follows category)" passed after 0.311 seconds.
+✔ Test "New editor starts with no selection" passed after 0.311 seconds.
+✔ Test "Save with NO service + preset env var + matching default category writes no override" passed after 0.311 seconds.
+✔ Test "Forgery with a different signing key verifies but yields a DIFFERENT fingerprint" passed after 0.311 seconds.
+✔ Test "Icon follows the category default until the user picks one" passed after 0.311 seconds.
+✔ Test "Editing key loads existing value" passed after 0.311 seconds.
+✔ Test "Save with NO service but a preset-named env var preserves the chosen category via override (#102)" passed after 0.311 seconds.
+✔ Test "Save with NO service + custom env var creates a CustomKey with the chosen category (#102)" passed after 0.311 seconds.
+✔ Test "Save stores value in keychain" passed after 0.311 seconds.
+✔ Test "Cannot save with empty token" passed after 0.311 seconds.
+✔ Test "Prefix warning shows for wrong prefix" passed after 0.311 seconds.
+✔ Test "Old CustomKey JSON without an icon field decodes safely (migration, #110)" passed after 0.311 seconds.
+✔ Test "All services have system images" passed after 0.311 seconds.
+✔ Test "Token prefix format is correct" passed after 0.311 seconds.
+✔ Test "All services have env var names" passed after 0.311 seconds.
+✔ Test "All services have categories" passed after 0.311 seconds.
+✔ Test "Setup URLs are valid" passed after 0.311 seconds.
+✔ Test "Save stores a user-picked icon on a custom key (#110)" passed after 0.312 seconds.
+✔ Test "All services have display names" passed after 0.311 seconds.
+✔ Test "contentLengthField validates: absent/present/invalid (non-numeric, negative, conflicting)" passed after 0.311 seconds.
+✔ Test "Save stores an icon override for a preset-named key (#110)" passed after 0.312 seconds.
+✔ Test "parseContentLength reads the header case-insensitively" passed after 0.311 seconds.
+✔ Test "decodeSigningBlob: round-trips a freshly created SE identity when available" passed after 0.313 seconds.
+✔ Test "makeNewSigningIdentity produces a usable signer (SE or software)" passed after 0.313 seconds.
+✔ Test "Starting twice does not crash" passed after 0.312 seconds.
+✔ Test "Invalid env var names are rejected" passed after 0.309 seconds.
+✔ Test "isValid does not trim: surrounding whitespace makes a name invalid" passed after 0.309 seconds.
+✔ Test "Names with embedded newlines are rejected (anchors match whole string, not line)" passed after 0.309 seconds.
+✔ Test "Valid env var names are accepted" passed after 0.309 seconds.
+✔ Suite "ProxyRoute Tests" passed after 0.313 seconds.
+✔ Test "unconfigure removes a well-formed block and preserves user lines" passed after 0.306 seconds.
+✔ Suite "HTTPRequestParser Tests" passed after 0.313 seconds.
+✔ Suite "KeyCategory Tests" passed after 0.313 seconds.
+✔ Suite "EnvParser key validation Tests (#116)" passed after 0.314 seconds.
+✔ Suite "KeychainService sink validation Tests (#116)" passed after 0.313 seconds.
+✔ Suite "MockKeychainService Tests" passed after 0.313 seconds.
+✔ Suite "Header Injection Security Tests" passed after 0.313 seconds.
+✔ Suite "ZshrcExporter Secret Reference Tests" passed after 0.314 seconds.
+✔ Suite "KeyListViewModel Tests" passed after 0.314 seconds.
+✔ Suite "SecretMask Tests" passed after 0.314 seconds.
+✔ Suite "ProxyLog Tests" passed after 0.314 seconds.
+✔ Suite "KeyShareService Sender Auth (#112)" passed after 0.314 seconds.
+✔ Suite "KeyEditorViewModel Tests" passed after 0.314 seconds.
+✔ Suite "KeyManagementMode Tests" passed after 0.314 seconds.
+✔ Suite "ServiceType Tests" passed after 0.314 seconds.
+✔ Suite "KeyShare Hardening (#126 / #127)" passed after 0.314 seconds.
+✔ Suite "EnvVarName Tests" passed after 0.314 seconds.
+◇ Test "unconfigure fails safely for a dangling BEGIN around the current hook" started.
+✔ Test "unconfigure fails safely for a dangling BEGIN around the current hook" passed after 0.006 seconds.
+◇ Test "unconfigure leaves a simple dangling BEGIN byte-identical" started.
+✔ Test "unconfigure leaves a simple dangling BEGIN byte-identical" passed after 0.001 seconds.
+◇ Test "unconfigure fails safely for a lone END marker" started.
+✔ Test "unconfigure fails safely for a lone END marker" passed after 0.001 seconds.
+◇ Test "unconfigure backup has 0600 permissions" started.
+✔ Test "unconfigure backup has 0600 permissions" passed after 0.001 seconds.
+◇ Test "unconfigure recognizes and removes a well-formed CRLF block" started.
+✔ Test "unconfigure recognizes and removes a well-formed CRLF block" passed after 0.001 seconds.
+◇ Test "configure migrates a stale managed block" started.
+✔ Test "configure migrates a stale managed block" passed after 0.001 seconds.
+◇ Test "configure is idempotent when managed block is current" started.
+✔ Test "configure is idempotent when managed block is current" passed after 0.001 seconds.
+◇ Test "configure adds current managed block to a fresh zshrc" started.
+✔ Test "configure adds current managed block to a fresh zshrc" passed after 0.001 seconds.
+◇ Test "Config block contains BASE_URL for all supported services" started.
+✔ Test "Config block contains BASE_URL for all supported services" passed after 0.001 seconds.
+◇ Test "ProxyRoute covers all configured BASE_URLs" started.
+✔ Test "ProxyRoute covers all configured BASE_URLs" passed after 0.001 seconds.
+◇ Test "Default port is 18121" started.
+✔ Test "Default port is 18121" passed after 0.001 seconds.
+◇ Test "activateProxy creates env file, deactivateProxy removes it" started.
+✔ Test "activateProxy creates env file, deactivateProxy removes it" passed after 0.001 seconds.
+◇ Test "writeProxyEnvFile creates file with 0600 permissions (token not world-readable)" started.
+✔ Test "writeProxyEnvFile creates file with 0600 permissions (token not world-readable)" passed after 0.058 seconds.
+◇ Test "writeProxyEnvFile yields 0600 even under umask 022 (TOCTOU: no 0644 window)" started.
+✔ Test "writeProxyEnvFile yields 0600 even under umask 022 (TOCTOU: no 0644 window)" passed after 0.001 seconds.
+◇ Test "activateProxy writes proxy env file with 0600 permissions" started.
+✔ Test "activateProxy writes proxy env file with 0600 permissions" passed after 0.001 seconds.
+◇ Test "isProxyActive reflects file existence" started.
+✔ Test "isProxyActive reflects file existence" passed after 0.001 seconds.
+◇ Test "zsh proxy hook keeps live config and sources it" started.
+✔ Test "zsh proxy hook keeps live config and sources it" passed after 0.015 seconds.
+◇ Test "zsh proxy hook deletes config for closed port" started.
+✔ Test "Keychain consent-required read returns 503 quickly, no hang" passed after 0.409 seconds.
+✔ Test "zsh proxy hook deletes config for closed port" passed after 0.010 seconds.
+✔ Suite "SetupManager Tests" passed after 0.413 seconds.
+✔ Test "Invalid (conflicting) Content-Length is rejected with 400" passed after 0.415 seconds.
+✔ Test "Transfer-Encoding request is rejected with 400 (smuggling defense)" passed after 0.415 seconds.
+✔ Test "Unknown host is rejected instantly without touching the keychain" passed after 0.417 seconds.
+✔ Test "Oversized request is rejected with 413" passed after 0.418 seconds.
+✔ Test "Server can start and stop" passed after 0.619 seconds.
+✔ Suite "ProxyServer Tests" passed after 0.620 seconds.
+✔ Test "A blocked keychain read does NOT wedge other requests" passed after 0.711 seconds.
+✔ Test "Admission cap: concurrent burst during the first timeout window is bounded (fast 503)" passed after 0.723 seconds.
+✔ Test "Full request body is framed before forwarding (split header/body sends)" passed after 0.742 seconds.
+✔ Test "A blocked keychain read returns a timeout error, never hangs forever" passed after 1.418 seconds.
+✔ Test "Idle client connection is dropped after the inbound timeout" passed after 1.420 seconds.
+✔ Test "Circuit breaker: after a timeout, subsequent reads fail fast without re-blocking" passed after 1.420 seconds.
+✔ Suite "Proxy Hang Regression Tests (issue #96)" passed after 1.421 seconds.
+✔ Test "Upstream response is streamed to the client, not buffered until completion" passed after 2.026 seconds.
+✔ Suite "Proxy HTTP Streaming & Framing Tests (issue #98)" passed after 2.029 seconds.
+✔ Test run with 151 tests in 21 suites passed after 2.030 seconds.
