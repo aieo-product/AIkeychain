@@ -169,6 +169,46 @@ enum SetupManager {
         return content.contains(".aikeychain_proxy") && !content.contains(markerBegin)
     }
 
+    /// マーカー構造の解析結果
+    private struct MarkerAnalysis {
+        /// BEGIN/END がネストなく過不足なく対応しているか（unconfigure と同一判定）
+        let isWellFormed: Bool
+        /// 各ブロックの BEGIN/END 間の内容（各行を "\n" で join、末尾改行なし）
+        let blockContents: [String]
+    }
+
+    /// .zshrc の内容から AI KeyChain マーカーブロックの構造を解析する。
+    /// well-formedness の判定は unconfigure(zshrcPath:) と同一ロジックに揃える
+    /// （isWellFormed == true ならその後 unconfigure が throw しないことを保証する）。
+    private static func analyzeMarkers(in content: String) -> MarkerAnalysis {
+        let lines = content.components(separatedBy: "\n")
+        var isWellFormed = true
+        var blocks: [String] = []
+        var current: [String] = []
+        var inBlock = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == markerBegin {
+                if inBlock { isWellFormed = false }   // ネストした BEGIN
+                inBlock = true
+                current = []
+            } else if trimmed == markerEnd {
+                if !inBlock {
+                    isWellFormed = false              // 対応する BEGIN のない END
+                } else {
+                    blocks.append(current.joined(separator: "\n"))
+                }
+                inBlock = false
+            } else if inBlock {
+                current.append(line)
+            }
+        }
+        if inBlock { isWellFormed = false }           // 閉じられていない BEGIN
+
+        return MarkerAnalysis(isWellFormed: isWellFormed, blockContents: blocks)
+    }
+
     /// .zshrc にフックを追記（BEGIN/END マーカーで囲む）
     /// レガシー形式が存在する場合は先に削除してからマーカー形式で再追加
     static func configure() throws {
@@ -181,13 +221,19 @@ enum SetupManager {
             try unconfigure(zshrcPath: zshrcPath)
         }
 
-        // 現行のマーカー形式が既に存在する場合はスキップ。古い形式は置き換える。
-        if let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8),
-           content.contains(markerBegin) {
-            let currentBlock = "\(markerBegin)\n\(zshrcSourceLine)\n\(markerEnd)"
-            if content.contains(currentBlock) {
-                return
-            }
+        let existing = (try? String(contentsOfFile: zshrcPath, encoding: .utf8)) ?? ""
+        let analysis = analyzeMarkers(in: existing)
+
+        // べき等: 構造が well-formed かつ「現行と同一のブロックがちょうど 1 つだけ」なら
+        // 何もしない。重複ブロック・古い内容・余分なマーカーは以下で整理し直す（#148）。
+        if analysis.isWellFormed && analysis.blockContents == [zshrcSourceLine] {
+            return
+        }
+
+        // マーカーが 1 つでも存在すれば unconfigure で一旦整理する。
+        // - well-formed（重複ブロック / 古い内容）→ 全ブロック除去してから 1 つだけ再追加
+        // - malformed（余分/ネストしたマーカー）→ unconfigure が backup + throw（#146 契約）
+        if existing.contains(markerBegin) || existing.contains(markerEnd) {
             try unconfigure(zshrcPath: zshrcPath)
         }
 

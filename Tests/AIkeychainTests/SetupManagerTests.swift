@@ -243,6 +243,75 @@ struct SetupManagerTests {
         #expect(result.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
     }
 
+    @Test("configure normalizes duplicate managed blocks to a single block")
+    func configureNormalizesDuplicateBlocks() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        // 現行と同一の well-formed ブロックが 2 つ存在する（重複）状態。
+        let snippet = SetupManager.proxySourceSnippet(proxyEnvPath: "~/.aikeychain_proxy")
+        let block = "# >>> AI KeyChain >>>\n\(snippet)\n# <<< AI KeyChain <<<"
+        let original = """
+        export EDITOR=vim
+
+        \(block)
+
+        alias k=kubectl
+
+        \(block)
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        // 重複が 1 つに正規化される
+        #expect(result.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
+        #expect(result.components(separatedBy: "# <<< AI KeyChain <<<").count - 1 == 1)
+        #expect(result.contains("/usr/bin/nc -z"))
+        // ユーザー行は保持される
+        #expect(result.contains("export EDITOR=vim"))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(try zshSyntaxIsValid(at: path))
+    }
+
+    @Test("configure fails safely when a stray marker accompanies the current block")
+    func configureFailsSafelyWithStrayMarker() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        // 現行ブロックに加え、余分な（ネストした）BEGIN マーカーが混在 = malformed。
+        let snippet = SetupManager.proxySourceSnippet(proxyEnvPath: "~/.aikeychain_proxy")
+        let original = """
+        export EDITOR=vim
+        # >>> AI KeyChain >>>
+        # >>> AI KeyChain >>>
+        \(snippet)
+        # <<< AI KeyChain <<<
+        alias k=kubectl
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+        let originalData = try Data(contentsOf: URL(fileURLWithPath: path))
+
+        // malformed は非破壊 throw（unconfigure #146 契約）に委ねる
+        #expect(throws: SetupManager.SetupError.malformedMarkers) {
+            try SetupManager.configure(zshrcPath: path)
+        }
+
+        // 元ファイルは 1 バイトも変更されず、backup が作られる
+        let resultData = try Data(contentsOf: URL(fileURLWithPath: path))
+        #expect(resultData == originalData)
+        #expect(FileManager.default.fileExists(atPath: backupPath))
+        let backupData = try Data(contentsOf: URL(fileURLWithPath: backupPath))
+        #expect(backupData == originalData)
+    }
+
     @Test("Config block contains BASE_URL for all supported services")
     func configBlockContent() {
         // SetupManager.configure() が書く内容を間接的に検証
