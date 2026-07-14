@@ -209,6 +209,35 @@ enum SetupManager {
         return MarkerAnalysis(isWellFormed: isWellFormed, blockContents: blocks)
     }
 
+    /// well-formed なマーカーブロックだけを取り除き、ブロック外の行は一切変更せず残す。
+    /// unconfigure と異なりレガシー行（`.aikeychain_proxy` を含む行等）の削除は行わないため、
+    /// マーカー外にあるユーザー自身の設定を巻き添え削除しない（#148 / Codex #1）。
+    /// 呼び出し側は事前に isWellFormed == true を保証すること（malformed は unconfigure に委ねる）。
+    private static func removingMarkerBlocks(from content: String) -> String {
+        let lines = content.components(separatedBy: "\n")
+        var result: [String] = []
+        var inBlock = false
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == markerBegin {
+                inBlock = true
+                continue
+            }
+            if trimmed == markerEnd {
+                inBlock = false
+                continue
+            }
+            if !inBlock {
+                result.append(line)
+            }
+        }
+        var output = result.joined(separator: "\n")
+        while output.contains("\n\n\n") {
+            output = output.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        }
+        return output
+    }
+
     /// .zshrc にフックを追記（BEGIN/END マーカーで囲む）
     /// レガシー形式が存在する場合は先に削除してからマーカー形式で再追加
     static func configure() throws {
@@ -225,19 +254,29 @@ enum SetupManager {
         let analysis = analyzeMarkers(in: existing)
 
         // べき等: 構造が well-formed かつ「現行と同一のブロックがちょうど 1 つだけ」なら
-        // 何もしない。重複ブロック・古い内容・余分なマーカーは以下で整理し直す（#148）。
-        if analysis.isWellFormed && analysis.blockContents == [zshrcSourceLine] {
+        // 何もしない。CRLF 環境でも本文末尾の \r を無視して比較し、既に整合したブロックを
+        // 不必要に書き換えて末尾へ移動させない（#148 / Codex #3）。
+        let normalizedBlocks = analysis.blockContents.map {
+            $0.replacingOccurrences(of: "\r", with: "")
+        }
+        if analysis.isWellFormed && normalizedBlocks == [zshrcSourceLine] {
             return
         }
 
-        // マーカーが 1 つでも存在すれば unconfigure で一旦整理する。
-        // - well-formed（重複ブロック / 古い内容）→ 全ブロック除去してから 1 つだけ再追加
-        // - malformed（余分/ネストしたマーカー）→ unconfigure が backup + throw（#146 契約）
-        if existing.contains(markerBegin) || existing.contains(markerEnd) {
+        // マーカーの整理。
+        // - well-formed（重複ブロック / 古い内容）→ マーカーブロックだけ除去（ブロック外の
+        //   ユーザー行は保護）してから 1 つだけ再追加する。unconfigure を経由すると
+        //   ブロック外の `.aikeychain_proxy` 参照行まで消えるため使わない（#148 / Codex #1）。
+        // - malformed（余分/ネストしたマーカー）→ unconfigure が backup + throw（#146 契約）。
+        //   analyzeMarkers と unconfigure の well-formedness 判定は同一なので必ず throw する。
+        var content: String
+        if analysis.isWellFormed {
+            content = removingMarkerBlocks(from: existing)
+        } else {
             try unconfigure(zshrcPath: zshrcPath)
+            // 到達しない（malformed なので unconfigure が throw する）。防御的に中断する。
+            throw SetupError.malformedMarkers
         }
-
-        var content = (try? String(contentsOfFile: zshrcPath, encoding: .utf8)) ?? ""
 
         if !content.isEmpty && !content.hasSuffix("\n") {
             content += "\n"

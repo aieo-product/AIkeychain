@@ -272,10 +272,76 @@ struct SetupManagerTests {
         #expect(result.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
         #expect(result.components(separatedBy: "# <<< AI KeyChain <<<").count - 1 == 1)
         #expect(result.contains("/usr/bin/nc -z"))
+        // マーカー間本文が現行 snippet と完全一致するブロックがちょうど 1 つ
+        // （「空マーカーペア + マーカー外に残った snippet」等の抜けを防ぐ、Codex #4）。
+        #expect(result.components(separatedBy: block).count - 1 == 1)
         // ユーザー行は保持される
         #expect(result.contains("export EDITOR=vim"))
         #expect(result.contains("alias k=kubectl"))
         #expect(try zshSyntaxIsValid(at: path))
+    }
+
+    @Test("configure preserves user lines mentioning the proxy path when normalizing duplicates")
+    func configurePreservesUserProxyReferenceWhenNormalizing() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        // 重複ブロック + マーカー外にユーザー自身の `.aikeychain_proxy` 参照行。
+        // 正規化のために unconfigure を素通しすると、この行が巻き添え削除される（Codex #1）。
+        let snippet = SetupManager.proxySourceSnippet(proxyEnvPath: "~/.aikeychain_proxy")
+        let block = "# >>> AI KeyChain >>>\n\(snippet)\n# <<< AI KeyChain <<<"
+        let userProxyLine = "export SNAPSHOT=\"$HOME/.aikeychain_proxy.backup\""
+        let original = """
+        \(userProxyLine)
+
+        \(block)
+
+        alias k=kubectl
+
+        \(block)
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        // 管理ブロックは 1 つに正規化されるが、ユーザー行は削除されない
+        #expect(result.components(separatedBy: "# >>> AI KeyChain >>>").count - 1 == 1)
+        #expect(result.contains(userProxyLine))
+        #expect(result.contains("alias k=kubectl"))
+        #expect(try zshSyntaxIsValid(at: path))
+    }
+
+    @Test("configure is a byte-identical no-op for an already-correct CRLF block")
+    func configureIsIdempotentForCRLFCurrentBlock() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        // 既に正しい現行ブロックを持つが CRLF 改行の .zshrc。
+        // 本文の \r を無視して同一と判定できないと、no-op にならずブロックが末尾へ移動する（Codex #3）。
+        let snippet = SetupManager.proxySourceSnippet(proxyEnvPath: "~/.aikeychain_proxy")
+        let lf = """
+        export EDITOR=vim
+
+        # >>> AI KeyChain >>>
+        \(snippet)
+        # <<< AI KeyChain <<<
+        """
+        let crlf = lf.replacingOccurrences(of: "\n", with: "\r\n")
+        try crlf.write(toFile: path, atomically: true, encoding: .utf8)
+        let originalData = try Data(contentsOf: URL(fileURLWithPath: path))
+
+        try SetupManager.configure(zshrcPath: path)
+
+        // 既に整合しているので 1 バイトも書き換わらない
+        let resultData = try Data(contentsOf: URL(fileURLWithPath: path))
+        #expect(resultData == originalData)
     }
 
     @Test("configure fails safely when a stray marker accompanies the current block")
@@ -310,6 +376,9 @@ struct SetupManagerTests {
         #expect(FileManager.default.fileExists(atPath: backupPath))
         let backupData = try Data(contentsOf: URL(fileURLWithPath: backupPath))
         #expect(backupData == originalData)
+        // backup は 0600 で作られる（#146 契約 / Codex #4）
+        let backupPerm = try FileManager.default.attributesOfItem(atPath: backupPath)[.posixPermissions] as? NSNumber
+        #expect(backupPerm?.int16Value == 0o600)
     }
 
     @Test("Config block contains BASE_URL for all supported services")
