@@ -212,6 +212,7 @@ enum SetupManager {
     /// well-formed なマーカーブロックだけを取り除き、ブロック外の行は一切変更せず残す。
     /// unconfigure と異なりレガシー行（`.aikeychain_proxy` を含む行等）の削除は行わないため、
     /// マーカー外にあるユーザー自身の設定を巻き添え削除しない（#148 / Codex #1）。
+    /// 空行の圧縮も行わない（heredoc 本文等、ユーザーの意図的な連続空行を壊さない / Codex #A）。
     /// 呼び出し側は事前に isWellFormed == true を保証すること（malformed は unconfigure に委ねる）。
     private static func removingMarkerBlocks(from content: String) -> String {
         let lines = content.components(separatedBy: "\n")
@@ -231,11 +232,15 @@ enum SetupManager {
                 result.append(line)
             }
         }
-        var output = result.joined(separator: "\n")
-        while output.contains("\n\n\n") {
-            output = output.replacingOccurrences(of: "\n\n\n", with: "\n\n")
-        }
-        return output
+        return result.joined(separator: "\n")
+    }
+
+    /// CRLF 環境向けに、各物理行の「行末」の CR だけを取り除いて LF 正規形にする。
+    /// 行の途中に混入した CR は残すため、壊れたブロックを現行ブロックと誤認しない（Codex #B）。
+    private static func normalizingLineEndings(_ s: String) -> String {
+        s.components(separatedBy: "\n")
+            .map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+            .joined(separator: "\n")
     }
 
     /// .zshrc にフックを追記（BEGIN/END マーカーで囲む）
@@ -256,9 +261,7 @@ enum SetupManager {
         // べき等: 構造が well-formed かつ「現行と同一のブロックがちょうど 1 つだけ」なら
         // 何もしない。CRLF 環境でも本文末尾の \r を無視して比較し、既に整合したブロックを
         // 不必要に書き換えて末尾へ移動させない（#148 / Codex #3）。
-        let normalizedBlocks = analysis.blockContents.map {
-            $0.replacingOccurrences(of: "\r", with: "")
-        }
+        let normalizedBlocks = analysis.blockContents.map(normalizingLineEndings)
         if analysis.isWellFormed && normalizedBlocks == [zshrcSourceLine] {
             return
         }

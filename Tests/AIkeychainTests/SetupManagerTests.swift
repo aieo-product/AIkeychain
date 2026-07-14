@@ -344,6 +344,57 @@ struct SetupManagerTests {
         #expect(resultData == originalData)
     }
 
+    @Test("configure preserves user's intentional blank lines (no whitespace collapse)")
+    func configurePreservesIntentionalBlankLines() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        // マーカー未設定の初回 configure。ユーザーが意図的に置いた連続空行
+        // （heredoc 本文等）を圧縮してはならない（Codex #A）。
+        let original = """
+        alpha
+
+
+        beta
+        """
+        try original.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        // 追記前のユーザー内容はそのまま（連続空行が保持される）
+        #expect(result.hasPrefix("alpha\n\n\nbeta"))
+    }
+
+    @Test("configure rewrites a block whose body differs only by an embedded mid-line CR")
+    func configureRewritesBlockWithMidLineCarriageReturn() throws {
+        let path = temporaryZshrcPath()
+        let backupPath = path + ".aikeychain.bak"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            try? FileManager.default.removeItem(atPath: backupPath)
+        }
+        // well-formed だが本文の 1 行に「行中の」CR が混入した壊れたブロック。
+        // 行末 CR ではないので現行 snippet とは別物 → no-op にせず正規化すべき（Codex #B）。
+        let snippet = SetupManager.proxySourceSnippet(proxyEnvPath: "~/.aikeychain_proxy")
+        let corruptedSnippet = snippet.replacingOccurrences(
+            of: "~/.aikeychain_proxy", with: "~/.aikeychain_pro\rxy")
+        let corruptedBlock = "# >>> AI KeyChain >>>\n\(corruptedSnippet)\n# <<< AI KeyChain <<<"
+        try corruptedBlock.write(toFile: path, atomically: true, encoding: .utf8)
+
+        try SetupManager.configure(zshrcPath: path)
+
+        let result = try String(contentsOfFile: path, encoding: .utf8)
+        // 壊れたパスは残らず、正しい現行ブロックへ置き換わる
+        #expect(!result.contains("\r"))
+        let cleanBlock = "# >>> AI KeyChain >>>\n\(snippet)\n# <<< AI KeyChain <<<"
+        #expect(result.components(separatedBy: cleanBlock).count - 1 == 1)
+        #expect(try zshSyntaxIsValid(at: path))
+    }
+
     @Test("configure fails safely when a stray marker accompanies the current block")
     func configureFailsSafelyWithStrayMarker() throws {
         let path = temporaryZshrcPath()
