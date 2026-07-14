@@ -169,6 +169,80 @@ enum SetupManager {
         return content.contains(".aikeychain_proxy") && !content.contains(markerBegin)
     }
 
+    /// マーカー構造の解析結果
+    private struct MarkerAnalysis {
+        /// BEGIN/END がネストなく過不足なく対応しているか（unconfigure と同一判定）
+        let isWellFormed: Bool
+        /// 各ブロックの BEGIN/END 間の内容（各行を "\n" で join、末尾改行なし）
+        let blockContents: [String]
+    }
+
+    /// .zshrc の内容から AI KeyChain マーカーブロックの構造を解析する。
+    /// well-formedness の判定は unconfigure(zshrcPath:) と同一ロジックに揃える
+    /// （isWellFormed == true ならその後 unconfigure が throw しないことを保証する）。
+    private static func analyzeMarkers(in content: String) -> MarkerAnalysis {
+        let lines = content.components(separatedBy: "\n")
+        var isWellFormed = true
+        var blocks: [String] = []
+        var current: [String] = []
+        var inBlock = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == markerBegin {
+                if inBlock { isWellFormed = false }   // ネストした BEGIN
+                inBlock = true
+                current = []
+            } else if trimmed == markerEnd {
+                if !inBlock {
+                    isWellFormed = false              // 対応する BEGIN のない END
+                } else {
+                    blocks.append(current.joined(separator: "\n"))
+                }
+                inBlock = false
+            } else if inBlock {
+                current.append(line)
+            }
+        }
+        if inBlock { isWellFormed = false }           // 閉じられていない BEGIN
+
+        return MarkerAnalysis(isWellFormed: isWellFormed, blockContents: blocks)
+    }
+
+    /// well-formed なマーカーブロックだけを取り除き、ブロック外の行は一切変更せず残す。
+    /// unconfigure と異なりレガシー行（`.aikeychain_proxy` を含む行等）の削除は行わないため、
+    /// マーカー外にあるユーザー自身の設定を巻き添え削除しない（#148 / Codex #1）。
+    /// 空行の圧縮も行わない（heredoc 本文等、ユーザーの意図的な連続空行を壊さない / Codex #A）。
+    /// 呼び出し側は事前に isWellFormed == true を保証すること（malformed は unconfigure に委ねる）。
+    private static func removingMarkerBlocks(from content: String) -> String {
+        let lines = content.components(separatedBy: "\n")
+        var result: [String] = []
+        var inBlock = false
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed == markerBegin {
+                inBlock = true
+                continue
+            }
+            if trimmed == markerEnd {
+                inBlock = false
+                continue
+            }
+            if !inBlock {
+                result.append(line)
+            }
+        }
+        return result.joined(separator: "\n")
+    }
+
+    /// CRLF 環境向けに、各物理行の「行末」の CR だけを取り除いて LF 正規形にする。
+    /// 行の途中に混入した CR は残すため、壊れたブロックを現行ブロックと誤認しない（Codex #B）。
+    private static func normalizingLineEndings(_ s: String) -> String {
+        s.components(separatedBy: "\n")
+            .map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+            .joined(separator: "\n")
+    }
+
     /// .zshrc にフックを追記（BEGIN/END マーカーで囲む）
     /// レガシー形式が存在する場合は先に削除してからマーカー形式で再追加
     static func configure() throws {
@@ -181,17 +255,31 @@ enum SetupManager {
             try unconfigure(zshrcPath: zshrcPath)
         }
 
-        // 現行のマーカー形式が既に存在する場合はスキップ。古い形式は置き換える。
-        if let content = try? String(contentsOfFile: zshrcPath, encoding: .utf8),
-           content.contains(markerBegin) {
-            let currentBlock = "\(markerBegin)\n\(zshrcSourceLine)\n\(markerEnd)"
-            if content.contains(currentBlock) {
-                return
-            }
-            try unconfigure(zshrcPath: zshrcPath)
+        let existing = (try? String(contentsOfFile: zshrcPath, encoding: .utf8)) ?? ""
+        let analysis = analyzeMarkers(in: existing)
+
+        // べき等: 構造が well-formed かつ「現行と同一のブロックがちょうど 1 つだけ」なら
+        // 何もしない。CRLF 環境でも本文末尾の \r を無視して比較し、既に整合したブロックを
+        // 不必要に書き換えて末尾へ移動させない（#148 / Codex #3）。
+        let normalizedBlocks = analysis.blockContents.map(normalizingLineEndings)
+        if analysis.isWellFormed && normalizedBlocks == [zshrcSourceLine] {
+            return
         }
 
-        var content = (try? String(contentsOfFile: zshrcPath, encoding: .utf8)) ?? ""
+        // マーカーの整理。
+        // - well-formed（重複ブロック / 古い内容）→ マーカーブロックだけ除去（ブロック外の
+        //   ユーザー行は保護）してから 1 つだけ再追加する。unconfigure を経由すると
+        //   ブロック外の `.aikeychain_proxy` 参照行まで消えるため使わない（#148 / Codex #1）。
+        // - malformed（余分/ネストしたマーカー）→ unconfigure が backup + throw（#146 契約）。
+        //   analyzeMarkers と unconfigure の well-formedness 判定は同一なので必ず throw する。
+        var content: String
+        if analysis.isWellFormed {
+            content = removingMarkerBlocks(from: existing)
+        } else {
+            try unconfigure(zshrcPath: zshrcPath)
+            // 到達しない（malformed なので unconfigure が throw する）。防御的に中断する。
+            throw SetupError.malformedMarkers
+        }
 
         if !content.isEmpty && !content.hasSuffix("\n") {
             content += "\n"
