@@ -70,6 +70,47 @@ struct KeyListViewModelTests {
         #expect(vm.builtinCategoryCount(for: .ai) == aiCount)
     }
 
+    @Test("CLI-added keychain keys are discovered under the CLI Added category")
+    func discoversCliAddedKeys() throws {
+        let (vm, mock) = makeSUT()
+        // プリセットにもカスタムにも無い、CLI (akc set) 由来の Keychain キー。
+        try mock.save(value: "secret", for: "MY_CLI_KEY")
+        vm.loadKeys()
+
+        let discovered = vm.keys.first { $0.envVarName == "MY_CLI_KEY" }
+        #expect(discovered != nil)
+        #expect(discovered?.isConfigured == true)
+        #expect(discovered?.builtinCategory == .cliAdded)
+        // 「コマンド追加」カテゴリでフィルタすると出てくる
+        vm.selectedCategory = .builtin(.cliAdded)
+        #expect(vm.filteredKeys.contains { $0.envVarName == "MY_CLI_KEY" })
+    }
+
+    @Test("A preset key stored via CLI is not duplicated as a discovered key")
+    func presetStoredViaCliIsNotDuplicated() throws {
+        let (vm, mock) = makeSUT()
+        // プリセットの envVarName を CLI で保存しても、発見キーとして二重表示しない。
+        try mock.save(value: "secret", for: "ANTHROPIC_API_KEY")
+        vm.loadKeys()
+
+        let matches = vm.keys.filter { $0.envVarName == "ANTHROPIC_API_KEY" }
+        #expect(matches.count == 1)
+        #expect(matches.first?.service == .some(.anthropic))
+        // .cliAdded ではなくプリセットのカテゴリに属する
+        #expect(matches.first?.builtinCategory != .cliAdded)
+    }
+
+    @Test("Non-env-var-shaped keychain accounts are not surfaced")
+    func invalidNamesNotSurfaced() throws {
+        let (vm, mock) = makeSUT()
+        // env 変数名として無効な名前（先頭数字 / ハイフン）は一覧に出さない。
+        try mock.save(value: "v", for: "9INVALID")
+        try mock.save(value: "v", for: "has-hyphen")
+        vm.loadKeys()
+        #expect(!vm.keys.contains { $0.envVarName == "9INVALID" })
+        #expect(!vm.keys.contains { $0.envVarName == "has-hyphen" })
+    }
+
     @Test("Delete key makes it unconfigured")
     func deleteKey() throws {
         let (vm, mock) = makeSUT()

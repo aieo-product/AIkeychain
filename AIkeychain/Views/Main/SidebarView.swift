@@ -9,6 +9,14 @@ struct SidebarView: View {
     private var appState: AppState { .shared }
     private var logStore: ProxyLogStore { appState.proxyLogStore }
 
+    /// サイドバーに出すビルトインカテゴリ。`.cliAdded`（コマンド追加）は CLI 発見キーが
+    /// 1 件以上ある時だけ表示し、常時 0/0 の空カテゴリを出さない（#153）。
+    private var visibleCategories: [KeyCategory] {
+        KeyCategory.allCases.filter { category in
+            category != .cliAdded || viewModel.builtinCategoryCount(for: category) > 0
+        }
+    }
+
     var body: some View {
         List(selection: $viewModel.selectedCategory) {
             Section {
@@ -46,7 +54,7 @@ struct SidebarView: View {
             }
 
             Section(L10n.s(ja: "カテゴリ", en: "Categories")) {
-                ForEach(KeyCategory.allCases) { category in
+                ForEach(visibleCategories) { category in
                     NavigationLink(value: CategorySelection.builtin(category)) {
                         Label {
                             HStack {

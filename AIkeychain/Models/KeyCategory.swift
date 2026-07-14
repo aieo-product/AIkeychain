@@ -7,6 +7,9 @@ enum KeyCategory: String, CaseIterable, Identifiable {
     case cloud = "Cloud & Infra"
     case communication = "Communication"
     case devTools = "Developer Tools"
+    /// CLI（`akc set`）で追加され、プリセット/カスタムのどちらにも属さないキーの
+    /// 発見用カテゴリ。種別不明のキーをここにまとめて表示する（#153）。
+    case cliAdded = "CLI Added"
 
     var id: String { rawValue }
 
@@ -19,6 +22,7 @@ enum KeyCategory: String, CaseIterable, Identifiable {
         case .cloud: L10n.s(ja: "クラウド & インフラ", en: "Cloud & Infra")
         case .communication: L10n.s(ja: "コミュニケーション", en: "Communication")
         case .devTools: L10n.s(ja: "開発ツール", en: "Developer Tools")
+        case .cliAdded: L10n.s(ja: "コマンド追加", en: "CLI Added")
         }
     }
 
@@ -30,6 +34,7 @@ enum KeyCategory: String, CaseIterable, Identifiable {
         case .cloud: Color(hex: 0x0284C7)
         case .communication: Color(hex: 0x059669)
         case .devTools: Color(hex: 0x6B7280)
+        case .cliAdded: Color(hex: 0x4F46E5)
         }
     }
 
@@ -41,6 +46,7 @@ enum KeyCategory: String, CaseIterable, Identifiable {
         case .cloud: "cloud.fill"
         case .communication: "bubble.left.and.bubble.right.fill"
         case .devTools: "wrench.and.screwdriver.fill"
+        case .cliAdded: "terminal.fill"
         }
     }
 
@@ -53,6 +59,7 @@ enum KeyCategory: String, CaseIterable, Identifiable {
         case .cloud:         UUID(uuidString: "B0000000-0000-0000-0000-000000000004")!
         case .communication: UUID(uuidString: "B0000000-0000-0000-0000-000000000005")!
         case .devTools:      UUID(uuidString: "B0000000-0000-0000-0000-000000000006")!
+        case .cliAdded:      UUID(uuidString: "B0000000-0000-0000-0000-000000000007")!
         }
     }
 

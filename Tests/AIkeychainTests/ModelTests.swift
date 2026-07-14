@@ -67,9 +67,10 @@ struct KeyCategoryTests {
         }
     }
 
-    @Test("Category count is 6")
+    @Test("Category count is 7")
     func categoryCount() {
-        #expect(KeyCategory.allCases.count == 6)
+        // 6 プリセットカテゴリ + CLI 発見用 .cliAdded（#153）
+        #expect(KeyCategory.allCases.count == 7)
     }
 }
 

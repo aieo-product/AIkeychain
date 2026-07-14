@@ -93,6 +93,21 @@ final class KeyListViewModel {
             ))
         }
 
+        // CLI (`akc set`) で追加され、プリセットにもカスタム索引にも無い Keychain キーを
+        // 発見して「コマンド追加」カテゴリに出す（種別不明のためまとめて表示 / #153）。
+        // env 変数名の形（EnvVarName.isValid）のみ採用し、内部用アイテムや
+        // シェル export で壊れる名前は除外する。
+        let known = Set(allKeys.map(\.envVarName))
+        for account in keychainService.allAccounts()
+        where !known.contains(account) && EnvVarName.isValid(account) {
+            let discovered = CustomKey(
+                envVarName: account,
+                displayName: account,
+                categoryId: KeyCategory.cliAdded.stableId
+            )
+            allKeys.append(APIKey(customKey: discovered, isConfigured: true))
+        }
+
         keys = allKeys
     }
 
