@@ -67,4 +67,10 @@ enum KeyCategory: String, CaseIterable, Identifiable {
     static func from(stableId: UUID) -> KeyCategory? {
         allCases.first { $0.stableId == stableId }
     }
+
+    /// ユーザーが手動で割り当て可能なカテゴリ。`.cliAdded` は CLI 発見キー専用の
+    /// 自動カテゴリなので、キー追加/オンボーディングの選択肢からは除外する（#153 / Codex #4）。
+    static var assignableCases: [KeyCategory] {
+        allCases.filter { $0 != .cliAdded }
+    }
 }

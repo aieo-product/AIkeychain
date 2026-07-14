@@ -35,7 +35,7 @@ struct KeyEditorView: View {
                     Text(L10n.s(ja: "カテゴリを選択...", en: "Select a category..."))
                         .foregroundStyle(.secondary)
                         .tag(CategorySelection?.none)
-                    ForEach(KeyCategory.allCases) { cat in
+                    ForEach(viewModel.selectableCategories) { cat in
                         Label(cat.displayName, systemImage: cat.systemImage)
                             .tag(CategorySelection?.some(.builtin(cat)))
                     }

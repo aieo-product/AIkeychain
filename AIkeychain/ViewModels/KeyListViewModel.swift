@@ -97,9 +97,11 @@ final class KeyListViewModel {
         // 発見して「コマンド追加」カテゴリに出す（種別不明のためまとめて表示 / #153）。
         // env 変数名の形（EnvVarName.isValid）のみ採用し、内部用アイテムや
         // シェル export で壊れる名前は除外する。
-        let known = Set(allKeys.map(\.envVarName))
+        // known は発見ループ中も更新する。allAccounts() は kSecMatchLimitAll で
+        // 同名アカウントを複数返し得るため、insert の成否で二重追加を防ぐ（Codex #2）。
+        var known = Set(allKeys.map(\.envVarName))
         for account in keychainService.allAccounts()
-        where !known.contains(account) && EnvVarName.isValid(account) {
+        where EnvVarName.isValid(account) && known.insert(account).inserted {
             let discovered = CustomKey(
                 envVarName: account,
                 displayName: account,

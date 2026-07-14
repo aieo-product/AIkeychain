@@ -455,7 +455,8 @@ struct RegisterKeysStepView: View {
 
                 // Quick status
                 VStack(spacing: 10) {
-                    ForEach(KeyCategory.allCases) { category in
+                    // 発見用 .cliAdded は CLI キーがある時だけ出す（オンボーディング初期は常に空 / Codex #4）
+                    ForEach(KeyCategory.allCases.filter { $0 != .cliAdded || keyListVM.builtinCategoryCount(for: $0) > 0 }) { category in
                         HStack(spacing: 10) {
                             CategoryIcon(category: category, size: 26)
                             Text(category.rawValue)

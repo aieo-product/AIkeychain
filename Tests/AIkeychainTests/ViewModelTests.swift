@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import AIkeychain
 
 @Suite("KeyListViewModel Tests")
@@ -70,20 +71,61 @@ struct KeyListViewModelTests {
         #expect(vm.builtinCategoryCount(for: .ai) == aiCount)
     }
 
+    /// CustomKeyStore.shared のグローバル状態と衝突しない、テストごとに一意な env 変数名。
+    /// （APIKey の分類は .shared 参照のため、既存 custom キーと同名だと偽陽性になる — #6 対策）
+    private func uniqueEnvName() -> String {
+        "CLI_TEST_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+    }
+
     @Test("CLI-added keychain keys are discovered under the CLI Added category")
     func discoversCliAddedKeys() throws {
         let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
         // プリセットにもカスタムにも無い、CLI (akc set) 由来の Keychain キー。
-        try mock.save(value: "secret", for: "MY_CLI_KEY")
+        try mock.save(value: "secret", for: name)
         vm.loadKeys()
 
-        let discovered = vm.keys.first { $0.envVarName == "MY_CLI_KEY" }
+        let discovered = vm.keys.first { $0.envVarName == name }
         #expect(discovered != nil)
         #expect(discovered?.isConfigured == true)
         #expect(discovered?.builtinCategory == .cliAdded)
         // 「コマンド追加」カテゴリでフィルタすると出てくる
         vm.selectedCategory = .builtin(.cliAdded)
-        #expect(vm.filteredKeys.contains { $0.envVarName == "MY_CLI_KEY" })
+        #expect(vm.filteredKeys.contains { $0.envVarName == name })
+    }
+
+    @Test("A discovered key shows the CLI Added category color, not gray")
+    func discoveredKeyUsesCliAddedColor() throws {
+        let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
+        try mock.save(value: "secret", for: name)
+        vm.loadKeys()
+        let discovered = vm.keys.first { $0.envVarName == name }
+        #expect(discovered?.categoryColor == KeyCategory.cliAdded.color)
+    }
+
+    @Test("Editing a discovered key's category persists across reload (via override)")
+    func editingDiscoveredKeyPersistsCategory() throws {
+        let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
+        try mock.save(value: "secret", for: name)
+        vm.loadKeys()
+        let discovered = try #require(vm.keys.first { $0.envVarName == name })
+        defer {
+            // .shared に書いた override を後始末する
+            CustomKeyStore.shared.setCategoryOverride(envVarName: name, value: nil)
+            CustomKeyStore.shared.setIconOverride(envVarName: name, icon: nil)
+        }
+
+        // 発見キーをエディタで「開発ツール」に付け替えて保存
+        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock)
+        editor.selectedCategorySelection = .builtin(.devTools)
+        try editor.save()
+
+        // 再読込しても .cliAdded に戻らず devTools を維持する
+        vm.loadKeys()
+        let after = vm.keys.first { $0.envVarName == name }
+        #expect(after?.builtinCategory == .devTools)
     }
 
     @Test("A preset key stored via CLI is not duplicated as a discovered key")
@@ -111,6 +153,14 @@ struct KeyListViewModelTests {
         #expect(!vm.keys.contains { $0.envVarName == "has-hyphen" })
     }
 
+    @Test("Duplicate accounts from enumeration are surfaced only once")
+    func dedupesDuplicateDiscoveredAccounts() {
+        let name = "CLI_DUP_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let stub = DupAccountsKeychainService(accounts: [name, name])
+        let vm = KeyListViewModel(keychainService: stub)
+        #expect(vm.keys.filter { $0.envVarName == name }.count == 1)
+    }
+
     @Test("Delete key makes it unconfigured")
     func deleteKey() throws {
         let (vm, mock) = makeSUT()
@@ -122,4 +172,16 @@ struct KeyListViewModelTests {
         try vm.delete(key: githubKey)
         #expect(vm.configuredCount == 0)
     }
+}
+
+/// `allAccounts()` が重複を返す状況を再現するテストダブル（辞書ベースの Mock では作れない）。
+final class DupAccountsKeychainService: KeychainServiceProtocol {
+    private let accounts: [String]
+    init(accounts: [String]) { self.accounts = accounts }
+    func save(value: String, for account: String) throws {}
+    func retrieve(for account: String) throws -> String? { nil }
+    func retrieveNoninteractive(for account: String) throws -> String? { nil }
+    func delete(for account: String) throws {}
+    func exists(for account: String) -> Bool { true }
+    func allAccounts() -> [String] { accounts }
 }

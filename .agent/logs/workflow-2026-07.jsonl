@@ -1,0 +1,1 @@
+{"timestamp": "2026-07-14T12:51:28Z", "command": "issue-implement", "issue": 153, "repo": "aieo-product/AIkeychain", "result": "success", "detail": "GUI が CLI 追加キーを発見表示(.cliAdded カテゴリ)。KeychainService.allAccounts 追加。swift test 160/160。PR #154。"}

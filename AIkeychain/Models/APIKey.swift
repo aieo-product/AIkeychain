@@ -74,6 +74,9 @@ struct APIKey: Identifiable, Equatable, Hashable {
         if let customKey, let cat = CustomKeyStore.shared.category(for: customKey.categoryId) {
             return cat.color
         }
+        // ビルトインカテゴリ（発見キーの .cliAdded / stableId でビルトインを指すカスタムキー）
+        // はカスタムカテゴリ検索に載らないため、実効ビルトインカテゴリの色を使う（#153 / Codex #3）。
+        if let builtin = builtinCategory { return builtin.color }
         return .gray
     }
 
