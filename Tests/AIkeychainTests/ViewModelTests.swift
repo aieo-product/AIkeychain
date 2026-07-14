@@ -153,6 +153,53 @@ struct KeyListViewModelTests {
         #expect(!vm.keys.contains { $0.envVarName == "has-hyphen" })
     }
 
+    @Test("Editing an existing key does not rename it (no orphaned duplicate)")
+    func editingDoesNotRenameKey() throws {
+        let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
+        try mock.save(value: "secret", for: name)
+        vm.loadKeys()
+        let discovered = try #require(vm.keys.first { $0.envVarName == name })
+
+        // エディタで環境変数名を書き換えて保存しても、rename は起きない
+        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock)
+        editor.selectedCategorySelection = .builtin(.devTools)
+        editor.envVarName = name + "_RENAMED"
+        try editor.save()
+
+        vm.loadKeys()
+        // 新名は作られず、旧名だけが残る（二重表示・無確認上書きを防ぐ）
+        #expect(!vm.keys.contains { $0.envVarName == name + "_RENAMED" })
+        #expect(vm.keys.contains { $0.envVarName == name })
+        #expect(mock.exists(for: name))
+        #expect(!mock.exists(for: name + "_RENAMED"))
+    }
+
+    @Test("A discovered key moved to a custom category uses that category's color")
+    func discoveredKeyMovedToCustomCategoryUsesItsColor() throws {
+        let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
+        // テスト用カスタムカテゴリを .shared に用意
+        let cat = CustomCategory(name: "CLI_Test_Cat_\(UUID().uuidString.prefix(6))", colorHex: 0x123456)
+        CustomKeyStore.shared.addCategory(cat)
+        try mock.save(value: "secret", for: name)
+        vm.loadKeys()
+        let discovered = try #require(vm.keys.first { $0.envVarName == name })
+        defer {
+            CustomKeyStore.shared.setCategoryOverride(envVarName: name, value: nil)
+            CustomKeyStore.shared.setIconOverride(envVarName: name, icon: nil)
+            CustomKeyStore.shared.deleteCategory(cat.id)
+        }
+
+        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock)
+        editor.selectedCategorySelection = .custom(cat.id)
+        try editor.save()
+
+        vm.loadKeys()
+        let after = try #require(vm.keys.first { $0.envVarName == name })
+        #expect(after.categoryColor == cat.color)
+    }
+
     @Test("Duplicate accounts from enumeration are surfaced only once")
     func dedupesDuplicateDiscoveredAccounts() {
         let name = "CLI_DUP_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")

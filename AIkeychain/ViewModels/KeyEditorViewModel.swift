@@ -126,7 +126,12 @@ final class KeyEditorViewModel {
 
     func save() throws {
         let trimmedValue = tokenValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedEnvVar = envVarName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 既存キーの編集では環境変数名を変更しない（rename は旧 Keychain 項目の残存・
+        // 無確認上書き・二重表示の原因になるため非対応 / #153 Codex 再指摘#1）。
+        // rename が必要なら削除→新規追加で行う。新規追加時のみ入力値を採用する。
+        let trimmedEnvVar = isEditing
+            ? (editingKey?.envVarName ?? envVarName.trimmingCharacters(in: .whitespacesAndNewlines))
+            : envVarName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedValue.isEmpty, !trimmedEnvVar.isEmpty else { return }
 
         isSaving = true
