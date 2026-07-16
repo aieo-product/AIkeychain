@@ -10,6 +10,17 @@ Republish carrying fixes merged to `main` after the `0.5.0` release.
 - **CLI mask leak** — `cli/src/keychain.js` `maskValue` printed `****** (N chars)`, leaking the secret's character count. Now emits a fixed-length `********` mask, matching the `scripts/akc` behavior fixed earlier under #115/#123 (#136)
 - **Manual key-retrieval guidance** — `akc init` template, MCP `usage_guide`, and README taught only the `security find-generic-password -s "ENV_VAR_NAME" -w` form, which returns exit 44 for keys stored via the AI KeyChain GUI (`service=com.aieo.aikeychain`) and falsely suggested the key was missing. `akc get <KEY>` is now the primary recommendation everywhere; both `security` lookup forms are documented with an explicit warning that exit 44 on the bare form is not proof of "unregistered" (#137, #138)
 
+## [1.7.0] - 2026-07-16
+
+### Added
+- **CLI で追加したキーの GUI 表示** — `akc set`（CLI）で追加したキーは GUI と同じ Keychain（`service=com.aieo.aikeychain`）に保存されるが、GUI 一覧はプリセット + カスタム索引しか反復せず表示されなかった。GUI 起動時に Keychain を列挙し、プリセット/カスタムのどちらにも属さないキーを新カテゴリ「コマンド追加」(`CLI Added`) で発見表示する。分類/アイコンの編集は override で永続化し、内部用（共有鍵/署名鍵）や env 変数名でないアカウントは除外する (#153)
+
+### Fixed
+- **`SetupManager.configure()` のマーカーブロック正規化** — 現行ブロックが存在すると早期 return するため、重複した well-formed ブロックや余分な malformed マーカーが残存しても検証・除去されなかった（冪等性・整合性の穴）。早期 return を「well-formed かつ現行と同一ブロックがちょうど 1 つ」に厳格化し、逸脱時は `unconfigure()` 契約（well-formed は全除去して再追加 / malformed は 0600 backup + throw）で整理し直す。ブロック外のユーザー行や連続空行、CRLF 改行を保持する (#148)
+
+### Docs
+- **設計書のキー解決フロー最新化** — `docs/design/architecture.md` を現行実装に同期。External CLI を npm CLI(`aikeychain`/`akc`) + MCP server + Bash 同等に更新、Secret Reference の 2 段ルックアップ(#91)を図に反映、AI エージェント経由(MCP + `akc run`)のデータフローを新設 (#156)
+
 ## [1.6.1] - 2026-05-13
 
 ### Fixed
