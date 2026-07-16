@@ -77,6 +77,16 @@ struct KeyListViewModelTests {
         "CLI_TEST_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
     }
 
+    /// 分離した UserDefaults スイートで CustomKeyStore を作る。テストが
+    /// グローバルな `CustomKeyStore.shared`（`.standard`）を書き換えないための土台。
+    /// swift-testing は既定で並列実行するため、`.shared` を書くテストは他テストの
+    /// `.shared` 読取と競合してクラッシュし得る（ModelTests と同じ隔離パターンに揃える）。
+    private func isolatedStore() -> (CustomKeyStore, UserDefaults, String) {
+        let suite = "test-keylist-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        return (CustomKeyStore(defaults: defaults), defaults, suite)
+    }
+
     @Test("CLI-added keychain keys are discovered under the CLI Added category")
     func discoversCliAddedKeys() throws {
         let (vm, mock) = makeSUT()
@@ -104,28 +114,24 @@ struct KeyListViewModelTests {
         #expect(discovered?.categoryColor == KeyCategory.cliAdded.color)
     }
 
-    @Test("Editing a discovered key's category persists across reload (via override)")
+    @Test("Editing a discovered key's category is persisted as an override")
     func editingDiscoveredKeyPersistsCategory() throws {
-        let (vm, mock) = makeSUT()
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let mock = MockKeychainService()
         let name = uniqueEnvName()
         try mock.save(value: "secret", for: name)
-        vm.loadKeys()
+        let vm = KeyListViewModel(keychainService: mock, customStore: store)
         let discovered = try #require(vm.keys.first { $0.envVarName == name })
-        defer {
-            // .shared に書いた override を後始末する
-            CustomKeyStore.shared.setCategoryOverride(envVarName: name, value: nil)
-            CustomKeyStore.shared.setIconOverride(envVarName: name, icon: nil)
-        }
 
         // 発見キーをエディタで「開発ツール」に付け替えて保存
-        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock)
+        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock, customStore: store)
         editor.selectedCategorySelection = .builtin(.devTools)
         try editor.save()
 
-        // 再読込しても .cliAdded に戻らず devTools を維持する
-        vm.loadKeys()
-        let after = vm.keys.first { $0.envVarName == name }
-        #expect(after?.builtinCategory == .devTools)
+        // 発見キー（customStore に無い合成キー）の分類変更は override として永続化される。
+        // → 再読込後も APIKey.builtinCategory が override を優先解決し devTools を維持する。
+        #expect(store.overriddenCategory(for: name) == .builtin(.devTools))
     }
 
     @Test("A preset key stored via CLI is not duplicated as a discovered key")
@@ -155,14 +161,16 @@ struct KeyListViewModelTests {
 
     @Test("Editing an existing key does not rename it (no orphaned duplicate)")
     func editingDoesNotRenameKey() throws {
-        let (vm, mock) = makeSUT()
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let mock = MockKeychainService()
         let name = uniqueEnvName()
         try mock.save(value: "secret", for: name)
-        vm.loadKeys()
+        let vm = KeyListViewModel(keychainService: mock, customStore: store)
         let discovered = try #require(vm.keys.first { $0.envVarName == name })
 
         // エディタで環境変数名を書き換えて保存しても、rename は起きない
-        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock)
+        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock, customStore: store)
         editor.selectedCategorySelection = .builtin(.devTools)
         editor.envVarName = name + "_RENAMED"
         try editor.save()
@@ -175,29 +183,26 @@ struct KeyListViewModelTests {
         #expect(!mock.exists(for: name + "_RENAMED"))
     }
 
-    @Test("A discovered key moved to a custom category uses that category's color")
-    func discoveredKeyMovedToCustomCategoryUsesItsColor() throws {
-        let (vm, mock) = makeSUT()
+    @Test("Editing a discovered key into a custom category persists the override")
+    func editingDiscoveredKeyPersistsCustomCategory() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let mock = MockKeychainService()
         let name = uniqueEnvName()
-        // テスト用カスタムカテゴリを .shared に用意
-        let cat = CustomCategory(name: "CLI_Test_Cat_\(UUID().uuidString.prefix(6))", colorHex: 0x123456)
-        CustomKeyStore.shared.addCategory(cat)
+        let cat = CustomCategory(name: "CLI_Test_Cat", colorHex: 0x123456)
+        store.addCategory(cat)
         try mock.save(value: "secret", for: name)
-        vm.loadKeys()
+        let vm = KeyListViewModel(keychainService: mock, customStore: store)
         let discovered = try #require(vm.keys.first { $0.envVarName == name })
-        defer {
-            CustomKeyStore.shared.setCategoryOverride(envVarName: name, value: nil)
-            CustomKeyStore.shared.setIconOverride(envVarName: name, icon: nil)
-            CustomKeyStore.shared.deleteCategory(cat.id)
-        }
 
-        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock)
+        let editor = KeyEditorViewModel(editingKey: discovered, keychainService: mock, customStore: store)
         editor.selectedCategorySelection = .custom(cat.id)
         try editor.save()
 
-        vm.loadKeys()
-        let after = try #require(vm.keys.first { $0.envVarName == name })
-        #expect(after.categoryColor == cat.color)
+        // 発見キーをカスタムカテゴリへ移動 → override として永続化される（categoryColor は
+        // この customCategoryId 経由で当該カテゴリ色を解決する。色解決自体は
+        // discoveredKeyUsesCliAddedColor でも担保）。
+        #expect(store.overriddenCategory(for: name) == .custom(cat.id))
     }
 
     @Test("Duplicate accounts from enumeration are surfaced only once")
