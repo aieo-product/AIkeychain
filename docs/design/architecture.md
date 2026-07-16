@@ -45,14 +45,19 @@ graph TB
         CryptoKit["CryptoKit<br/>(P-256 / AES-GCM)"]
     end
 
-    subgraph CLI["External CLI"]
-        Akc["akc<br/>(scripts/akc)"]
+    subgraph CLI["External CLI / MCP (AI エージェント連携)"]
+        direction LR
+        Akc["akc / aikeychain<br/>(npm CLI)"]
+        Mcp["MCP server<br/>(get_secret_reference / akc run)"]
+        AkcSh["scripts/akc<br/>(Bash, 同等機能)"]
     end
 
     Presentation --> ViewModel
     ViewModel --> Service
     Service --> System
-    Akc -.->|security コマンド| Keychain
+    Mcp -.->|keychain:// 参照を提供| Akc
+    Akc -.->|security 2 段ルックアップ| Keychain
+    AkcSh -.->|security 2 段ルックアップ| Keychain
 
     style Presentation fill:#E8D5FF,stroke:#7C3AED
     style ViewModel fill:#DBEAFE,stroke:#0284C7
@@ -69,7 +74,9 @@ graph TB
 | **ViewModel** | 画面状態管理・ビジネスロジック | KeyListViewModel, KeyEditorViewModel, OnboardingViewModel |
 | **Service** | アプリ固有の処理・外部連携 | AppState, ProxyServer, ProxyLogStore, KeychainService, SetupManager, KeyShareService, L10n |
 | **System** | OS フレームワーク | Security.framework, Network.framework, CryptoKit, ServiceManagement |
-| **External CLI** | Secret Reference 解決 | `akc` (Bash スクリプト) |
+| **External CLI / MCP** | Secret Reference 解決・AI エージェント連携 | npm CLI (`aikeychain` / `akc`), MCP server (`get_secret_reference`), `scripts/akc` (Bash, 同等機能) |
+
+> **キー解決 CLI の現況**: 配布の主役は npm パッケージ `aikeychain`（コマンド名 `akc`）で、`akc run` による Secret Reference 解決と MCP server（`get_secret_reference` 等）を提供する。`scripts/akc`（Bash）は同等機能の同梱スクリプトで、両者ともキー解決は同一の **2 段ルックアップ**（後述）で行う。
 
 ## データフロー
 
@@ -107,14 +114,50 @@ sequenceDiagram
     Shell->>Zshrc: source ~/.zshrc
     Zshrc->>Shell: export ANTHROPIC_API_KEY="keychain://ANTHROPIC_API_KEY"
     Shell->>Akc: akc run -- claude
-    Akc->>Akc: env をスキャン (keychain:// プレフィックス検出)
-    Akc->>Security: security find-generic-password -s "com.aieo.aikeychain" -a "ANTHROPIC_API_KEY" -w
+    Akc->>Akc: env をスキャン (keychain:// プレフィックス検出 / collectRefs)
+    Note over Akc,Keychain: 2 段ルックアップ (resolveKey, issue #91)
+    Akc->>Security: ① security find-generic-password -s "com.aieo.aikeychain" -a "ANTHROPIC_API_KEY" -w
     Security->>Keychain: SecItemCopyMatching
-    Keychain-->>Security: シークレット値
-    Security-->>Akc: 値を返却
-    Akc->>Child: env を上書きして exec (親 env は変更しない)
+    alt GUI 保存形式で見つかった
+        Keychain-->>Akc: シークレット値
+    else 見つからない (exit 44)
+        Akc->>Security: ② security find-generic-password -s "ANTHROPIC_API_KEY" -w (手動登録キー)
+        Security->>Keychain: SecItemCopyMatching
+        Keychain-->>Akc: シークレット値
+    end
+    Akc->>Child: 子プロセスの env にのみ値を注入して spawn (親 env は不変)
     Child->>API: curl -H "x-api-key: $ANTHROPIC_API_KEY"
 ```
+
+> **2 段ルックアップ（`resolveKey`）**: ① GUI 保存形式 `-s "com.aieo.aikeychain" -a "<KEY>"`（アカウント厳密一致）→ 見つからなければ ② 手動登録キー `-s "<KEY>"`（service 名のみ、`-a` は付けない）。手動登録キーは `acct` 値が一定しない（$USER / service 名）ため account を固定すると古い/無効な値を掴む恐れがあり、これを避ける（issue #91）。npm CLI（`cli/src/keychain.js`）・`scripts/akc`・GUI の `SetupManager.readSystemKeychainValue` はいずれも同一手順。
+
+### AI エージェント経由 (MCP + akc run)
+
+AI エージェントは MCP server 経由で**参照だけ**を受け取り、生値はモデルのコンテキストに一切載せずにワークロードを実行する。
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI エージェント
+    participant MCP as MCP server
+    participant Akc as akc run
+    participant Keychain as macOS Keychain
+    participant Child as 子プロセス (CLI/API 呼出)
+
+    Agent->>MCP: get_secret_reference("GITHUB_TOKEN")
+    MCP-->>Agent: "keychain://GITHUB_TOKEN" (生値は返さない)
+    Agent->>Akc: export GITHUB_TOKEN=keychain://GITHUB_TOKEN && akc run -- <command>
+    Akc->>Akc: env の keychain:// 参照を検出 (collectRefs)
+    Akc->>Keychain: 2 段ルックアップ (resolveKey)
+    Keychain-->>Akc: シークレット値
+    Akc->>Child: 子プロセスの env にのみ値を注入して spawn
+    Child->>Child: 解決済みの値でコマンド実行
+```
+
+::: tip 生値がコンテキストに載らない保証
+- MCP には**生値を返すツールが存在しない**（`get_secret_reference` は `keychain://` 参照のみ、`list_keys` は名前と所在のみ）。
+- 値の解決は `akc run` が実行時に行い、**子プロセスの env にだけ**注入する。親プロセス・シェル・`.zshrc`・ログ・モデルのコンテキストのいずれにも生値は残らない。
+- 手動で読む場合も `akc get <KEY>` は既定で `keychain://` 参照を返し、生値は `--reveal` 指定時のみ。
+:::
 
 ### Proxy モード
 
@@ -244,8 +287,18 @@ AIkeychain/
     ├── AppFonts.swift               # タイポグラフィ
     └── AppAnimations.swift          # トランジションアニメーション
 
+cli/                                 # npm パッケージ `aikeychain`（コマンド名 akc, 配布の主役）
+├── bin/
+│   └── akc.js                       # CLI エントリポイント
+└── src/
+    ├── keychain.js                  # security ラッパ + 2 段ルックアップ (resolveKey / setKey)
+    ├── run.js                       # `akc run` — keychain:// 参照を実行時解決し子プロセスへ注入
+    ├── mcp-server.js                # MCP server (get_secret_reference / list_keys / doctor / usage_guide)
+    ├── doctor.js / init.js / agent-setup.js / usage-guide.js
+    └── ...
+
 scripts/
-└── akc                              # Secret Reference 解決 CLI (Bash)
+└── akc                              # 同等機能の Bash 実装（npm 未導入環境向け, 2 段ルックアップ同一）
 ```
 
 ## 状態管理方針
