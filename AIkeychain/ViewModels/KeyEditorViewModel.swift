@@ -29,6 +29,16 @@ final class KeyEditorViewModel {
         isEditing ? L10n.s(ja: "キーを編集", en: "Edit Key") : L10n.s(ja: "キーを追加", en: "Add Key")
     }
 
+    /// カテゴリピッカーに出すビルトインカテゴリ。通常は `.cliAdded` を除くが、
+    /// 発見キー（現在 .cliAdded）の編集時のみ、現行カテゴリを選択状態として表示できるよう含める。
+    var selectableCategories: [KeyCategory] {
+        var cats = KeyCategory.assignableCases
+        if editingKey?.builtinCategory == .cliAdded {
+            cats.append(.cliAdded)
+        }
+        return cats
+    }
+
     /// 選択中カテゴリの既定アイコン。
     var categoryDefaultIcon: String {
         switch selectedCategorySelection {
@@ -116,7 +126,12 @@ final class KeyEditorViewModel {
 
     func save() throws {
         let trimmedValue = tokenValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedEnvVar = envVarName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 既存キーの編集では環境変数名を変更しない（rename は旧 Keychain 項目の残存・
+        // 無確認上書き・二重表示の原因になるため非対応 / #153 Codex 再指摘#1）。
+        // rename が必要なら削除→新規追加で行う。新規追加時のみ入力値を採用する。
+        let trimmedEnvVar = isEditing
+            ? (editingKey?.envVarName ?? envVarName.trimmingCharacters(in: .whitespacesAndNewlines))
+            : envVarName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedValue.isEmpty, !trimmedEnvVar.isEmpty else { return }
 
         isSaving = true
@@ -134,12 +149,21 @@ final class KeyEditorViewModel {
                         envVarName: trimmedEnvVar,
                         value: categoryOverrideValue(defaultCategory: service.category))
                     customStore.setIconOverride(envVarName: trimmedEnvVar, icon: iconToStore)
-                } else if let customKey = key.customKey {
-                    // カスタムキーのカテゴリ/アイコン変更
+                } else if let customKey = key.customKey,
+                          customStore.keys.contains(where: { $0.id == customKey.id }) {
+                    // 永続化済みカスタムキーのカテゴリ/アイコン変更
                     var updated = customKey
                     updated.categoryId = resolveCategoryId()
                     updated.icon = iconToStore
                     customStore.updateKey(updated)
+                } else {
+                    // 発見キー（CLI 追加, customStore に無い合成キー）: updateKey は no-op で
+                    // 編集が消えるため、プリセットと同じく envVarName キーの override で分類/アイコンを
+                    // 永続化する。APIKey は再読込後も override を優先解決する（#153 / Codex #1）。
+                    customStore.setCategoryOverride(
+                        envVarName: trimmedEnvVar,
+                        value: categoryOverrideValue(defaultCategory: .cliAdded))
+                    customStore.setIconOverride(envVarName: trimmedEnvVar, icon: iconToStore)
                 }
             } else {
                 // 新規キー

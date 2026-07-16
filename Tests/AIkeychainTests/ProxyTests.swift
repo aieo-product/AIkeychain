@@ -150,6 +150,7 @@ final class BlockingKeychainService: KeychainServiceProtocol {
     }
     func delete(for account: String) throws {}
     func exists(for account: String) -> Bool { false }
+    func allAccounts() -> [String] { [] }
 }
 
 /// Keychain double that reports the read needs user interaction.
@@ -161,6 +162,7 @@ final class InteractionRequiredKeychainService: KeychainServiceProtocol {
     }
     func delete(for account: String) throws {}
     func exists(for account: String) -> Bool { false }
+    func allAccounts() -> [String] { [] }
 }
 
 /// Minimal raw-TCP HTTP client for talking to the local proxy in tests.

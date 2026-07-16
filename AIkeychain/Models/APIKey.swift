@@ -70,10 +70,14 @@ struct APIKey: Identifiable, Equatable, Hashable {
     }
 
     var categoryColor: Color {
-        if let service { return service.category.color }
-        if let customKey, let cat = CustomKeyStore.shared.category(for: customKey.categoryId) {
+        // 表示中カテゴリ（override 込みの実効値）から色を解決する。合成キーの元 categoryId
+        // ではなく customCategoryId / builtinCategory を使うことで、発見キーをカスタム/別ビルトイン
+        // カテゴリへ移しても色が gray に落ちない（#153 / Codex #2・#3）。
+        if let customId = customCategoryId, let cat = CustomKeyStore.shared.category(for: customId) {
             return cat.color
         }
+        if let builtin = builtinCategory { return builtin.color }
+        if let service { return service.category.color }
         return .gray
     }
 

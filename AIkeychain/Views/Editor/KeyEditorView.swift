@@ -35,7 +35,7 @@ struct KeyEditorView: View {
                     Text(L10n.s(ja: "カテゴリを選択...", en: "Select a category..."))
                         .foregroundStyle(.secondary)
                         .tag(CategorySelection?.none)
-                    ForEach(KeyCategory.allCases) { cat in
+                    ForEach(viewModel.selectableCategories) { cat in
                         Label(cat.displayName, systemImage: cat.systemImage)
                             .tag(CategorySelection?.some(.builtin(cat)))
                     }
@@ -52,8 +52,11 @@ struct KeyEditorView: View {
                 }
 
                 // Env var name (required)
+                // 既存キーの編集では rename 非対応（旧項目残存/無確認上書きを防ぐ）。
+                // 名前を変えたい場合は削除→新規追加で行う（#153）。
                 TextField(L10n.s(ja: "環境変数名", en: "Environment Variable"), text: $viewModel.envVarName)
                     .font(AppFonts.code)
+                    .disabled(viewModel.isEditing)
 
                 // Token value (required) — primary input, kept above the optional icon picker.
                 Section {

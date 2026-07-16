@@ -32,6 +32,10 @@ protocol KeychainServiceProtocol {
     func retrieveNoninteractive(for account: String) throws -> String?
     func delete(for account: String) throws
     func exists(for account: String) -> Bool
+    /// AI KeyChain の保存 service (com.aieo.aikeychain) に存在する全アカウント名を列挙する。
+    /// CLI (`akc set`) で追加され GUI 索引に無いキーを発見するために使う (#153)。
+    /// 秘密値は読まない（アカウント名のみ）。
+    func allAccounts() -> [String]
 }
 
 final class KeychainService: KeychainServiceProtocol {
@@ -151,6 +155,21 @@ final class KeychainService: KeychainServiceProtocol {
         let status = SecItemCopyMatching(query as CFDictionary, nil)
         return status == errSecSuccess
     }
+
+    func allAccounts() -> [String] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
+            return []
+        }
+        return items.compactMap { $0[kSecAttrAccount as String] as? String }
+    }
 }
 
 // MARK: - Mock for Previews and Tests
@@ -176,5 +195,9 @@ final class MockKeychainService: KeychainServiceProtocol {
 
     func exists(for account: String) -> Bool {
         store[account] != nil
+    }
+
+    func allAccounts() -> [String] {
+        Array(store.keys)
     }
 }
