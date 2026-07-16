@@ -1,0 +1,6 @@
+warning: 'release-1_7_0': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /Volumes/AIWorkSSD/AIWorkSpace/gitlab/aieo/AIkeychain-wt/release-1_7_0/AIkeychain/Resources/AIkeychain.entitlements
+[0/1] Planning build
+Building for production...
+[0/2] Write swift-version--58304C5D6DBC2206.txt
+Build complete! (0.18s)
