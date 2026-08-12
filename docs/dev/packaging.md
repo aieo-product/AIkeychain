@@ -1,6 +1,17 @@
 # パッケージング手順
 
-AI KeyChain のビルドからグラフィカル DMG 配布までの手順。
+AI KeyChain のビルドから **Developer ID 署名 + Apple 公証済み** DMG 配布までの手順。
+
+::: tip 全自動スクリプト
+以下の全手順は `scripts/build-release.sh` にまとまっています。前提条件を満たしていれば:
+
+```bash
+scripts/build-release.sh                # project.yml の MARKETING_VERSION でビルド
+VERSION=1.8.0 scripts/build-release.sh  # バージョン明示
+```
+
+以降の節は各ステップの解説です。
+:::
 
 ## 前提条件
 
@@ -8,6 +19,18 @@ AI KeyChain のビルドからグラフィカル DMG 配布までの手順。
 - Swift 5.9+ / Xcode 15+
 - `create-dmg` (`brew install create-dmg`)
 - アプリアイコン PNG が `AIkeychain/Resources/Assets.xcassets/AppIcon.appiconset/` に配置済み
+- **Developer ID Application 証明書**がログインキーチェーンにあること
+  ```bash
+  security find-identity -v -p codesigning
+  # → "Developer ID Application: <NAME> (<TEAM_ID>)" が表示されること
+  ```
+  無い場合: Xcode → Settings → Accounts → チーム選択 → Manage Certificates → 「+」→ Developer ID Application（Account Holder 権限が必要）
+- **notarytool のキーチェーンプロファイル**が登録済みであること（初回のみ）
+  ```bash
+  xcrun notarytool store-credentials AIKC_NOTARY \
+    --apple-id <Apple ID> --team-id <TEAM_ID> --password <App用パスワード>
+  ```
+  App 用パスワードは https://account.apple.com → サインインとセキュリティ → App 用パスワード で生成。値は Keychain に保存され、ファイルには残らない。
 
 ## 手順
 
@@ -95,23 +118,24 @@ cp "$SRC/icon_1024x1024.png" "$ICONSET/icon_512x512@2x.png"
 iconutil -c icns "$ICONSET" -o "$APP_DIR/Resources/AppIcon.icns"
 ```
 
-### 5. Ad-hoc コード署名
+### 5. Developer ID 署名（Hardened Runtime）
 
-Developer ID がない場合の署名（「壊れているため開けません」エラーを防止）。
+v1.8.0 以降の出荷物は **Developer ID Application 証明書 + Hardened Runtime** で署名する。
+`--options runtime` は公証の必須条件であり、`DYLD_INSERT_LIBRARIES` による dylib 注入や
+デコード済みシークレットを保持するプロセスへのデバッガアタッチへの防御にもなる（#114）。
 **Proxy モードの outbound TLS 接続には network entitlements が必須。**
 
-::: warning 正典レシピは CI 側
-実際に出荷されるアーティファクトは **CI（`.github/workflows/auto-release.yml`）が生成する DMG** であり、
-CI の ad-hoc 署名は **network entitlements を付けていない**。この §5 の手動署名（entitlements 付き）は
-ローカル動作確認用であり、出荷物とは署名内容が異なる。**Hardened Runtime の実機起動テストは
-必ず CI 生成物（Release にアップロードされた DMG）に対して行うこと**。
-Proxy モードの upstream TLS 挙動は entitlements の有無で変わるため、手動署名版で
-「動いた／動かない」を CI 生成物の判断材料にしないこと。
+::: warning 正典レシピはローカルの `scripts/build-release.sh`
+公証には Developer ID 証明書と notarytool クレデンシャルが必要なため、
+**出荷 DMG はローカルで `scripts/build-release.sh` により生成する**。
+CI（`.github/workflows/auto-release.yml`）の ad-hoc 署名 DMG はフォールバック
+（署名済みリリースが既に存在する場合はスキップされる）。CI への Developer ID
+署名導入は別 issue でトラッキング。
 :::
 
 ```bash
-# network entitlements を作成（初回のみ）
-cat > /tmp/aikeychain.entitlements << 'ENTITLEMENTS'
+# network entitlements を作成
+cat > build/aikeychain.entitlements << 'ENTITLEMENTS'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -124,11 +148,14 @@ cat > /tmp/aikeychain.entitlements << 'ENTITLEMENTS'
 </plist>
 ENTITLEMENTS
 
-# entitlements 付きで署名 (+ Hardened Runtime: DYLD_INSERT_LIBRARIES 注入や
-# デコード済みシークレットを保持するプロセスへのデバッガアタッチへの防御。#114)
-codesign --force --deep --options runtime --sign - \
-  --entitlements /tmp/aikeychain.entitlements \
+# Developer ID + Hardened Runtime + secure timestamp で署名
+codesign --force --options runtime --timestamp \
+  --entitlements build/aikeychain.entitlements \
+  --sign "Developer ID Application" \
   "build/AI KeyChain.app"
+
+# 検証
+codesign --verify --deep --strict "build/AI KeyChain.app"
 ```
 
 ::: warning entitlements なしの場合
@@ -136,15 +163,23 @@ codesign --force --deep --options runtime --sign - \
 API 呼び出しがタイムアウトします（Standard / Secret Reference モードは影響なし）。
 :::
 
-::: warning Hardened Runtime + Ad-hoc 署名について
-Hardened Runtime の library validation は、Ad-hoc 署名との組み合わせで
-署名されていないサードパーティ dylib の読み込みに影響する可能性がある。
-本アプリはシステムフレームワークと自前の SwiftPM コードのみをリンクしているため
-基本的に問題ないはずだが、**CI では実機起動確認ができないため、リリースごとに
-実機でアプリを起動して動作確認すること**（#114 フォローアップ）。
-:::
+### 6. .app の公証 + staple
 
-### 6. グラフィカル DMG 作成
+DMG から取り出した .app 単体でも（オフライン環境含め）Gatekeeper を通すため、
+.app 自体を公証してチケットを staple する。
+
+```bash
+ditto -c -k --keepParent "build/AI KeyChain.app" "build/AI KeyChain.zip"
+xcrun notarytool submit "build/AI KeyChain.zip" \
+  --keychain-profile AIKC_NOTARY --wait
+xcrun stapler staple "build/AI KeyChain.app"
+rm "build/AI KeyChain.zip"
+```
+
+`--wait` は公証完了までブロックする（通常 1〜5 分）。ステータスが `Invalid` の場合は
+`xcrun notarytool log <submission-id> --keychain-profile AIKC_NOTARY` で理由を確認する。
+
+### 7. グラフィカル DMG 作成
 
 `create-dmg` を使ってアプリアイコン + Applications ドラッグリンク付きのインストーラーを作成。
 
@@ -169,19 +204,46 @@ brew install create-dmg
 ```
 :::
 
-### 7. インストール
+### 8. DMG の署名 + 公証 + staple
 
 ```bash
-# DMG を開く
-open build/AIKeyChain-v${VERSION}.dmg
+codesign --force --timestamp --sign "Developer ID Application" \
+  "build/AIKeyChain-v${VERSION}.dmg"
 
-# AI KeyChain.app を Applications にドラッグ
-
-# Gatekeeper の検疫属性を削除 (署名なしの場合)
-xattr -cr /Applications/AI\ KeyChain.app
+xcrun notarytool submit "build/AIKeyChain-v${VERSION}.dmg" \
+  --keychain-profile AIKC_NOTARY --wait
+xcrun stapler staple "build/AIKeyChain-v${VERSION}.dmg"
 ```
 
+### 9. 検証とチェックサム
+
+```bash
+# Gatekeeper 通過を確認（"accepted" / "Notarized Developer ID" が出ること）
+spctl --assess --type execute -vv "build/AI KeyChain.app"
+spctl --assess --type open --context context:primary-signature -vv \
+  "build/AIKeyChain-v${VERSION}.dmg"
+xcrun stapler validate "build/AIKeyChain-v${VERSION}.dmg"
+
+# リリースに添付する SHA-256 チェックサム
+shasum -a 256 "build/AIKeyChain-v${VERSION}.dmg" \
+  | tee "build/AIKeyChain-v${VERSION}.dmg.sha256"
+```
+
+### 10. インストール
+
+```bash
+# DMG を開く → AI KeyChain.app を Applications にドラッグ
+open build/AIKeyChain-v${VERSION}.dmg
+```
+
+公証 + staple 済みのため、quarantine 属性の手動削除（`xattr`）は**不要**。
+
 ## ワンライナー (全手順)
+
+**`scripts/build-release.sh` を使うこと**（上記手順 1〜9 を全自動化、公証込み）。
+
+<details>
+<summary>旧・ad-hoc 署名ワンライナー（Developer ID 証明書がない環境向け、参考）</summary>
 
 ```bash
 VERSION="1.1.0" && \
@@ -239,6 +301,8 @@ create-dmg \
 echo "Done: build/AIKeyChain-v${VERSION}.dmg"
 ```
 
+</details>
+
 ## トラブルシューティング
 
 | 問題 | 解決策 |
@@ -246,6 +310,7 @@ echo "Done: build/AIKeyChain-v${VERSION}.dmg"
 | 型推論エラー (`unable to type-check`) | 複雑な SwiftUI ビューを `@ViewBuilder` プロパティに分割 |
 | アプリアイコンが表示されない | `.icns` が `Resources/` にあるか確認。`swift build` は xcassets をコンパイルしない |
 | DMG がフォルダ表示になる | `hdiutil` ではなく `create-dmg` を使う |
-| 「壊れているため開けません」 | `xattr -cr /Applications/AI\ KeyChain.app` を実行 |
-| 「信頼されていない開発元」 | システム設定 → プライバシーとセキュリティ → 「このまま開く」 |
+| 「壊れているため開けません」「信頼されていない開発元」 | v1.8.0 以降の公証済み DMG では発生しない。表示されたら旧ビルドの可能性 — 最新リリースを取り直す。ローカルの ad-hoc ビルド検証時のみ `xattr -cr`（`sudo` 不要） |
+| `codesign` が identity を見つけられない | `security find-identity -v -p codesigning` で Developer ID 証明書の有無を確認（前提条件参照） |
+| 公証が `Invalid` になる | `xcrun notarytool log <submission-id> --keychain-profile AIKC_NOTARY` で原因確認。Hardened Runtime（`--options runtime`）と secure timestamp（`--timestamp`）の欠落が典型 |
 | `create-dmg` が見つからない | `brew install create-dmg` |

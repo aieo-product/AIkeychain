@@ -52,13 +52,9 @@ Download the latest release from [Releases](https://github.com/aieo-product/AIke
 
 1. **Verify the download's checksum** — see [Verify your download](#verify-your-download) below.
 2. Open the DMG and drag **AI KeyChain.app** to **Applications**
-3. Run the following command to trust the app (required before first launch):
+3. Launch the app — no extra steps needed.
 
-```bash
-xattr -dr com.apple.quarantine "/Applications/AI KeyChain.app"
-```
-
-> **Note:** This app is not yet notarized with the Apple Developer Program, so macOS Gatekeeper quarantines it on download (tracking: [#114](https://github.com/aieo-product/AIkeychain/issues/114), [#34](https://github.com/aieo-product/AIkeychain/issues/34)). The command above removes the quarantine attribute so the app can launch without a security warning. **Never run this with `sudo`** — removing a quarantine attribute never requires root, and running it as root only widens the blast radius if the downloaded file were ever tampered with.
+> **Note:** Since v1.8.0, releases are signed with a Developer ID certificate (Team `34J49FY7U7`), notarized by Apple, and stapled, so Gatekeeper accepts the app without any manual `xattr` workaround. If macOS still warns that the app is damaged or from an unidentified developer, you are likely holding a pre-1.8.0 build — download the latest release instead of bypassing Gatekeeper. You can verify the signature with `spctl --assess --type execute -vv "/Applications/AI KeyChain.app"`.
 
 ### Verify your download
 
@@ -75,7 +71,7 @@ shasum -a 256 "AIKeyChain-vX.Y.Z.dmg"
 # compare the printed hash against the value in AIKeyChain-vX.Y.Z.dmg.sha256 from the same release
 ```
 
-> **Note:** The `.sha256` file is hosted in the same GitHub Release as the DMG, so this is a **download-integrity check only** — it catches corrupted downloads or a tampered mirror, but an attacker who can replace the release asset could also replace the checksum. It is **not** a substitute for code signing / notarization (tracking: [#114](https://github.com/aieo-product/AIkeychain/issues/114)).
+> **Note:** The `.sha256` file is hosted in the same GitHub Release as the DMG, so this is a **download-integrity check only** — it catches corrupted downloads or a tampered mirror. Authenticity is guaranteed by the Developer ID signature and Apple notarization (since v1.8.0), which Gatekeeper verifies automatically.
 
 ### Build from Source
 
@@ -251,13 +247,9 @@ AI 開発では多数の API キーを扱います。多くの開発者はこれ
 
 1. **ダウンロードのチェックサムを検証してください**（下記「ダウンロードの検証」参照）。
 2. DMG を開き、**AI KeyChain.app** を **Applications** フォルダにドラッグ
-3. 初回起動前に以下のコマンドを実行してアプリを信頼させてください:
+3. そのまま起動できます — 追加の手順は不要です。
 
-```bash
-xattr -dr com.apple.quarantine "/Applications/AI KeyChain.app"
-```
-
-> **注意:** Apple Developer Program 未登録のため（トラッキング: [#114](https://github.com/aieo-product/AIkeychain/issues/114), [#34](https://github.com/aieo-product/AIkeychain/issues/34)）、macOS Gatekeeper がダウンロード時に quarantine（検疫）属性を付与します。上記コマンドはその検疫属性を削除し、警告なしで起動できるようにします。**`sudo` は絶対に付けないでください** — 検疫属性の削除に root 権限は不要であり、`sudo` を付けると万一ダウンロードしたファイルが改ざんされていた場合の被害が拡大するだけです。
+> **注意:** v1.8.0 以降のリリースは Developer ID 証明書（Team `34J49FY7U7`）で署名し、Apple の公証（Notarization）+ staple 済みのため、Gatekeeper の警告なしでそのまま起動できます。「壊れているため開けません」「開発元を確認できません」と表示される場合は v1.8.0 より前のビルドを使っている可能性が高いので、Gatekeeper を回避せず最新リリースをダウンロードし直してください。署名は `spctl --assess --type execute -vv "/Applications/AI KeyChain.app"` で確認できます。
 
 #### ダウンロードの検証
 
@@ -274,7 +266,7 @@ shasum -a 256 "AIKeyChain-vX.Y.Z.dmg"
 # 出力されたハッシュ値を同リリースの AIKeyChain-vX.Y.Z.dmg.sha256 の値と比較する
 ```
 
-> **注意:** `.sha256` ファイルは DMG と同じ GitHub Release に置かれているため、これは**ダウンロードの完全性チェック**にすぎません（破損したダウンロードやミラーの改ざんは検出できますが、リリース資産を差し替えられる攻撃者はチェックサムも差し替えられます）。コード署名／公証（トラッキング: [#114](https://github.com/aieo-product/AIkeychain/issues/114)）の代替ではありません。
+> **注意:** `.sha256` ファイルは DMG と同じ GitHub Release に置かれているため、これは**ダウンロードの完全性チェック**です（破損したダウンロードやミラーの改ざんを検出）。真正性は v1.8.0 以降の Developer ID 署名 + Apple 公証で保証され、Gatekeeper が自動的に検証します。
 
 #### ソースからビルド
 
