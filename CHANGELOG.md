@@ -2,6 +2,20 @@
 
 All notable changes to AI KeyChain are documented in this file.
 
+## [1.8.0] - 2026-08-12
+
+### Added
+- **Developer ID 署名 + Apple 公証（Notarization）による正式配布** — 配布 DMG と .app を Developer ID Application 証明書（Team `34J49FY7U7`）+ Hardened Runtime（`--options runtime --timestamp`）で署名し、Apple 公証 + staple 済みで配布。Gatekeeper 警告なしでそのままインストール・起動できる。Hardened Runtime により `DYLD_INSERT_LIBRARIES` 注入やデバッガアタッチからシークレット保持プロセスを防御 (#34, #114)
+- **`scripts/build-release.sh`** — ビルド → .app バンドル → Developer ID 署名 → .app 公証/staple → DMG 作成 → DMG 署名/公証/staple → `spctl` 検証 → SHA-256 生成までを全自動化するリリーススクリプト
+
+### Changed
+- **README のインストール手順** — 公証済み配布に伴い、`xattr -dr com.apple.quarantine` による Gatekeeper 回避手順を撤廃（EN/JA）。チェックサム検証は完全性チェックとして継続、真正性は署名 + 公証で保証 (#114)
+- **`docs/dev/packaging.md`** — ad-hoc 署名手順を Developer ID + 公証フローに全面更新。正典レシピをローカル `scripts/build-release.sh` に変更
+- **auto-release CI** — ad-hoc 署名 DMG の生成・添付を廃止（未署名アーティファクトを「リリース」として公開しないため）。CI はリリースノートのみ作成し、DMG は `scripts/build-release.sh` で生成して添付する。CI での Developer ID 署名は #159
+
+### Upgrade note
+- **v1.7.x 以前からのアップデート時、初回のみ Keychain の承認ダイアログがキーごとに再表示されます**。署名が ad-hoc から Developer ID に変わり、既存 Keychain アイテムの ACL から見て「別のアプリ」になるためです。各ダイアログで「常に許可」を選べば、以後はアプリを更新しても再承認は発生しません（署名 ID が Team `34J49FY7U7` で安定するため）
+
 ## npm `aikeychain@0.5.1` - 2026-07-09
 
 Republish carrying fixes merged to `main` after the `0.5.0` release.
