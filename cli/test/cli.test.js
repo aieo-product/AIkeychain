@@ -6,7 +6,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, writeFile, chmod, access } from 'node:fs/promises';
+import { mkdtemp, writeFile, chmod, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,7 @@ if [ "$cmd" = "-i" ]; then
   read -r line
   case "$line" in
     add-generic-password*-a\\ \\"NEW_KEY\\"*-X\\ *)
+      printf '%s' "$line" > "$state_dir/line-NEW_KEY"
       printf '%s' "\${line##* }" | xxd -r -p > "$state_dir/state-NEW_KEY"
       exit 0 ;;
     add-generic-password*-a\\ \\"ECHO_KEY\\"*-X\\ *)
@@ -235,6 +236,23 @@ test('set stores a piped value via security -i stdin, never argv', async () => {
   assert.equal(r.code, 0);
   assert.match(r.stdout, /✅ Saved NEW_KEY/);
   assert.doesNotMatch(r.stdout, /piped-secret/);
+});
+
+test('set pre-trusts the GUI app and security CLI in the item ACL (-T, issue #162)', async () => {
+  // stub が記録した -i コマンドラインを検証する。
+  // -T が無いと GUI からの読み取りがアイテムごとに承認ダイアログを出す。
+  const r = await pExecFile(
+    'bash',
+    ['-c', `echo "trust-check" | ${process.execPath} ${AKC} set NEW_KEY`],
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
+  ).then(
+    (r) => ({ code: 0, ...r }),
+    (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
+  );
+  assert.equal(r.code, 0);
+  const line = await readFile(join(stubDir, 'line-NEW_KEY'), 'utf8');
+  assert.match(line, /-T "\/Applications\/AI KeyChain\.app"/);
+  assert.match(line, /-T "\/usr\/bin\/security"/);
 });
 
 test('set failure stderr never leaks the value, even when security echoes the command', async () => {

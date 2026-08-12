@@ -136,8 +136,13 @@ export async function setKey(name, value, { manual = false } = {}) {
   }
   const service = manual ? name : GUI_SERVICE;
   const hex = Buffer.from(value, 'utf8').toString('hex');
+  // -T: 作成時に GUI アプリと security CLI を Keychain ACL の信頼リストへ登録する
+  // (issue #162)。これが無いと GUI からの読み取りがアイテムごとに承認ダイアログを
+  // 出す。-T は作成時のみ有効で、-U による既存アイテム更新では ACL は変わらない。
+  // パスのアプリが存在しない環境でも add 自体は成功する。
   const r = await securityInteractive(
-    `add-generic-password -U -s "${service}" -a "${name}" -X ${hex}`
+    `add-generic-password -U -s "${service}" -a "${name}" ` +
+      `-T "/Applications/AI KeyChain.app" -T "/usr/bin/security" -X ${hex}`
   );
   if (!r.ok) {
     // `security -i` stderr could in principle echo the command line (which
