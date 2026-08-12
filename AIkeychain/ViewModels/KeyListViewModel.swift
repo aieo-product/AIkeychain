@@ -77,11 +77,21 @@ final class KeyListViewModel {
     }
 
     func loadKeys() {
+        // スキーム判定用の集合（値は読まないので承認 UI は出ない）。
+        // 両スキームに存在する場合は 2 段ルックアップの優先順どおり .app 扱い。
+        let guiAccounts = Set(keychainService.allAccounts())
+        let manualOnly = Set(keychainService.manualServices()).subtracting(guiAccounts)
+
+        func storage(for name: String) -> StorageScheme {
+            manualOnly.contains(name) ? .manual : .app
+        }
+
         // プリセットキー
         var allKeys: [APIKey] = ServiceType.allCases.map { service in
             APIKey(
                 service: service,
-                isConfigured: keychainService.exists(for: service.envVarName)
+                isConfigured: keychainService.exists(for: service.envVarName),
+                storage: storage(for: service.envVarName)
             )
         }
 
@@ -89,7 +99,8 @@ final class KeyListViewModel {
         for customKey in customStore.keys {
             allKeys.append(APIKey(
                 customKey: customKey,
-                isConfigured: keychainService.exists(for: customKey.envVarName)
+                isConfigured: keychainService.exists(for: customKey.envVarName),
+                storage: storage(for: customKey.envVarName)
             ))
         }
 
@@ -97,10 +108,10 @@ final class KeyListViewModel {
         // 発見して「コマンド追加」カテゴリに出す（種別不明のためまとめて表示 / #153）。
         // env 変数名の形（EnvVarName.isValid）のみ採用し、内部用アイテムや
         // シェル export で壊れる名前は除外する。
-        // known は発見ループ中も更新する。allAccounts() は kSecMatchLimitAll で
-        // 同名アカウントを複数返し得るため、insert の成否で二重追加を防ぐ（Codex #2）。
+        // known は発見ループ中も更新する。guiAccounts は Set なので同名アカウントの
+        // 重複は既に畳まれているが、insert の成否での二重追加防止は維持（Codex #2）。
         var known = Set(allKeys.map(\.envVarName))
-        for account in keychainService.allAccounts()
+        for account in guiAccounts
         where EnvVarName.isValid(account) && known.insert(account).inserted {
             let discovered = CustomKey(
                 envVarName: account,
@@ -123,7 +134,7 @@ final class KeyListViewModel {
                 displayName: svc,
                 categoryId: KeyCategory.cliAdded.stableId
             )
-            allKeys.append(APIKey(customKey: discovered, isConfigured: true))
+            allKeys.append(APIKey(customKey: discovered, isConfigured: true, storage: .manual))
         }
 
         keys = allKeys

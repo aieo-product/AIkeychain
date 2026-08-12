@@ -468,17 +468,32 @@ private struct SendTab: View {
             var values: [String: String] = [:]
             var failed: [String] = []
             for key in configuredKeys {
-                if let value = try? KeychainService.shared.retrieve(for: key.envVarName),
-                   !value.isEmpty {
-                    values[key.envVarName] = value
-                } else {
+                do {
+                    if let value = try KeychainService.shared.retrieve(for: key.envVarName),
+                       !value.isEmpty {
+                        values[key.envVarName] = value
+                    }
+                    // nil/空値は「未登録 or 空」で再試行しても直らないため failed に
+                    // 入れない（承認拒否と混同させない）。isConfigured 直後の読取なので
+                    // 実際にはほぼ発生しない。
+                } catch {
+                    // 承認ダイアログの拒否 / ACL 不一致など再試行で直り得る失敗
                     failed.append(key.envVarName)
                 }
             }
             DispatchQueue.main.async {
+                // 再試行(Retry)時にユーザーが外したチェックを勝手に戻さない:
+                // 初回ロードのみ全選択、以降は既存の選択を維持しつつ
+                // 新たに読み込めたキーだけを追加選択する
+                let loaded = Set(values.keys)
+                if cachedValues.isEmpty {
+                    selectedKeys = loaded
+                } else {
+                    let newlyLoaded = loaded.subtracting(cachedValues.keys)
+                    selectedKeys = selectedKeys.intersection(loaded).union(newlyLoaded)
+                }
                 cachedValues = values
                 failedKeys = failed
-                selectedKeys = Set(values.keys) // デフォルト全選択
                 isLoading = false
             }
         }

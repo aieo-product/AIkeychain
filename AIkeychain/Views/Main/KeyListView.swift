@@ -68,6 +68,9 @@ struct KeyListView: View {
                                 Button(L10n.s(ja: "値をコピー", en: "Copy Value")) {
                                     if let value = viewModel.retrieveValue(for: key) {
                                         copySecretToPasteboard(value)
+                                    } else {
+                                        // 承認拒否/ACL 不一致等で読めなかったことを無音にしない (#163)
+                                        NSSound.beep()
                                     }
                                 }
                             }

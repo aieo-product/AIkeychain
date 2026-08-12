@@ -89,7 +89,22 @@ final class KeychainService: KeychainServiceProtocol {
         let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
 
         if updateStatus == errSecItemNotFound {
-            // Item doesn't exist, add it
+            // GUI スキームに無く manual スキームにだけ存在するキーは、manual 側を
+            // その場で更新する（CLI の setKey と同じ）。GUI 側へ新規追加してしまうと
+            // 旧値を持つ manual アイテムが残り、manual を直接読む既存の .zshrc 行や
+            // スクリプトがローテート前の値を使い続ける (#163 レビュー指摘)。
+            if EnvVarName.isManualSchemeCandidate(account) {
+                let manualStatus = SecItemUpdate(manualQuery(for: account) as CFDictionary,
+                                                 attributes as CFDictionary)
+                if manualStatus == errSecSuccess {
+                    return
+                }
+                guard manualStatus == errSecItemNotFound else {
+                    throw KeychainError.unexpectedStatus(manualStatus)
+                }
+            }
+
+            // どちらにも無い新規キーは GUI スキームに追加
             var addQuery = query
             addQuery[kSecValueData as String] = data
             addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -155,17 +170,23 @@ final class KeychainService: KeychainServiceProtocol {
     }
 
     func delete(for account: String) throws {
-        // GUI スキームと manual スキームの両方を削除する。片方だけ消すと 2 段
-        // ルックアップ (retrieve) がもう片方を解決し続け、「削除したのに残っている」
-        // 状態になるため (#160)。SecItemDelete は macOS では全一致アイテムを削除する。
+        // GUI スキームと manual スキームの両方を削除する（`akc delete` と同じ意味論）。
+        // 片方だけ消すと 2 段ルックアップ (retrieve) がもう片方を解決し続け、
+        // 「削除したのに残っている」状態になるため (#160)。manual 側は他ツール作成の
+        // アイテムであり得るため、削除確認ダイアログ（KeyEditorView）が manual コピーの
+        // 存在を事前警告する。
+        // 順序は manual → GUI: 逆順だと manual 削除が失敗したとき GUI コピーだけが
+        // 消え、古い manual 値が 2 段ルックアップで「復活」する（fail-closed 化）。
+        // SecItemDelete は macOS では全一致アイテムを削除する。
+        if EnvVarName.isManualSchemeCandidate(account) {
+            let manualStatus = SecItemDelete(manualQuery(for: account) as CFDictionary)
+            guard manualStatus == errSecSuccess || manualStatus == errSecItemNotFound else {
+                throw KeychainError.unexpectedStatus(manualStatus)
+            }
+        }
         let guiStatus = SecItemDelete(baseQuery(for: account) as CFDictionary)
         guard guiStatus == errSecSuccess || guiStatus == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(guiStatus)
-        }
-        guard EnvVarName.isManualSchemeCandidate(account) else { return }
-        let manualStatus = SecItemDelete(manualQuery(for: account) as CFDictionary)
-        guard manualStatus == errSecSuccess || manualStatus == errSecItemNotFound else {
-            throw KeychainError.unexpectedStatus(manualStatus)
         }
     }
 
@@ -233,7 +254,12 @@ final class MockKeychainService: KeychainServiceProtocol {
     var manualStore: [String: String] = [:]
 
     func save(value: String, for account: String) throws {
-        store[account] = value
+        // 実装と同じ意味論: manual にだけ存在するキーは manual 側を in-place 更新
+        if store[account] == nil, manualStore[account] != nil {
+            manualStore[account] = value
+        } else {
+            store[account] = value
+        }
     }
 
     func retrieve(for account: String) throws -> String? {

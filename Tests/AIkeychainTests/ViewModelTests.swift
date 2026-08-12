@@ -171,6 +171,38 @@ struct KeyListViewModelTests {
         #expect(discovered != nil)
         #expect(discovered?.isConfigured == true)
         #expect(discovered?.builtinCategory == .cliAdded)
+        #expect(discovered?.storage == .manual)
+    }
+
+    @Test("Saving a manual-only key updates the manual item in place (no GUI shadow copy)")
+    func savingManualKeyUpdatesInPlace() throws {
+        let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
+        mock.manualStore[name] = "old-value"
+        vm.loadKeys()
+        let discovered = vm.keys.first { $0.envVarName == name }
+
+        try vm.save(value: "new-value", for: discovered!)
+
+        // manual 側が更新され、GUI 側に影のコピーが増えない (#163 レビュー指摘)
+        #expect(mock.manualStore[name] == "new-value")
+        #expect(mock.store[name] == nil)
+    }
+
+    @Test("Deleting a dual-scheme key removes both copies")
+    func deletingRemovesBothSchemes() throws {
+        let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
+        try mock.save(value: "app-value", for: name)
+        mock.manualStore[name] = "manual-value"
+        vm.loadKeys()
+        let key = vm.keys.first { $0.envVarName == name }
+
+        try vm.delete(key: key!)
+
+        // 片方だけ残ると 2 段ルックアップで「復活」するため両方消える (#160)
+        #expect(mock.store[name] == nil)
+        #expect(mock.manualStore[name] == nil)
     }
 
     @Test("A key present in both schemes is not duplicated")
