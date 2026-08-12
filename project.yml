@@ -15,7 +15,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aieo.aikeychain
-        MARKETING_VERSION: "1.8.0"
+        MARKETING_VERSION: "1.8.1"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"

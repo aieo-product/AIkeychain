@@ -27,7 +27,7 @@ readonly SECURITY_BIN="/usr/bin/security"
 # `VAR=keychain://KEY` 行を捏造して任意の Keychain 値を解決・export させられる。
 readonly ENV_BIN="/usr/bin/env"
 
-VERSION="1.8.0"
+VERSION="1.8.1"
 
 usage() {
     cat <<'USAGE'

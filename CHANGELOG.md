@@ -2,6 +2,12 @@
 
 All notable changes to AI KeyChain are documented in this file.
 
+## [1.8.1] - 2026-08-13
+
+### Fixed
+- **GUI 値編集による CLI 管理キーの毒化を防止（データ整合性）** — `akc set` または手動 `security add-generic-password` で登録した `/usr/bin/security` 所有キーの値を GUI で編集すると、in-process `SecItemUpdate` が**無音で成功しつつ所有権を破壊し、以後 `akc run` がヘッドレスでそのキーを読めなくなる**（プロンプト待ちでハング）実機確認済みの不具合を修正。GUI は該当キーの in-process 上書きをやめ、`SecItemDelete` を「プロンプトを出さない所有権プローブ」に用いて、CLI 管理キーは**値を変更せず fail-closed** し「`akc set <KEY>` で更新してください」と案内する。GUI 所有キーは従来どおり編集可能 (#177)
+- **.env インポート / キー共有インポートでの取りこぼしを可視化** — 上記により CLI 管理キーはインポート時に上書きされないため、「N 件は akc CLI 管理のため未更新（`akc set` で更新）」を結果画面に明示。古い/失効済みの値がサイレントに残る問題を解消 (#177)
+
 ## [1.8.0] - 2026-08-12
 
 ### Added
