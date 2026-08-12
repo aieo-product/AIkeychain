@@ -28,9 +28,11 @@ VERSION=1.8.0 scripts/build-release.sh  # バージョン明示
 - **notarytool のキーチェーンプロファイル**が登録済みであること（初回のみ）
   ```bash
   xcrun notarytool store-credentials AIKC_NOTARY \
-    --apple-id <Apple ID> --team-id <TEAM_ID> --password <App用パスワード>
+    --apple-id <Apple ID> --team-id <TEAM_ID>
   ```
-  App 用パスワードは https://account.apple.com → サインインとセキュリティ → App 用パスワード で生成。値は Keychain に保存され、ファイルには残らない。
+  App 用パスワードは https://account.apple.com → サインインとセキュリティ → App 用パスワード で生成し、
+  **`--password` は付けずに実行して対話プロンプトで入力する**（argv に渡すとシェル履歴・`ps` に残る）。
+  値は Keychain に保存され、ファイルには残らない。
 
 ## 手順
 
@@ -128,9 +130,20 @@ v1.8.0 以降の出荷物は **Developer ID Application 証明書 + Hardened Run
 ::: warning 正典レシピはローカルの `scripts/build-release.sh`
 公証には Developer ID 証明書と notarytool クレデンシャルが必要なため、
 **出荷 DMG はローカルで `scripts/build-release.sh` により生成する**。
-CI（`.github/workflows/auto-release.yml`）の ad-hoc 署名 DMG はフォールバック
-（署名済みリリースが既に存在する場合はスキップされる）。CI への Developer ID
-署名導入は別 issue でトラッキング。
+CI（`.github/workflows/auto-release.yml`）は**リリースノートのみ**を作成し、
+DMG は一切生成しない（未署名アーティファクトを「リリース」として公開しないため）。
+CI への Developer ID 署名導入は #159 でトラッキング。
+:::
+
+::: danger リリースの順序（必須）
+**公証済み DMG 付きの Release を発行してから、CHANGELOG を含む PR を main にマージする。**
+
+1. リリースブランチで `scripts/build-release.sh` を実行
+2. `gh release create vX.Y.Z --target <ブランチHEAD> ... build/AIKeyChain-vX.Y.Z.dmg build/AIKeyChain-vX.Y.Z.dmg.sha256`
+3. PR をマージ（auto-release は既存 Release を検出してスキップ）
+
+逆順でマージすると auto-release がノートのみの Release を先に作る。その場合は
+`gh release upload vX.Y.Z build/AIKeyChain-vX.Y.Z.dmg{,.sha256}` で後から添付する。
 :::
 
 ```bash
@@ -228,6 +241,13 @@ xcrun stapler validate "build/AIKeyChain-v${VERSION}.dmg"
 shasum -a 256 "build/AIKeyChain-v${VERSION}.dmg" \
   | tee "build/AIKeyChain-v${VERSION}.dmg.sha256"
 ```
+
+::: warning リリースごとの実機起動テスト（必須）
+`spctl` は Gatekeeper 判定しか見ない。**リリースごとに生成 DMG からアプリを実際に
+インストール・起動し、主要機能（キー一覧表示・Proxy モードの upstream TLS 接続）を
+確認すること**。Hardened Runtime + entitlements の組み合わせ不備は起動時にしか
+発現しない。
+:::
 
 ### 10. インストール
 

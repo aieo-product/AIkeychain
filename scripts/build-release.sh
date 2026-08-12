@@ -19,13 +19,38 @@ cd "$(dirname "$0")/.."
 VERSION="${VERSION:-$(sed -n 's/.*MARKETING_VERSION: "\(.*\)"/\1/p' project.yml)}"
 SIGN_IDENTITY="${SIGN_IDENTITY:-Developer ID Application}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-AIKC_NOTARY}"
+# 署名後に実際の TeamIdentifier を照合する（複数の Developer ID 証明書がある環境で
+# 別チームの identity が拾われた成果物を出荷しないためのゲート）
+EXPECTED_TEAM_ID="${EXPECTED_TEAM_ID:-34J49FY7U7}"
+
+# sed が空を返しても set -u では検出できないため明示ガード
+# （project.yml の MARKETING_VERSION がクォート無し等の形式ずれでも起こる）
+if [ -z "$VERSION" ]; then
+    echo "ERROR: VERSION を解決できません。project.yml の MARKETING_VERSION（\"X.Y.Z\" 形式）を確認するか、VERSION=X.Y.Z を指定してください。" >&2
+    exit 1
+fi
 
 APP_NAME="AI KeyChain"
 APP="build/${APP_NAME}.app"
 CONTENTS="$APP/Contents"
 DMG="build/AIKeyChain-v${VERSION}.dmg"
 
-echo "==> Version: $VERSION / Identity: $SIGN_IDENTITY / Profile: $NOTARY_PROFILE"
+echo "==> Version: $VERSION / Identity: $SIGN_IDENTITY / Team: $EXPECTED_TEAM_ID / Profile: $NOTARY_PROFILE"
+
+# notarytool submit --wait は status=Invalid でも exit 0 を返すため、
+# 出力から Accepted を明示検証する。失敗時は log コマンドを案内して止める。
+notarize() {
+    local artifact="$1"
+    local out
+    out=$(xcrun notarytool submit "$artifact" --keychain-profile "$NOTARY_PROFILE" --wait 2>&1 | tee /dev/stderr) || true
+    if ! printf '%s' "$out" | grep -q "status: Accepted"; then
+        local sub_id
+        sub_id=$(printf '%s' "$out" | grep -m1 '  id: ' | awk '{print $2}')
+        echo "ERROR: 公証が Accepted になりませんでした（$artifact）。" >&2
+        echo "  原因確認: xcrun notarytool log ${sub_id:-<submission-id>} --keychain-profile $NOTARY_PROFILE" >&2
+        exit 1
+    fi
+}
 
 # 1. Release ビルド
 swift build -c release
@@ -91,10 +116,16 @@ codesign --force --options runtime --timestamp \
   --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP"
 
+# 期待した Team の identity で署名されたかを照合
+if ! codesign -dvv "$APP" 2>&1 | grep -q "TeamIdentifier=${EXPECTED_TEAM_ID}"; then
+    echo "ERROR: TeamIdentifier が ${EXPECTED_TEAM_ID} ではありません。SIGN_IDENTITY / キーチェーンの証明書を確認してください。" >&2
+    codesign -dvv "$APP" 2>&1 | grep TeamIdentifier >&2 || true
+    exit 1
+fi
+
 # 6. .app を公証 → staple(DMG から取り出した後もオフラインで Gatekeeper を通すため)
 ditto -c -k --keepParent "$APP" "build/${APP_NAME}.zip"
-xcrun notarytool submit "build/${APP_NAME}.zip" \
-  --keychain-profile "$NOTARY_PROFILE" --wait
+notarize "build/${APP_NAME}.zip"
 xcrun stapler staple "$APP"
 rm "build/${APP_NAME}.zip"
 
@@ -112,7 +143,7 @@ create-dmg \
   "$DMG" "$APP"
 
 codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
-xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+notarize "$DMG"
 xcrun stapler staple "$DMG"
 
 # 8. 検証

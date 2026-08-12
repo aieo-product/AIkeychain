@@ -10,7 +10,11 @@ All notable changes to AI KeyChain are documented in this file.
 
 ### Changed
 - **README のインストール手順** — 公証済み配布に伴い、`xattr -dr com.apple.quarantine` による Gatekeeper 回避手順を撤廃（EN/JA）。チェックサム検証は完全性チェックとして継続、真正性は署名 + 公証で保証 (#114)
-- **`docs/dev/packaging.md`** — ad-hoc 署名手順を Developer ID + 公証フローに全面更新。正典レシピをローカル `scripts/build-release.sh` に変更（CI の ad-hoc DMG はフォールバック）
+- **`docs/dev/packaging.md`** — ad-hoc 署名手順を Developer ID + 公証フローに全面更新。正典レシピをローカル `scripts/build-release.sh` に変更
+- **auto-release CI** — ad-hoc 署名 DMG の生成・添付を廃止（未署名アーティファクトを「リリース」として公開しないため）。CI はリリースノートのみ作成し、DMG は `scripts/build-release.sh` で生成して添付する。CI での Developer ID 署名は #159
+
+### Upgrade note
+- **v1.7.x 以前からのアップデート時、初回のみ Keychain の承認ダイアログがキーごとに再表示されます**。署名が ad-hoc から Developer ID に変わり、既存 Keychain アイテムの ACL から見て「別のアプリ」になるためです。各ダイアログで「常に許可」を選べば、以後はアプリを更新しても再承認は発生しません（署名 ID が Team `34J49FY7U7` で安定するため）
 
 ## npm `aikeychain@0.5.1` - 2026-07-09
 

@@ -54,7 +54,9 @@ Download the latest release from [Releases](https://github.com/aieo-product/AIke
 2. Open the DMG and drag **AI KeyChain.app** to **Applications**
 3. Launch the app — no extra steps needed.
 
-> **Note:** Since v1.8.0, releases are signed with a Developer ID certificate (Team `34J49FY7U7`), notarized by Apple, and stapled, so Gatekeeper accepts the app without any manual `xattr` workaround. If macOS still warns that the app is damaged or from an unidentified developer, you are likely holding a pre-1.8.0 build — download the latest release instead of bypassing Gatekeeper. You can verify the signature with `spctl --assess --type execute -vv "/Applications/AI KeyChain.app"`.
+> **Note:** Since v1.8.0, releases are signed with a Developer ID certificate (Team `34J49FY7U7`), notarized by Apple, and stapled, so Gatekeeper accepts the app without any manual `xattr` workaround. If macOS warns that the app is damaged or from an unidentified developer, do **not** bypass Gatekeeper — verify the asset with `spctl --assess --type open --context context:primary-signature -vv AIKeyChain-vX.Y.Z.dmg` (expect `accepted / Notarized Developer ID`) and re-download the latest release.
+>
+> **Upgrading from v1.7.x or earlier:** the signing identity changed from ad-hoc to Developer ID, so macOS asks for Keychain approval once per stored key on first access. Choose **"Always Allow"** — after that, approvals persist across all future updates.
 
 ### Verify your download
 
@@ -71,7 +73,7 @@ shasum -a 256 "AIKeyChain-vX.Y.Z.dmg"
 # compare the printed hash against the value in AIKeyChain-vX.Y.Z.dmg.sha256 from the same release
 ```
 
-> **Note:** The `.sha256` file is hosted in the same GitHub Release as the DMG, so this is a **download-integrity check only** — it catches corrupted downloads or a tampered mirror. Authenticity is guaranteed by the Developer ID signature and Apple notarization (since v1.8.0), which Gatekeeper verifies automatically.
+> **Note:** The `.sha256` file is hosted in the same GitHub Release as the DMG, so this is a **download-integrity check only** — it catches corrupted downloads or a tampered mirror, but an attacker who can replace the release asset could also replace the checksum. Authenticity comes from the Developer ID signature + Apple notarization (v1.8.0+), which Gatekeeper verifies automatically — and which you can check explicitly with `spctl --assess --type open --context context:primary-signature -vv <dmg>`. An asset that fails that check is not an official build, whatever its checksum says.
 
 ### Build from Source
 
@@ -249,7 +251,9 @@ AI 開発では多数の API キーを扱います。多くの開発者はこれ
 2. DMG を開き、**AI KeyChain.app** を **Applications** フォルダにドラッグ
 3. そのまま起動できます — 追加の手順は不要です。
 
-> **注意:** v1.8.0 以降のリリースは Developer ID 証明書（Team `34J49FY7U7`）で署名し、Apple の公証（Notarization）+ staple 済みのため、Gatekeeper の警告なしでそのまま起動できます。「壊れているため開けません」「開発元を確認できません」と表示される場合は v1.8.0 より前のビルドを使っている可能性が高いので、Gatekeeper を回避せず最新リリースをダウンロードし直してください。署名は `spctl --assess --type execute -vv "/Applications/AI KeyChain.app"` で確認できます。
+> **注意:** v1.8.0 以降のリリースは Developer ID 証明書（Team `34J49FY7U7`）で署名し、Apple の公証（Notarization）+ staple 済みのため、Gatekeeper の警告なしでそのまま起動できます。「壊れているため開けません」「開発元を確認できません」と表示された場合は **Gatekeeper を回避せず**、`spctl --assess --type open --context context:primary-signature -vv AIKeyChain-vX.Y.Z.dmg` で資産を検証（`accepted / Notarized Developer ID` が正）した上で最新リリースを取り直してください。
+>
+> **v1.7.x 以前からのアップデート:** 署名が ad-hoc から Developer ID に変わったため、初回アクセス時に保存済みキーごとの Keychain 承認ダイアログが一度だけ表示されます。**「常に許可」**を選べば、以後のアップデートでは再承認は発生しません。
 
 #### ダウンロードの検証
 
@@ -266,7 +270,7 @@ shasum -a 256 "AIKeyChain-vX.Y.Z.dmg"
 # 出力されたハッシュ値を同リリースの AIKeyChain-vX.Y.Z.dmg.sha256 の値と比較する
 ```
 
-> **注意:** `.sha256` ファイルは DMG と同じ GitHub Release に置かれているため、これは**ダウンロードの完全性チェック**です（破損したダウンロードやミラーの改ざんを検出）。真正性は v1.8.0 以降の Developer ID 署名 + Apple 公証で保証され、Gatekeeper が自動的に検証します。
+> **注意:** `.sha256` ファイルは DMG と同じ GitHub Release に置かれているため、これは**ダウンロードの完全性チェック**です（破損やミラー改ざんは検出できますが、リリース資産を差し替えられる攻撃者はチェックサムも差し替えられます）。真正性は v1.8.0 以降の Developer ID 署名 + Apple 公証が担い、Gatekeeper が自動検証します。`spctl --assess --type open --context context:primary-signature -vv <dmg>` で明示的に確認でき、この検証を通らない資産はチェックサムが合っていても公式ビルドではありません。
 
 #### ソースからビルド
 

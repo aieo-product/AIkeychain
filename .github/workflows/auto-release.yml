@@ -1,5 +1,20 @@
 name: auto-release
 
+# CHANGELOG.md の更新を検知して GitHub Release（リリースノートのみ）を作成する。
+#
+# 配布 DMG はこの workflow では作らない: 出荷物は Developer ID 署名 + Apple 公証が
+# 必須で、証明書と notarytool クレデンシャルはローカルにしかないため
+# （CI への導入は #159）、`scripts/build-release.sh` で生成して Release に添付する。
+# 以前この workflow が生成していた ad-hoc 署名 DMG は、未署名アーティファクトを
+# 「リリース」として公開してしまうため廃止した（#114 / PR #165 レビュー指摘）。
+#
+# 正しいリリース手順（docs/dev/packaging.md 参照）:
+#   1. リリースブランチで scripts/build-release.sh を実行（署名 + 公証 + 検証）
+#   2. `gh release create vX.Y.Z` で公証済み DMG + .sha256 を添付して発行
+#   3. CHANGELOG を含む PR を main へマージ（この workflow は既存 release を検出してスキップ）
+# 手順 2 を忘れてマージした場合はノートのみの release が作られるので、後から
+# `gh release upload vX.Y.Z build/AIKeyChain-vX.Y.Z.dmg{,.sha256}` で添付する。
+
 on:
   push:
     branches:
@@ -12,8 +27,8 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-14
-    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -48,7 +63,7 @@ jobs:
             echo "Release $TAG already exists. Skipping."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Release $TAG not found. Will create."
+            echo "Release $TAG not found. Will create (notes only)."
           fi
 
       - name: Extract CHANGELOG entry
@@ -71,140 +86,22 @@ jobs:
             BODY="Release v${VERSION} (auto-generated — no CHANGELOG entry found)"
           fi
 
-          echo "$BODY" > /tmp/release-body.md
+          {
+            echo "$BODY"
+            echo ""
+            echo "> ⚠️ 配布 DMG は未添付です。\`scripts/build-release.sh\` で公証済み DMG を生成し、"
+            echo "> \`gh release upload ${{ steps.version.outputs.tag }} build/AIKeyChain-v${VERSION}.dmg build/AIKeyChain-v${VERSION}.dmg.sha256\` で添付してください。"
+          } > /tmp/release-body.md
 
-      - name: Build release binary
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          swift build -c release
-
-      - name: Create .app bundle with icon
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          APP="build/AI KeyChain.app/Contents"
-
-          mkdir -p "$APP/MacOS" "$APP/Resources"
-          cp .build/release/AIkeychain "$APP/MacOS/AI KeyChain"
-          cp -R .build/release/AIkeychain_AIkeychain.bundle "$APP/Resources/"
-
-          # Info.plist
-          cat > "$APP/Info.plist" << PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleName</key>
-              <string>AI KeyChain</string>
-              <key>CFBundleDisplayName</key>
-              <string>AI KeyChain</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.aieo.aikeychain</string>
-              <key>CFBundleVersion</key>
-              <string>${VERSION}</string>
-              <key>CFBundleShortVersionString</key>
-              <string>${VERSION}</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>CFBundleExecutable</key>
-              <string>AI KeyChain</string>
-              <key>CFBundleIconFile</key>
-              <string>AppIcon</string>
-              <key>LSMinimumSystemVersion</key>
-              <string>14.0</string>
-              <key>LSUIElement</key>
-              <false/>
-              <key>NSHighResolutionCapable</key>
-              <true/>
-              <key>CFBundleInfoDictionaryVersion</key>
-              <string>6.0</string>
-          </dict>
-          </plist>
-          PLIST
-
-          # .icns 生成
-          SRC="AIkeychain/Resources/Assets.xcassets/AppIcon.appiconset"
-          ICONSET="/tmp/AppIcon.iconset"
-          mkdir -p "$ICONSET"
-          cp "$SRC/icon_16x16.png"     "$ICONSET/icon_16x16.png"
-          cp "$SRC/icon_32x32.png"     "$ICONSET/icon_16x16@2x.png"
-          cp "$SRC/icon_32x32.png"     "$ICONSET/icon_32x32.png"
-          cp "$SRC/icon_64x64.png"     "$ICONSET/icon_32x32@2x.png"
-          cp "$SRC/icon_128x128.png"   "$ICONSET/icon_128x128.png"
-          cp "$SRC/icon_256x256.png"   "$ICONSET/icon_128x128@2x.png"
-          cp "$SRC/icon_256x256.png"   "$ICONSET/icon_256x256.png"
-          cp "$SRC/icon_512x512.png"   "$ICONSET/icon_256x256@2x.png"
-          cp "$SRC/icon_512x512.png"   "$ICONSET/icon_512x512.png"
-          cp "$SRC/icon_1024x1024.png" "$ICONSET/icon_512x512@2x.png"
-          iconutil -c icns "$ICONSET" -o "$APP/Resources/AppIcon.icns"
-
-          # Ad-hoc 署名 (+ Hardened Runtime: defense-in-depth against
-          # DYLD_INSERT_LIBRARIES injection / debugger attach into a process
-          # that holds decrypted secrets in memory. See #114.)
-          codesign --force --deep --options runtime --sign - "build/AI KeyChain.app"
-
-      - name: Verify code signature and Hardened Runtime flag
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          APP="build/AI KeyChain.app"
-
-          # 署名そのものが壊れていないか
-          codesign --verify --deep --strict "$APP"
-
-          # Hardened Runtime フラグが実際に付与されているか検証
-          # (付与に失敗した署名をサイレントに出荷しないためのゲート)
-          if codesign -dvvv "$APP" 2>&1 | grep -qE 'flags=.*runtime'; then
-            echo "Hardened Runtime flag confirmed on $APP"
-          else
-            echo "ERROR: Hardened Runtime flag missing on $APP" >&2
-            codesign -dvvv "$APP" 2>&1 || true
-            exit 1
-          fi
-
-      - name: Install create-dmg
-        if: steps.check.outputs.exists == 'false'
-        run: brew install create-dmg
-
-      - name: Create graphical DMG
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          APP="build/AI KeyChain.app/Contents"
-
-          create-dmg \
-            --volname "AI KeyChain" \
-            --volicon "$APP/Resources/AppIcon.icns" \
-            --window-pos 200 120 \
-            --window-size 660 400 \
-            --icon-size 120 \
-            --icon "AI KeyChain.app" 160 185 \
-            --hide-extension "AI KeyChain.app" \
-            --app-drop-link 500 185 \
-            --no-internet-enable \
-            "build/AIKeyChain-v${VERSION}.dmg" \
-            "build/AI KeyChain.app"
-
-      - name: Compute DMG checksum
-        if: steps.check.outputs.exists == 'false'
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          cd build
-          shasum -a 256 "AIKeyChain-v${VERSION}.dmg" > "AIKeyChain-v${VERSION}.dmg.sha256"
-          cat "AIKeyChain-v${VERSION}.dmg.sha256"
-
-      - name: Create GitHub Release
+      - name: Create GitHub Release (notes only)
         if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          VERSION="${{ steps.version.outputs.version }}"
 
           gh release create "$TAG" \
             --title "$TAG" \
-            --notes-file /tmp/release-body.md \
-            "build/AIKeyChain-v${VERSION}.dmg#AIKeyChain-v${VERSION}.dmg" \
-            "build/AIKeyChain-v${VERSION}.dmg.sha256#AIKeyChain-v${VERSION}.dmg.sha256"
+            --notes-file /tmp/release-body.md
 
-          echo "Release $TAG created with DMG + checksum attached."
+          echo "Release $TAG created (notes only — attach the notarized DMG via scripts/build-release.sh + gh release upload)."
