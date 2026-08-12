@@ -73,16 +73,14 @@ final class KeychainService: KeychainServiceProtocol {
         ]
     }
 
-    /// アイテムの存在を **属性のみ** で確認する（値を読まない）。
+    /// アイテムの存在を **値を読まずに** 確認する（データも属性も返さない）。
     /// 値読み取り (kSecReturnData) は security 所有アイテムで ~7 秒ブロックして
-    /// SecurityAgent を起動する（#177 の実測 E6-1）が、属性照会はプロンプト無しで
-    /// 安全（loadKeys と同じ）。
+    /// SecurityAgent を起動する（#177 の実測 E6-1）が、存在照会はプロンプト無しで
+    /// 安全（exists(for:) と同じ）。
     private func itemExists(matching base: [String: Any]) throws -> Bool {
         var query = base
         query[kSecMatchLimit as String] = kSecMatchLimitOne
-        query[kSecReturnAttributes as String] = true
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let status = SecItemCopyMatching(query as CFDictionary, nil)
         switch status {
         case errSecSuccess: return true
         case errSecItemNotFound: return false
@@ -105,18 +103,38 @@ final class KeychainService: KeychainServiceProtocol {
         // #177: 既存アイテムへの in-process SecItemUpdate は、そのアイテムが
         // /usr/bin/security 所有（`akc set` / 手動 security 登録）の場合、**無音で成功
         // するのに所有権を毒化し、以後 `akc run` がヘッドレスで読めなくなる**（実測 E6-4）。
-        // よって update を使わず、SecItemDelete を「プロンプトを出さない所有権プローブ」
-        // として使う: 削除に失敗（-25244 等）= security 所有 → in-process 編集は毒化する
-        // ので **アイテムを変更せず fail-closed**（`akc set` で編集するよう案内）。
-        // 削除成功 = GUI 所有 → 新しい値で再作成する。
+        // よって update を使わず、SecItemDelete を「所有権プローブ」として使う:
+        // 削除に失敗（-25244 = security 所有、または UIFail による -25308 = 要対話）なら
+        // in-process 編集は毒化する／できないので **アイテムを変更せず fail-closed**
+        // （`akc set` で編集するよう案内）。削除成功 = GUI 所有 → 新しい値で再作成する。
+        //
+        // 既知の限界（いずれも恒久対応は #167 の v2 namespace / security 経路書込）:
+        //  1. delete→add は原子的でない。GUI 所有アイテムで delete 成功直後に add が
+        //     （キーチェーンのロック等で）失敗すると旧値を失う窓がある。add を 1 回
+        //     リトライして緩和し、それでも失敗したら旧値の消失を隠さず throw する。
+        //  2. `security add -A`（allow-all-apps ACL）で作られたキーは GUI からの
+        //     SecItemDelete が成功してしまい、GUI 所有として再作成され所有権が再毒化
+        //     し得る（akc set のデフォルト ACL では発生しない稀ケース）。
+        //  3. save() はメインスレッドで呼ばれる。SecItemDelete は E6-3 で security 所有
+        //     アイテムに対し即座に -25244（プロンプト無し）を返すことを実測済みで、
+        //     さらに下記 UIFail で対話を明示禁止するため UI フリーズは起きない。
         let appQuery = baseQuery(for: account)
 
         if try itemExists(matching: appQuery) {
-            let deleteStatus = SecItemDelete(appQuery as CFDictionary)
-            guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {
-                // -25244（GUI からは削除できない = security 所有）を含む全ての失敗で
-                // 毒化を避けるため fail-closed。アイテムは未変更（削除に失敗している）。
+            var deleteQuery = appQuery
+            // 削除がプロンプト/フリーズしないよう UI を明示禁止（旧 ad-hoc 署名などの
+            // 別 partition アイテムでも SecurityAgent を起動させず即座に失敗させる）。
+            deleteQuery[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
+            let deleteStatus = SecItemDelete(deleteQuery as CFDictionary)
+            switch deleteStatus {
+            case errSecSuccess, errSecItemNotFound:
+                break // GUI 所有 → 下で再作成
+            case errSecInteractionNotAllowed, errSecAuthFailed, -25244:
+                // security 所有 / 要対話 = in-process 編集不可 → 毒化させず fail-closed。
                 throw KeychainError.cliManaged(account)
+            default:
+                // ロック等の想定外失敗も、アイテムは未変更なので安全側に倒す。
+                throw KeychainError.unexpectedStatus(deleteStatus)
             }
         } else if EnvVarName.isManualSchemeCandidate(account),
                   try itemExists(matching: manualQuery(for: account)) {
@@ -131,7 +149,11 @@ final class KeychainService: KeychainServiceProtocol {
         addQuery[kSecValueData as String] = data
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        var addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        if addStatus != errSecSuccess {
+            // delete 後の add 失敗（旧値消失の窓）を緩和するため 1 回だけ再試行。
+            addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        }
         guard addStatus == errSecSuccess else {
             throw KeychainError.unexpectedStatus(addStatus)
         }
