@@ -124,6 +124,10 @@ final class KeychainService: KeychainServiceProtocol {
             var deleteQuery = appQuery
             // 削除がプロンプト/フリーズしないよう UI を明示禁止（旧 ad-hoc 署名などの
             // 別 partition アイテムでも SecurityAgent を起動させず即座に失敗させる）。
+            // deprecation 警告が出るが、推奨代替の LAContext.interactionNotAllowed は
+            // **Keychain の partition/パスワードプロンプトを抑止しない**ことを実測済み
+            // （#177 の E6-1。生体認証系 UI 専用）。よって意図的に kSecUseAuthenticationUIFail
+            // を使う。
             deleteQuery[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
             let deleteStatus = SecItemDelete(deleteQuery as CFDictionary)
             switch deleteStatus {
