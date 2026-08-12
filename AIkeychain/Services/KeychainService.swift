@@ -8,6 +8,11 @@ enum KeychainError: LocalizedError {
     case invalidData
     case invalidAccount
     case interactionRequired
+    /// The item is owned by `/usr/bin/security` (registered via the `akc` CLI or a
+    /// manual `security add-generic-password`). An in-process edit from the GUI would
+    /// silently poison it — leaving `akc run` unable to read it — so we fail closed
+    /// and tell the user to edit it via the CLI instead. See issue #177.
+    case cliManaged(String)
     case unexpectedStatus(OSStatus)
 
     var errorDescription: String? {
@@ -17,6 +22,7 @@ enum KeychainError: LocalizedError {
         case .invalidData: "Failed to encode/decode the key data."
         case .invalidAccount: "Invalid key name. Use only letters, digits and underscores (must start with a letter or underscore)."
         case .interactionRequired: "Keychain access requires user interaction (consent or unlock), which is unavailable in this context."
+        case .cliManaged(let account): "\(account) is managed by the akc CLI. Change its value from the terminal with: akc set \(account)"
         case .unexpectedStatus(let status): "Keychain error: \(status)"
         }
     }
@@ -67,6 +73,23 @@ final class KeychainService: KeychainServiceProtocol {
         ]
     }
 
+    /// アイテムの存在を **属性のみ** で確認する（値を読まない）。
+    /// 値読み取り (kSecReturnData) は security 所有アイテムで ~7 秒ブロックして
+    /// SecurityAgent を起動する（#177 の実測 E6-1）が、属性照会はプロンプト無しで
+    /// 安全（loadKeys と同じ）。
+    private func itemExists(matching base: [String: Any]) throws -> Bool {
+        var query = base
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        query[kSecReturnAttributes as String] = true
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        switch status {
+        case errSecSuccess: return true
+        case errSecItemNotFound: return false
+        default: throw KeychainError.unexpectedStatus(status)
+        }
+    }
+
     func save(value: String, for account: String) throws {
         // シンクでの一元検証: どの ingress（手動エディタ / .env インポート /
         // キー共有インポート）経由でも、シェル export に安全な名前だけを Keychain に
@@ -79,42 +102,38 @@ final class KeychainService: KeychainServiceProtocol {
             throw KeychainError.invalidData
         }
 
-        // Try to update first
-        let query = baseQuery(for: account)
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        ]
+        // #177: 既存アイテムへの in-process SecItemUpdate は、そのアイテムが
+        // /usr/bin/security 所有（`akc set` / 手動 security 登録）の場合、**無音で成功
+        // するのに所有権を毒化し、以後 `akc run` がヘッドレスで読めなくなる**（実測 E6-4）。
+        // よって update を使わず、SecItemDelete を「プロンプトを出さない所有権プローブ」
+        // として使う: 削除に失敗（-25244 等）= security 所有 → in-process 編集は毒化する
+        // ので **アイテムを変更せず fail-closed**（`akc set` で編集するよう案内）。
+        // 削除成功 = GUI 所有 → 新しい値で再作成する。
+        let appQuery = baseQuery(for: account)
 
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-
-        if updateStatus == errSecItemNotFound {
-            // GUI スキームに無く manual スキームにだけ存在するキーは、manual 側を
-            // その場で更新する（CLI の setKey と同じ）。GUI 側へ新規追加してしまうと
-            // 旧値を持つ manual アイテムが残り、manual を直接読む既存の .zshrc 行や
-            // スクリプトがローテート前の値を使い続ける (#163 レビュー指摘)。
-            if EnvVarName.isManualSchemeCandidate(account) {
-                let manualStatus = SecItemUpdate(manualQuery(for: account) as CFDictionary,
-                                                 attributes as CFDictionary)
-                if manualStatus == errSecSuccess {
-                    return
-                }
-                guard manualStatus == errSecItemNotFound else {
-                    throw KeychainError.unexpectedStatus(manualStatus)
-                }
+        if try itemExists(matching: appQuery) {
+            let deleteStatus = SecItemDelete(appQuery as CFDictionary)
+            guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {
+                // -25244（GUI からは削除できない = security 所有）を含む全ての失敗で
+                // 毒化を避けるため fail-closed。アイテムは未変更（削除に失敗している）。
+                throw KeychainError.cliManaged(account)
             }
+        } else if EnvVarName.isManualSchemeCandidate(account),
+                  try itemExists(matching: manualQuery(for: account)) {
+            // manual スキーム (service=<KEY>) のキーは実運用上ほぼ security 所有
+            // （手動 security 登録 / `akc set` の manual 更新）。in-process 編集は毒化する
+            // ため、削除を試みず fail-closed（#163 の manual in-place 更新を置き換える）。
+            throw KeychainError.cliManaged(account)
+        }
 
-            // どちらにも無い新規キーは GUI スキームに追加
-            var addQuery = query
-            addQuery[kSecValueData as String] = data
-            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        // 新規キー、または GUI 所有アイテムの削除成功後 → GUI スキームに追加
+        var addQuery = appQuery
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
-            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-            guard addStatus == errSecSuccess else {
-                throw KeychainError.unexpectedStatus(addStatus)
-            }
-        } else if updateStatus != errSecSuccess {
-            throw KeychainError.unexpectedStatus(updateStatus)
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(addStatus)
         }
     }
 
@@ -252,14 +271,22 @@ final class MockKeychainService: KeychainServiceProtocol {
     var store: [String: String] = [:]
     /// manual スキーム (service=<キー名>) 相当のアイテム (#160)
     var manualStore: [String: String] = [:]
+    /// `/usr/bin/security` 所有（`akc set` / 手動登録）を模すアカウント。実装では
+    /// in-process SecItemDelete が -25244 で失敗するケース。save() は fail-closed する (#177)。
+    var securityOwnedAccounts: Set<String> = []
 
     func save(value: String, for account: String) throws {
-        // 実装と同じ意味論: manual にだけ存在するキーは manual 側を in-place 更新
-        if store[account] == nil, manualStore[account] != nil {
-            manualStore[account] = value
-        } else {
-            store[account] = value
+        // #177: 実装と同じ fail-closed 契約。
+        // (1) security 所有アイテム（app スキームだが CLI/手動作成）→ in-process 編集は
+        //     毒化するため cliManaged で拒否。
+        // (2) manual スキームにのみ存在するキーも実運用上 security 所有 → 拒否。
+        if securityOwnedAccounts.contains(account) {
+            throw KeychainError.cliManaged(account)
         }
+        if store[account] == nil, manualStore[account] != nil {
+            throw KeychainError.cliManaged(account)
+        }
+        store[account] = value
     }
 
     func retrieve(for account: String) throws -> String? {
