@@ -539,6 +539,10 @@ private struct ReceiveTab: View {
     @State private var overwriteConfirmed = false          // 既存上書きの明示承諾
     @State private var imported = false
     @State private var importCount = 0
+    /// #177: 受信キーのうちローカルが akc CLI 管理で上書きできなかった件数。
+    @State private var cliManagedCount = 0
+    /// #177: cliManaged 以外の理由（keychain ロック等）で保存できなかった件数。
+    @State private var failedCount = 0
     @State private var errorMessage: String?
     // 復号時に envVarName で重複排除（先勝ち）した表示用エントリ（finding 10）と、
     // その時点で一度だけ Keychain を引いて数えた上書き件数（finding 11）。
@@ -859,6 +863,27 @@ private struct ReceiveTab: View {
             Text(L10n.s(ja: "Keychain に保存されました", en: "Saved to Keychain"))
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
+            if cliManagedCount > 0 {
+                // #177: akc CLI 管理キーは GUI から上書きできない（毒化防止）
+                Label(L10n.s(
+                    ja: "\(cliManagedCount) 件は akc CLI 管理のため未更新です。ターミナルで `akc set <KEY>` で更新してください。",
+                    en: "\(cliManagedCount) key(s) are managed by the akc CLI and were not updated. Update them with `akc set <KEY>` in a terminal."),
+                      systemImage: "terminal.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
+            if failedCount > 0 {
+                Label(L10n.s(
+                    ja: "\(failedCount) 件は保存に失敗しました（Keychain のロック等）。もう一度お試しください。",
+                    en: "\(failedCount) key(s) failed to save (e.g. a locked Keychain). Please try again."),
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
 
             Button {
                 NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Keychain Access.app"))
@@ -923,16 +948,29 @@ private struct ReceiveTab: View {
             tofu.confirm(fp)
         }
         var count = 0
+        var cliManaged: [String] = []
+        var failed: [String] = []
         for entry in entries {
             // 外部由来の .aikeychain ファイルの envVarName は信頼できない。
             // シェル export に不正な名前はスキップする（KeychainService.save 側でも
             // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
             guard EnvVarName.isValid(entry.envVarName) else { continue }
-            if let _ = try? KeychainService.shared.save(value: entry.value, for: entry.envVarName) {
+            do {
+                try KeychainService.shared.save(value: entry.value, for: entry.envVarName)
                 count += 1
+            } catch KeychainError.cliManaged {
+                // #177: 受信キーと同名のローカルキーが akc CLI 管理（security 所有）。
+                // GUI から上書きすると毒化するため fail-closed。黙って捨てず件数を surface。
+                cliManaged.append(entry.envVarName)
+            } catch {
+                // その他の失敗（keychain ロック等）は cliManaged と混同せず別集計。
+                // 「akc set で更新」の誤案内で本当の失敗を隠さないため（codex 指摘）。
+                failed.append(entry.envVarName)
             }
         }
         importCount = count
+        cliManagedCount = cliManaged.count
+        failedCount = failed.count
         imported = true
         onImport() // キーリストを更新
     }

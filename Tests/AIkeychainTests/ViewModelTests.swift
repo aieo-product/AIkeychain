@@ -174,18 +174,20 @@ struct KeyListViewModelTests {
         #expect(discovered?.storage == .manual)
     }
 
-    @Test("Saving a manual-only key updates the manual item in place (no GUI shadow copy)")
-    func savingManualKeyUpdatesInPlace() throws {
+    @Test("Editing a manual-only (CLI-managed) key fails closed instead of poisoning (#177)")
+    func savingManualKeyFailsClosed() throws {
         let (vm, mock) = makeSUT()
         let name = uniqueEnvName()
         mock.manualStore[name] = "old-value"
         vm.loadKeys()
-        let discovered = vm.keys.first { $0.envVarName == name }
+        let discovered = try #require(vm.keys.first { $0.envVarName == name })
 
-        try vm.save(value: "new-value", for: discovered!)
-
-        // manual 側が更新され、GUI 側に影のコピーが増えない (#163 レビュー指摘)
-        #expect(mock.manualStore[name] == "new-value")
+        // in-process 編集は security 所有 manual アイテムを毒化するため拒否される。
+        #expect(throws: KeychainError.self) {
+            try vm.save(value: "new-value", for: discovered)
+        }
+        // 値は未変更（毒化も GUI 影コピーも起きない）
+        #expect(mock.manualStore[name] == "old-value")
         #expect(mock.store[name] == nil)
     }
 

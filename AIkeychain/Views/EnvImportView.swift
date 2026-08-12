@@ -393,11 +393,12 @@ struct EnvImportView: View {
             Spacer()
 
             if let result = importResult {
-                Image(systemName: result.failed == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                let clean = result.failed == 0 && result.cliManaged.isEmpty
+                Image(systemName: clean ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(result.failed == 0 ? AppColors.configured : .orange)
+                    .foregroundStyle(clean ? AppColors.configured : .orange)
 
-                Text(result.failed == 0 ? "Import Complete!" : "Partially Imported")
+                Text(clean ? "Import Complete!" : "Partially Imported")
                     .font(.system(size: 18, weight: .semibold))
 
                 VStack(spacing: 8) {
@@ -416,6 +417,12 @@ struct EnvImportView: View {
                     if result.failed > 0 {
                         ResultRow(icon: "xmark.circle.fill", color: .red,
                                   text: "\(result.failed) keys failed")
+                    }
+                    if !result.cliManaged.isEmpty {
+                        ResultRow(icon: "terminal.fill", color: .orange,
+                                  text: L10n.s(
+                                    ja: "\(result.cliManaged.count) 件は akc CLI 管理のため未更新。ターミナルで更新してください: akc set \(result.cliManaged.joined(separator: " / akc set "))",
+                                    en: "\(result.cliManaged.count) key(s) are managed by the akc CLI and were not updated. Update them in a terminal: akc set \(result.cliManaged.joined(separator: " / akc set "))"))
                     }
                 }
                 .padding(.horizontal, 40)
@@ -448,6 +455,7 @@ struct EnvImportView: View {
         var failed = 0
         var removedFromZshrc = 0
         var savedKeys: [String] = []
+        var cliManagedKeys: [String] = []
 
         for entry in selected {
             let account = entry.matchedService?.envVarName ?? entry.key
@@ -455,6 +463,11 @@ struct EnvImportView: View {
                 try KeychainService.shared.save(value: entry.value, for: account)
                 saved += 1
                 savedKeys.append(account)
+            } catch KeychainError.cliManaged {
+                // #177: このキーは akc CLI 管理（security 所有）。GUI から上書きすると
+                // 毒化するため save() が fail-closed した。古い値のまま黙って放置せず、
+                // 「akc set で更新して」と明示する。
+                cliManagedKeys.append(account)
             } catch {
                 failed += 1
             }
@@ -471,7 +484,8 @@ struct EnvImportView: View {
         }
 
         let skipped = parsedEntries.count - selected.count
-        importResult = ImportResult(saved: saved, skipped: skipped, failed: failed, removedFromZshrc: removedFromZshrc)
+        importResult = ImportResult(saved: saved, skipped: skipped, failed: failed,
+                                    removedFromZshrc: removedFromZshrc, cliManaged: cliManagedKeys)
     }
 
     private func isAIKey(_ key: String) -> Bool {
@@ -593,6 +607,9 @@ private struct ImportResult {
     let skipped: Int
     let failed: Int
     let removedFromZshrc: Int
+    /// #177: akc CLI 管理（security 所有）で GUI から上書きできなかったキー。
+    /// 古い値のまま残るため `akc set <KEY>` での更新を案内する。
+    var cliManaged: [String] = []
 }
 
 struct EnvEntry: Identifiable {

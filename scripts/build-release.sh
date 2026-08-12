@@ -116,10 +116,14 @@ codesign --force --options runtime --timestamp \
   --sign "$SIGN_IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP"
 
-# 期待した Team の identity で署名されたかを照合
-if ! codesign -dvv "$APP" 2>&1 | grep -q "TeamIdentifier=${EXPECTED_TEAM_ID}"; then
-    echo "ERROR: TeamIdentifier が ${EXPECTED_TEAM_ID} ではありません。SIGN_IDENTITY / キーチェーンの証明書を確認してください。" >&2
-    codesign -dvv "$APP" 2>&1 | grep TeamIdentifier >&2 || true
+# 期待した Team の identity で署名されたかを照合。
+# 注: `codesign -dvv | grep -q` を直接パイプすると、grep -q がマッチ即座に終了して
+# codesign が SIGPIPE(141) で落ち、pipefail がパイプライン全体を失敗扱いにするため
+# 正しい署名でも誤検知する。先に変数へ捕捉してから照合する。
+CODESIGN_INFO=$(codesign -dvv "$APP" 2>&1)
+ACTUAL_TEAM=$(printf '%s\n' "$CODESIGN_INFO" | sed -n 's/^TeamIdentifier=//p')
+if [ "$ACTUAL_TEAM" != "$EXPECTED_TEAM_ID" ]; then
+    echo "ERROR: TeamIdentifier が ${EXPECTED_TEAM_ID} ではありません（実際: '${ACTUAL_TEAM}'）。SIGN_IDENTITY / キーチェーンの証明書を確認してください。" >&2
     exit 1
 fi
 
