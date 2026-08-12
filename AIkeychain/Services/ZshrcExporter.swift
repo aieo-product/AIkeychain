@@ -39,10 +39,16 @@ struct ZshrcExporter {
             lines.append("# --- \(category.rawValue) ---")
             for key in categoryKeys {
                 lines.append("# [AI KeyChain] \(key.displayName)")
-                // GUI の保存形式 (service=com.aieo.aikeychain, account=KEY_NAME) に
-                // 厳密に一致させる。-a "$USER" だと acct のずれ/重複で古い値を
-                // 掴む恐れがあるため使わない。
-                lines.append("export \(key.envVarName)=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"\(key.envVarName)\" -w)")
+                // キーの実保存スキームに厳密一致する lookup だけを出す (#91, #160)。
+                // シェル側の `||` フォールバックは使わない — 承認拒否や一時エラーでも
+                // 別スキームの古い/無関係な値へ静かに落ちてしまうため。
+                // -a "$USER" は acct のずれ/重複で古い値を掴む恐れがあるため使わない。
+                switch key.storage {
+                case .app:
+                    lines.append("export \(key.envVarName)=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"\(key.envVarName)\" -w)")
+                case .manual:
+                    lines.append("export \(key.envVarName)=$(/usr/bin/security find-generic-password -s \"\(key.envVarName)\" -w)")
+                }
             }
             lines.append("")
         }

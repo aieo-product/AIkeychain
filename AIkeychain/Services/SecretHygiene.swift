@@ -44,4 +44,17 @@ enum EnvVarName {
         guard !name.isEmpty else { return false }
         return name.range(of: pattern, options: .regularExpression) != nil
     }
+
+    /// manual スキーム (service=<キー名>) の対象と見なす名前かどうか (#160)。
+    ///
+    /// `isValid` より厳しい**大文字スネークケース限定** — npm CLI の
+    /// `MANUAL_NAME_PATTERN` (cli/src/keychain.js) と同一規則。緩い判定だと
+    /// `iCloud` / `AirPort` / `BluetoothGlobal` 等の macOS システムアイテムや
+    /// 他アプリの service 名を「キー」と誤認し、一覧を汚すだけでなく GUI からの
+    /// 削除・fallback 読取が無関係なアイテムに波及するため、ここで厳格に絞る。
+    private static let manualPattern = #"^[A-Z][A-Z0-9_]*$"#
+
+    static func isManualSchemeCandidate(_ name: String) -> Bool {
+        name.range(of: manualPattern, options: .regularExpression) != nil
+    }
 }

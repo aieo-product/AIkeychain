@@ -172,8 +172,13 @@ struct KeyEditorView: View {
                 }
             }
         } message: {
-            Text(L10n.s(ja: "このキーを Keychain から削除します。この操作は取り消せません。",
-                        en: "This will remove the key from Keychain. This action cannot be undone."))
+            if viewModel.deletesManualEntryToo {
+                Text(L10n.s(ja: "このキーを Keychain から削除します。手動登録されたエントリ（service=キー名。他のツールが作成したものの可能性があります）も併せて削除されます。この操作は取り消せません。",
+                            en: "This will remove the key from Keychain, including the manually registered entry (service=key name, possibly created by another tool). This action cannot be undone."))
+            } else {
+                Text(L10n.s(ja: "このキーを Keychain から削除します。この操作は取り消せません。",
+                            en: "This will remove the key from Keychain. This action cannot be undone."))
+            }
         }
     }
 
