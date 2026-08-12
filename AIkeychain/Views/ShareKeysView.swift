@@ -229,6 +229,7 @@ private struct SendTab: View {
     @State private var errorMessage: String?
     @State private var exported = false
     @State private var cachedValues: [String: String] = [:] // 一括取得キャッシュ
+    @State private var failedKeys: [String] = [] // 読み込み失敗（拒否/ACL 不一致等）キー (#161)
     @State private var isLoading = false
     // 署名フィンガープリントは Keychain I/O（初回は鍵生成）を伴うので body 内で毎回
     // 呼ばず、onAppear で一度だけ解決して state に持つ（finding 6）。
@@ -272,10 +273,16 @@ private struct SendTab: View {
                     Text(L10n.s(ja: "Keychain からキーを読み込みます", en: "Load keys from Keychain"))
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
-                    Text(L10n.s(ja: "Keychain の承認ダイアログが表示されます。\n「常に許可」を選ぶと次回以降ダイアログが出ません。", en: "A Keychain authorization dialog will appear.\nChoose \"Always Allow\" to skip the dialog next time."))
+                    Text(L10n.s(ja: "Keychain の承認ダイアログがキーごとに表示されることがあります。\n「常に許可」を選んだキーは次回以降ダイアログが出ません。", en: "A Keychain authorization dialog may appear for each key.\nKeys you \"Always Allow\" won't ask again next time."))
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
+
+                    if !failedKeys.isEmpty {
+                        Text(L10n.s(ja: "前回 \(failedKeys.count) 件のキーを読み込めませんでした。", en: "\(failedKeys.count) key(s) could not be loaded last time."))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.orange)
+                    }
 
                     Button("Load Keys from Keychain") {
                         batchLoadKeys()
@@ -304,6 +311,7 @@ private struct SendTab: View {
                             recipientPublicKey = nil
                             cachedValues = [:]
                             selectedKeys = []
+                            failedKeys = []
                         }
                         .font(.system(size: 10))
                     }
@@ -329,6 +337,34 @@ private struct SendTab: View {
                             .foregroundStyle(.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
+                    }
+
+                    if !failedKeys.isEmpty {
+                        // 取得に失敗したキーを無警告で落とさない (#161)。拒否 / ACL 不一致 /
+                        // 空値のキーはここに列挙し、再試行できるようにする。
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Label(
+                                    L10n.s(ja: "読み込めなかったキー: \(failedKeys.count) 件（エクスポートに含まれません）", en: "\(failedKeys.count) key(s) could not be loaded (excluded from export)"),
+                                    systemImage: "exclamationmark.triangle.fill"
+                                )
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.orange)
+                                Spacer()
+                                Button(L10n.s(ja: "再試行", en: "Retry")) {
+                                    batchLoadKeys()
+                                }
+                                .font(.system(size: 10))
+                            }
+                            Text(failedKeys.joined(separator: ", "))
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .lineLimit(3)
+                        }
+                        .padding(8)
+                        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                        .padding(.horizontal, 16)
                     }
 
                     HStack {
@@ -422,20 +458,26 @@ private struct SendTab: View {
         }
     }
 
-    /// 全キーの値を一括取得（Keychain 承認は1回にまとめる）
+    /// 全キーの値を一括取得。Keychain の承認（ACL）はアイテム単位のため、他プロセス
+    /// 作成のアイテムはキーごとにダイアログが出る。取得に失敗したキーは無警告で
+    /// 落とさず failedKeys に集めて UI に出す (#161)。
     private func batchLoadKeys() {
         isLoading = true
         // バックグラウンドで全キーを一括読み込み
         DispatchQueue.global(qos: .userInitiated).async {
             var values: [String: String] = [:]
+            var failed: [String] = []
             for key in configuredKeys {
                 if let value = try? KeychainService.shared.retrieve(for: key.envVarName),
                    !value.isEmpty {
                     values[key.envVarName] = value
+                } else {
+                    failed.append(key.envVarName)
                 }
             }
             DispatchQueue.main.async {
                 cachedValues = values
+                failedKeys = failed
                 selectedKeys = Set(values.keys) // デフォルト全選択
                 isLoading = false
             }

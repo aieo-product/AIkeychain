@@ -110,6 +110,22 @@ final class KeyListViewModel {
             allKeys.append(APIKey(customKey: discovered, isConfigured: true))
         }
 
+        // manual スキーム (service=<キー名>) のキーも同様に発見する (#160)。
+        // `security add-generic-password -s KEY_NAME` による手動登録や、既存 manual
+        // エントリを `akc set` が更新した場合はこちらにしか存在しない。値の解決は
+        // KeychainService の 2 段ルックアップ (GUI → manual) が引き受けるため、
+        // GUI からは他の発見キーと同じに扱える。名前は厳格形（大文字スネークケース）
+        // のみ採用 — 緩くすると iCloud 等のシステムアイテムを誤検出する。
+        for svc in keychainService.manualServices()
+        where EnvVarName.isManualSchemeCandidate(svc) && known.insert(svc).inserted {
+            let discovered = CustomKey(
+                envVarName: svc,
+                displayName: svc,
+                categoryId: KeyCategory.cliAdded.stableId
+            )
+            allKeys.append(APIKey(customKey: discovered, isConfigured: true))
+        }
+
         keys = allKeys
     }
 

@@ -31,12 +31,24 @@ struct ZshrcExporterSecretRefTests {
         let output = ZshrcExporter.export(keys: keys, format: .zshrc)
         #expect(output.contains("# [AI KeyChain]"))
         #expect(output.contains("/usr/bin/security find-generic-password"))
-        // 生成される .zshrc 行が GUI 保存形式 (service=com.aieo.aikeychain, account=KEY) に
-        // 厳密一致していること。acct 不整合による古い/無効な値の誤取得を防ぐ (issue #91)。
+        // 生成される .zshrc 行は GUI 保存形式 (service=com.aieo.aikeychain, account=KEY) を
+        // 先に引き、無ければ manual 形式 (service=KEY, acct ピン留めなし) に fallback する
+        // 2 段ルックアップであること (issue #91, #160)。
         #expect(output.contains(
-            "export GITHUB_TOKEN=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"GITHUB_TOKEN\" -w)"
+            "export GITHUB_TOKEN=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"GITHUB_TOKEN\" -w 2>/dev/null || /usr/bin/security find-generic-password -s \"GITHUB_TOKEN\" -w)"
         ))
         #expect(!output.contains("-a \"$USER\""))
+    }
+
+    @Test("Standard format lookup works for manual-scheme keys via fallback")
+    func standardManualFallback() {
+        // manual スキーム (service=KEY_NAME) にしか無いキーでも、fallback 側の
+        // lookup (-s "KEY_NAME"、-a ピン留めなし) で解決できる形になっていること (#160)。
+        let custom = CustomKey(envVarName: "MANUAL_ONLY_KEY", displayName: "MANUAL_ONLY_KEY",
+                               categoryId: KeyCategory.cliAdded.stableId)
+        let keys = [APIKey(customKey: custom, isConfigured: true)]
+        let output = ZshrcExporter.export(keys: keys, format: .zshrc)
+        #expect(output.contains("|| /usr/bin/security find-generic-password -s \"MANUAL_ONLY_KEY\" -w)"))
     }
 
     @Test("Standard format uses absolute security path")

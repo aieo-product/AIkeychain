@@ -159,6 +159,62 @@ struct KeyListViewModelTests {
         #expect(!vm.keys.contains { $0.envVarName == "has-hyphen" })
     }
 
+    @Test("Manual-scheme keys (service=<name>) are discovered under the CLI Added category")
+    func discoversManualSchemeKeys() {
+        let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
+        // `security add-generic-password -s KEY_NAME` 等で登録された manual スキームのキー (#160)
+        mock.manualStore[name] = "secret"
+        vm.loadKeys()
+
+        let discovered = vm.keys.first { $0.envVarName == name }
+        #expect(discovered != nil)
+        #expect(discovered?.isConfigured == true)
+        #expect(discovered?.builtinCategory == .cliAdded)
+    }
+
+    @Test("A key present in both schemes is not duplicated")
+    func bothSchemesNotDuplicated() throws {
+        let (vm, mock) = makeSUT()
+        let name = uniqueEnvName()
+        try mock.save(value: "app-value", for: name)
+        mock.manualStore[name] = "manual-value"
+        vm.loadKeys()
+        #expect(vm.keys.filter { $0.envVarName == name }.count == 1)
+    }
+
+    @Test("A preset key backed only by a manual-scheme item shows as configured")
+    func presetBackedByManualScheme() {
+        let (vm, mock) = makeSUT()
+        // プリセット名のキーが manual スキームにだけ存在する場合、2 段ルックアップで
+        // configured になり、発見キーとして二重表示もされない (#160)。
+        mock.manualStore["ANTHROPIC_API_KEY"] = "secret"
+        vm.loadKeys()
+        let matches = vm.keys.filter { $0.envVarName == "ANTHROPIC_API_KEY" }
+        #expect(matches.count == 1)
+        #expect(matches.first?.service == .some(.anthropic))
+        #expect(matches.first?.isConfigured == true)
+        #expect(matches.first?.builtinCategory != .cliAdded)
+    }
+
+    @Test("Manual-scheme names that are not strict upper-snake-case are not surfaced")
+    func invalidManualNamesNotSurfaced() {
+        let (vm, mock) = makeSUT()
+        // 他アプリ/システムのアイテムは対象外。EnvVarName.isValid が許す小文字混じり
+        //（iCloud / AirPort 等の実在システム service 名）も manual 発見では弾く。
+        // MockKeychainService.manualServices() は無条件で返すため、ViewModel 側の
+        // EnvVarName.isManualSchemeCandidate ガードを検証する。
+        mock.manualStore["com.example.app"] = "v"
+        mock.manualStore["9INVALID"] = "v"
+        mock.manualStore["iCloud"] = "v"
+        mock.manualStore["BluetoothGlobal"] = "v"
+        vm.loadKeys()
+        #expect(!vm.keys.contains { $0.envVarName == "com.example.app" })
+        #expect(!vm.keys.contains { $0.envVarName == "9INVALID" })
+        #expect(!vm.keys.contains { $0.envVarName == "iCloud" })
+        #expect(!vm.keys.contains { $0.envVarName == "BluetoothGlobal" })
+    }
+
     @Test("Editing an existing key does not rename it (no orphaned duplicate)")
     func editingDoesNotRenameKey() throws {
         let (store, defaults, suite) = isolatedStore()
@@ -236,4 +292,5 @@ final class DupAccountsKeychainService: KeychainServiceProtocol {
     func delete(for account: String) throws {}
     func exists(for account: String) -> Bool { true }
     func allAccounts() -> [String] { accounts }
+    func manualServices() -> [String] { [] }
 }

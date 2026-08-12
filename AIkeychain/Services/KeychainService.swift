@@ -36,6 +36,11 @@ protocol KeychainServiceProtocol {
     /// CLI (`akc set`) で追加され GUI 索引に無いキーを発見するために使う (#153)。
     /// 秘密値は読まない（アカウント名のみ）。
     func allAccounts() -> [String]
+    /// manual スキーム (service=<キー名>) で保存されているキー名を列挙する (#160)。
+    /// `security add-generic-password -s KEY_NAME` による手動登録や、既存 manual
+    /// エントリを `akc set` が更新した場合のアイテムが対象。npm CLI の判定規則と同じく
+    /// env 変数名形式の service のみを manual と見なす。秘密値は読まない。
+    func manualServices() -> [String]
 }
 
 final class KeychainService: KeychainServiceProtocol {
@@ -50,6 +55,15 @@ final class KeychainService: KeychainServiceProtocol {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+        ]
+    }
+
+    /// manual スキーム (service=<キー名>) のクエリ。acct はゆらぎがある（$USER /
+    /// キー名 / 空）ため意図的にピン留めしない — #91 の CLI 側 2 段ルックアップと同じ。
+    private func manualQuery(for account: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: account,
         ]
     }
 
@@ -90,15 +104,32 @@ final class KeychainService: KeychainServiceProtocol {
     }
 
     func retrieve(for account: String) throws -> String? {
-        var query = baseQuery(for: account)
+        // 2 段ルックアップ: GUI スキーム → manual スキーム (#91 の CLI 側と同じ順序 / #160)。
+        // manual 側は厳格な名前形（大文字スネークケース）のときだけ照会し、
+        // 他アプリ/システムのアイテムへ fallback が波及しないようにする。
+        if let value = try copyValue(query: baseQuery(for: account)) {
+            return value
+        }
+        guard EnvVarName.isManualSchemeCandidate(account) else { return nil }
+        return try copyValue(query: manualQuery(for: account))
+    }
+
+    private func copyValue(query base: [String: Any], context: LAContext? = nil) throws -> String? {
+        var query = base
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
+        if let context {
+            query[kSecUseAuthenticationContext as String] = context
+        }
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
         if status == errSecItemNotFound {
             return nil
+        }
+        if status == errSecInteractionNotAllowed {
+            throw KeychainError.interactionRequired
         }
 
         guard status == errSecSuccess else {
@@ -113,47 +144,45 @@ final class KeychainService: KeychainServiceProtocol {
     }
 
     func retrieveNoninteractive(for account: String) throws -> String? {
-        var query = baseQuery(for: account)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
         // Fail fast instead of presenting (and blocking on) a consent/auth prompt.
         let context = LAContext()
         context.interactionNotAllowed = true
-        query[kSecUseAuthenticationContext as String] = context
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        if status == errSecItemNotFound {
-            return nil
+        if let value = try copyValue(query: baseQuery(for: account), context: context) {
+            return value
         }
-        if status == errSecInteractionNotAllowed {
-            throw KeychainError.interactionRequired
-        }
-        guard status == errSecSuccess else {
-            throw KeychainError.unexpectedStatus(status)
-        }
-        guard let data = result as? Data, let string = String(data: data, encoding: .utf8) else {
-            throw KeychainError.invalidData
-        }
-        return string
+        guard EnvVarName.isManualSchemeCandidate(account) else { return nil }
+        return try copyValue(query: manualQuery(for: account), context: context)
     }
 
     func delete(for account: String) throws {
-        let query = baseQuery(for: account)
-        let status = SecItemDelete(query as CFDictionary)
-
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError.unexpectedStatus(status)
+        // GUI スキームと manual スキームの両方を削除する。片方だけ消すと 2 段
+        // ルックアップ (retrieve) がもう片方を解決し続け、「削除したのに残っている」
+        // 状態になるため (#160)。SecItemDelete は macOS では全一致アイテムを削除する。
+        let guiStatus = SecItemDelete(baseQuery(for: account) as CFDictionary)
+        guard guiStatus == errSecSuccess || guiStatus == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(guiStatus)
+        }
+        guard EnvVarName.isManualSchemeCandidate(account) else { return }
+        let manualStatus = SecItemDelete(manualQuery(for: account) as CFDictionary)
+        guard manualStatus == errSecSuccess || manualStatus == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(manualStatus)
         }
     }
 
     func exists(for account: String) -> Bool {
-        var query = baseQuery(for: account)
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        let status = SecItemCopyMatching(query as CFDictionary, nil)
-        return status == errSecSuccess
+        // 2 段ルックアップ (#160)。attributes 照会のみで値は読まないため承認 UI は出ない。
+        var queries = [baseQuery(for: account)]
+        if EnvVarName.isManualSchemeCandidate(account) {
+            queries.append(manualQuery(for: account))
+        }
+        for base in queries {
+            var query = base
+            query[kSecMatchLimit as String] = kSecMatchLimitOne
+            if SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess {
+                return true
+            }
+        }
+        return false
     }
 
     func allAccounts() -> [String] {
@@ -170,34 +199,65 @@ final class KeychainService: KeychainServiceProtocol {
         }
         return items.compactMap { $0[kSecAttrAccount as String] as? String }
     }
+
+    func manualServices() -> [String] {
+        // service 指定なしで全 generic password の attributes を列挙し（値は読まないため
+        // 承認 UI は出ない）、env 変数名形式の service を manual スキームと判定する。
+        // npm CLI (cli/src/keychain.js) の dump-keychain 解析と同じ規則 (#160)。
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
+            return []
+        }
+        var seen = Set<String>()
+        return items.compactMap { item -> String? in
+            guard let svc = item[kSecAttrService as String] as? String,
+                  svc != service,
+                  EnvVarName.isManualSchemeCandidate(svc),
+                  seen.insert(svc).inserted else { return nil }
+            return svc
+        }
+    }
 }
 
 // MARK: - Mock for Previews and Tests
 
 final class MockKeychainService: KeychainServiceProtocol {
     var store: [String: String] = [:]
+    /// manual スキーム (service=<キー名>) 相当のアイテム (#160)
+    var manualStore: [String: String] = [:]
 
     func save(value: String, for account: String) throws {
         store[account] = value
     }
 
     func retrieve(for account: String) throws -> String? {
-        store[account]
+        store[account] ?? manualStore[account]
     }
 
     func retrieveNoninteractive(for account: String) throws -> String? {
-        store[account]
+        store[account] ?? manualStore[account]
     }
 
     func delete(for account: String) throws {
         store.removeValue(forKey: account)
+        manualStore.removeValue(forKey: account)
     }
 
     func exists(for account: String) -> Bool {
-        store[account] != nil
+        store[account] != nil || manualStore[account] != nil
     }
 
     func allAccounts() -> [String] {
         Array(store.keys)
+    }
+
+    func manualServices() -> [String] {
+        Array(manualStore.keys)
     }
 }

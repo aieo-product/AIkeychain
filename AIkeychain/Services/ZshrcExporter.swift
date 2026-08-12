@@ -39,10 +39,11 @@ struct ZshrcExporter {
             lines.append("# --- \(category.rawValue) ---")
             for key in categoryKeys {
                 lines.append("# [AI KeyChain] \(key.displayName)")
-                // GUI の保存形式 (service=com.aieo.aikeychain, account=KEY_NAME) に
-                // 厳密に一致させる。-a "$USER" だと acct のずれ/重複で古い値を
-                // 掴む恐れがあるため使わない。
-                lines.append("export \(key.envVarName)=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"\(key.envVarName)\" -w)")
+                // GUI の保存形式 (service=com.aieo.aikeychain, account=KEY_NAME) を先に
+                // 引き、無ければ manual スキーム (service=KEY_NAME) に fallback する。
+                // CLI (`akc`) の 2 段ルックアップと同じ順序 (#91, #160)。
+                // -a "$USER" は acct のずれ/重複で古い値を掴む恐れがあるため使わない。
+                lines.append("export \(key.envVarName)=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"\(key.envVarName)\" -w 2>/dev/null || /usr/bin/security find-generic-password -s \"\(key.envVarName)\" -w)")
             }
             lines.append("")
         }
