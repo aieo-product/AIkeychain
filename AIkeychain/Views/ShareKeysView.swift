@@ -469,7 +469,7 @@ private struct SendTab: View {
             var failed: [String] = []
             for key in configuredKeys {
                 do {
-                    if let value = try KeychainService.shared.retrieve(for: key.envVarName),
+                    if let value = try SecurityCLIKeychainService.shared.retrieve(for: key.envVarName),
                        !value.isEmpty {
                         values[key.envVarName] = value
                     }
@@ -922,7 +922,7 @@ private struct ReceiveTab: View {
                 let deduped = decrypted.entries.filter { seen.insert($0.envVarName).inserted }
                 // 上書き対象は decrypt 時に一度だけ Keychain を引いて確定（毎描画で
                 // 引かない / finding 11）。
-                let owNames = Set(deduped.map(\.envVarName).filter { KeychainService.shared.exists(for: $0) })
+                let owNames = Set(deduped.map(\.envVarName).filter { SecurityCLIKeychainService.shared.exists(for: $0) })
                 entries = deduped
                 overwriteNames = owNames
                 share = decrypted
@@ -956,7 +956,7 @@ private struct ReceiveTab: View {
             // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
             guard EnvVarName.isValid(entry.envVarName) else { continue }
             do {
-                try KeychainService.shared.save(value: entry.value, for: entry.envVarName)
+                try SecurityCLIKeychainService.shared.save(value: entry.value, for: entry.envVarName)
                 count += 1
             } catch KeychainError.cliManaged {
                 // #177: 受信キーと同名のローカルキーが akc CLI 管理（security 所有）。

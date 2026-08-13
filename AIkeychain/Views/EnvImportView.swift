@@ -328,7 +328,7 @@ struct EnvImportView: View {
 
                             Spacer()
 
-                            if KeychainService.shared.exists(for: entry.matchedService?.envVarName ?? entry.key) {
+                            if SecurityCLIKeychainService.shared.exists(for: entry.matchedService?.envVarName ?? entry.key) {
                                 Label("Overwrite", systemImage: "exclamationmark.triangle")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.orange)
@@ -460,7 +460,7 @@ struct EnvImportView: View {
         for entry in selected {
             let account = entry.matchedService?.envVarName ?? entry.key
             do {
-                try KeychainService.shared.save(value: entry.value, for: account)
+                try SecurityCLIKeychainService.shared.save(value: entry.value, for: account)
                 saved += 1
                 savedKeys.append(account)
             } catch KeychainError.cliManaged {
@@ -575,7 +575,7 @@ private struct EnvEntryRow: View {
 
             Spacer()
 
-            if KeychainService.shared.exists(for: entry.matchedService?.envVarName ?? entry.key) {
+            if SecurityCLIKeychainService.shared.exists(for: entry.matchedService?.envVarName ?? entry.key) {
                 Text("Exists")
                     .font(.system(size: 9))
                     .foregroundStyle(.orange)
