@@ -37,7 +37,7 @@ struct SecurityCLIKeychainServiceTests {
         find-generic-password)
           echo "find $acct" >> "$dir/calls.log"
           case "$acct" in
-            HANG_KEY) sleep 60 ;;
+            HANG_KEY) [ -f "$dir/$acct" ] || sleep 60 ;;  # 保存後は即応答（quarantine 解除テスト用）
             SLOW_KEY) sleep 0.5 ;;
           esac
           if [ -f "$dir/$acct" ]; then cat "$dir/$acct"; echo; exit 0; else exit 44; fi ;;
@@ -120,17 +120,21 @@ struct SecurityCLIKeychainServiceTests {
         #expect(findCalls(stateDir) == callsAfterFirst) // 追加 spawn なし
     }
 
-    @Test("Successful save clears the quarantine")
+    @Test("Successful save clears the quarantine for that key")
     func saveClearsQuarantine() throws {
         let (service, _) = try makeStub()
         service.readTimeout = 0.3
+        // 未保存の HANG_KEY はハング → timeout-kill → 隔離
         #expect(throws: KeychainError.self) {
             _ = try service.retrieveNoninteractive(for: "HANG_KEY")
         }
-        // save は writeTimeout 系なので成功し、隔離を解除する…が HANG_KEY は read-back
-        // で再びハングするため、ここでは別キーで解除ロジックのみ検証する
-        try service.save(value: "v", for: "OK_KEY")
-        #expect(try service.retrieveNoninteractive(for: "OK_KEY") == "v")
+        // 隔離中は即時失敗する
+        #expect(throws: KeychainError.self) {
+            _ = try service.retrieveNoninteractive(for: "HANG_KEY")
+        }
+        // 保存成功（stub は保存後の HANG_KEY に即応答する）→ 隔離が解除され読める
+        try service.save(value: "healed", for: "HANG_KEY")
+        #expect(try service.retrieveNoninteractive(for: "HANG_KEY") == "healed")
     }
 
     @Test("Concurrent reads of the same key are coalesced into one subprocess")
@@ -156,12 +160,19 @@ struct SecurityCLIKeychainServiceTests {
         #expect(findCalls(stateDir) - before == 1)
     }
 
-    @Test("Hex output from security -w is decoded when it is valid UTF-8 hex")
-    func hexDecode() {
-        #expect(SecurityCLIKeychainService.decodeHexIfLikely("68656c6c6f") == "hello")
-        #expect(SecurityCLIKeychainService.decodeHexIfLikely("sk-plain") == nil)     // 非 hex
-        #expect(SecurityCLIKeychainService.decodeHexIfLikely("abc") == nil)          // 奇数長
-        #expect(SecurityCLIKeychainService.decodeHexIfLikely("") == nil)
+    @Test("An all-hex ASCII secret round-trips verbatim (no hex-decode guessing, #179 review)")
+    func allHexSecretRoundTrip() throws {
+        let (service, _) = try makeStub()
+        try service.save(value: "4142434445464748", for: "HEXLIKE_KEY")
+        #expect(try service.retrieve(for: "HEXLIKE_KEY") == "4142434445464748")
+    }
+
+    @Test("Non-ASCII values are rejected until the C7 encoding convention lands")
+    func nonAsciiRejected() throws {
+        let (service, _) = try makeStub()
+        #expect(throws: KeychainError.self) {
+            try service.save(value: "秘密のトークン", for: "JP_KEY")
+        }
     }
 
     @Test("Writes and lists target the managed namespace, never the legacy service")

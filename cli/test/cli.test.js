@@ -51,7 +51,7 @@ case "$cmd" in
     if [ "$svc" = "com.aieo.aikeychain" ] && [ "$acct" = "GOOD_KEY" ]; then
       $want_value && echo "stub-good-value"; exit 0
     fi
-    if [ "$svc" = "com.aieo.aikeychain" ] && [ "$acct" = "NEW_KEY" ] && [ -f "$state_dir/state-NEW_KEY" ]; then
+    if { [ "$svc" = "com.aieo.aikeychain.managed" ] || [ "$svc" = "com.aieo.aikeychain" ]; } && [ "$acct" = "NEW_KEY" ] && [ -f "$state_dir/state-NEW_KEY" ]; then
       $want_value && { cat "$state_dir/state-NEW_KEY"; echo; }; exit 0
     fi
     if [ "$svc" = "MANUAL_KEY" ]; then

@@ -37,6 +37,10 @@ export const SECURITY_BIN =
 export const KEY_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
 export const GUI_SERVICE = 'com.aieo.aikeychain';
+// v1.9+ managed namespace (#167): every key under it was created by
+// /usr/bin/security, so headless reads never prompt. New writes go here;
+// GUI_SERVICE and the manual scheme remain read-only legacy fallbacks.
+export const MANAGED_SERVICE = 'com.aieo.aikeychain.managed';
 // Manual entries are identified by env-var-shaped service names (e.g. GITHUB_TOKEN).
 export const MANUAL_NAME_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 
@@ -72,6 +76,13 @@ function stripTrailingNewline(s) {
 
 /** Resolve a key to its secret value, or null if not found. */
 export async function resolveKey(name) {
+  // Lookup order: managed (v1.9+, always headless-readable) -> legacy GUI -> manual.
+  const managed = await security(['find-generic-password', '-s', MANAGED_SERVICE, '-a', name, '-w']);
+  if (managed.ok) {
+    const value = stripTrailingNewline(managed.stdout);
+    return value || null;
+  }
+  if (managed.code !== 44) return null; // fail closed on unexpected errors (#147 semantics)
   const gui = await security(['find-generic-password', '-s', GUI_SERVICE, '-a', name, '-w']);
   if (gui.ok) {
     const value = stripTrailingNewline(gui.stdout);
@@ -89,9 +100,10 @@ export async function resolveKey(name) {
 
 /** Check where a key exists without reading its secret value. */
 export async function keyExists(name) {
+  const managed = (await security(['find-generic-password', '-s', MANAGED_SERVICE, '-a', name])).ok;
   const app = (await security(['find-generic-password', '-s', GUI_SERVICE, '-a', name])).ok;
   const manual = (await security(['find-generic-password', '-s', name])).ok;
-  return { name, app, manual, exists: app || manual };
+  return { name, managed, app, manual, exists: managed || app || manual };
 }
 
 /** Redact hex-encoded secret material from text destined for errors/logs. */
@@ -134,7 +146,10 @@ export async function setKey(name, value, { manual = false } = {}) {
   if (/[\u0000-\u001f\u007f]/.test(value)) {
     throw new KeychainError('value must not contain control characters (newlines, tabs, NUL)');
   }
-  const service = manual ? name : GUI_SERVICE;
+  // New writes always target the managed namespace (#167). Updating a legacy
+  // manual entry in place is no longer offered: the managed copy wins the
+  // resolve order, and legacy copies are cleaned up by delete/migration.
+  const service = manual ? name : MANAGED_SERVICE;
   const hex = Buffer.from(value, 'utf8').toString('hex');
   const r = await securityInteractive(
     `add-generic-password -U -s "${service}" -a "${name}" -X ${hex}`
@@ -160,6 +175,10 @@ export async function setKey(name, value, { manual = false } = {}) {
 /** Delete a key from the GUI store and/or the manual store. Returns which stores were deleted. */
 export async function deleteKey(name, { app = true, manual = true } = {}) {
   const deleted = [];
+  if (app) {
+    const m = await security(['delete-generic-password', '-s', MANAGED_SERVICE, '-a', name]);
+    if (m.ok) deleted.push('managed');
+  }
   if (app) {
     const r = await security(['delete-generic-password', '-s', GUI_SERVICE, '-a', name]);
     if (r.ok) deleted.push('app');
@@ -198,7 +217,9 @@ export async function listKeys() {
     keys.get(name).add(source);
   };
   for (const { service, account } of parseDump(r.stdout)) {
-    if (service === GUI_SERVICE && account) {
+    if (service === MANAGED_SERVICE && account) {
+      add(account, 'app');
+    } else if (service === GUI_SERVICE && account) {
       add(account, 'app');
     } else if (service && service !== GUI_SERVICE && MANUAL_NAME_PATTERN.test(service)) {
       add(service, 'manual');
@@ -223,7 +244,7 @@ export async function listKeys() {
 export function findAmbiguousDuplicates(records) {
   const byService = new Map();
   for (const { service, account } of records) {
-    if (!service || service === GUI_SERVICE) continue;
+    if (!service || service === GUI_SERVICE || service === MANAGED_SERVICE) continue;
     if (!MANUAL_NAME_PATTERN.test(service)) continue;
     if (!byService.has(service)) byService.set(service, new Set());
     byService.get(service).add(account ?? '');

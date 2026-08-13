@@ -61,13 +61,14 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         guard EnvVarName.isValid(account) else {
             throw KeychainError.invalidAccount
         }
-        // CLI (cli/src/keychain.js) と同じ制約: 制御文字は `find -w` の読み戻しを
-        // hex 出力に化けさせラウンドトリップを壊すため保存前に拒否する。
-        // （複数行値の許容は C7 #174 で読み書き両側の規約を揃えてから）
-        guard value.range(of: "[\\x00-\\x1f\\x7f]", options: .regularExpression) == nil else {
+        // `security find -w` は値に非 ASCII/制御文字が含まれると hex を出力する。
+        // 「hex らしき出力を復号する」推測は all-hex の正規シークレット
+        // （例 "4142..."）を破壊するため行わない（#179 レビュー CONFIRMED）。
+        // 代わりに保存側で printable ASCII のみに制限し、読み出しが常に raw に
+        // なることを保証する。非 ASCII/複数行の対応は C7 #174 で規約を決めてから。
+        guard value.range(of: "^[\\x20-\\x7e]+$", options: .regularExpression) != nil else {
             throw KeychainError.invalidData
         }
-        guard !value.isEmpty else { throw KeychainError.invalidData }
 
         let hex = value.data(using: .utf8)!.map { String(format: "%02x", $0) }.joined()
         // -U: 既存アイテムの更新。security 所有アイテムへの -U は所有権・headless
@@ -145,16 +146,29 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
             arguments: ["delete-generic-password", "-s", Self.managedService, "-a", account],
             stdin: nil, timeout: writeTimeout)
         switch result {
-        case .exited(0, _, _):
-            return
-        case .exited(44, _, _):
-            return // not found は冪等成功扱い（従来の delete と同じ意味論）
+        case .exited(0, _, _), .exited(44, _, _):
+            break // 44 (not found) は冪等成功扱い（従来の delete と同じ意味論）
         case .exited(let status, _, _):
             throw KeychainError.unexpectedStatus(OSStatus(status))
         case .timedOut:
             throw KeychainError.interactionRequired
         case .failedToLaunch:
             throw KeychainError.unexpectedStatus(errSecIO)
+        }
+
+        // 旧 namespace（GUI store / manual スキーム）の同名コピーも best-effort で
+        // 掃除する。残すと `akc get/run` の legacy fallback が「削除したはずのキー」を
+        // 解決し続ける（#179 レビュー CONFIRMED）。akc set 由来の legacy は security
+        // 所有なので無音で消える。旧 GUI 所有はプロンプトになり得るため headed 前提の
+        // 削除操作でのみ発生し、timeout で kill されても本体（managed）は削除済み。
+        var legacyDeletes = [["delete-generic-password", "-s", "com.aieo.aikeychain", "-a", account]]
+        if EnvVarName.isManualSchemeCandidate(account) {
+            // manual スキームは厳格名（大文字スネーク）のみ対象（#163 と同じガード —
+            // 他アプリの小文字 service 名アイテムを巻き添えにしない）
+            legacyDeletes.append(["delete-generic-password", "-s", account])
+        }
+        for legacy in legacyDeletes {
+            _ = runSecurity(arguments: legacy, stdin: nil, timeout: writeTimeout)
         }
     }
 
@@ -212,11 +226,8 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         case .exited(0, let stdout, _):
             var text = String(data: stdout, encoding: .utf8) ?? ""
             if text.hasSuffix("\n") { text.removeLast() }
-            // security -w は非 ASCII 値を hex で出力する。保存側（save/akc set）は
-            // hex 入力なので、偶数長 hex + UTF-8 復号可能なら復号を試す。
-            // ASCII のみの実値が hex 文字だけで構成されるケースは save 側の
-            // read-back 検証で弾かれるため実害は限定的（CLI と同じ扱い）。
-            if let decoded = Self.decodeHexIfLikely(text) { text = decoded }
+            // 保存側が printable ASCII のみを許容するため、-w の出力は常に raw。
+            // hex 推測復号は all-hex の正規値を破壊するので行わない（#179 レビュー）。
             return text
         case .exited(44, _, _):
             return nil
@@ -284,22 +295,6 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         process.waitUntilExit()
         _ = ioGroup.wait(timeout: .now() + 2)
         return .exited(process.terminationStatus, stdout: stdoutData, stderr: stderrData)
-    }
-
-    /// 偶数長の hex 文字列で、かつ UTF-8 として復号できる場合のみ復号して返す。
-    static func decodeHexIfLikely(_ text: String) -> String? {
-        guard !text.isEmpty, text.count % 2 == 0,
-              text.range(of: "^[0-9a-fA-F]+$", options: .regularExpression) != nil else { return nil }
-        var bytes = [UInt8]()
-        bytes.reserveCapacity(text.count / 2)
-        var index = text.startIndex
-        while index < text.endIndex {
-            let next = text.index(index, offsetBy: 2)
-            guard let byte = UInt8(text[index..<next], radix: 16) else { return nil }
-            bytes.append(byte)
-            index = next
-        }
-        return String(bytes: bytes, encoding: .utf8)
     }
 
     private func resultDescription(_ result: RunResult, stderr: Bool) -> String {

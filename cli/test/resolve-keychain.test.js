@@ -63,7 +63,7 @@ after(async () => {
 test('resolveKey fails closed on a non-44 GUI lookup error (#147)', async () => {
   assert.equal(await resolveKey('ERROR_KEY'), null);
   const calls = await readFile(callsPath, 'utf8');
-  assert.equal(calls, 'com.aieo.aikeychain|ERROR_KEY\n');
+  assert.equal(calls, 'com.aieo.aikeychain.managed|ERROR_KEY\ncom.aieo.aikeychain|ERROR_KEY\n');
 });
 
 test('resolveKey falls back to manual storage when GUI lookup exits 44', async () => {
@@ -77,7 +77,7 @@ test('resolveKey returns null when GUI lookup exits 44 and manual value is empty
 test('resolveKey treats an empty successful GUI value as authoritative failure', async () => {
   assert.equal(await resolveKey('EMPTY_KEY'), null);
   const calls = await readFile(callsPath, 'utf8');
-  assert.equal(calls, 'com.aieo.aikeychain|EMPTY_KEY\n');
+  assert.equal(calls, 'com.aieo.aikeychain.managed|EMPTY_KEY\ncom.aieo.aikeychain|EMPTY_KEY\n');
 });
 
 test('resolveKey returns the GUI storage value without manual fallback', async () => {
