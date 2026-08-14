@@ -29,10 +29,12 @@ npx aikeychain <command>
 
 ### ルックアップ順序
 
-bash 版 `scripts/akc` と互換（issue #91 対応済み）:
+bash 版 `scripts/akc` と互換（issue #91/#167 対応済み）。各段は exit 44
+(not found) のときだけ次へ落ちる（それ以外の失敗は fail-closed / #150）:
 
-1. `service="com.aieo.aikeychain"` + `account=<KEY>`（GUI ストア）
-2. `service=<KEY>` のみ・**account 非指定**（手動登録キー）
+1. `service="com.aieo.aikeychain.managed"` + `account=<KEY>`（managed namespace、v1.9+ の保存先）
+2. `service="com.aieo.aikeychain"` + `account=<KEY>`（旧 GUI ストア）
+3. `service=<KEY>` のみ・**account 非指定**（手動登録キー）
 
 ## MCP サーバー
 

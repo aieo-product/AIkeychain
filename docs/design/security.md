@@ -67,17 +67,27 @@ kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 - `ThisDeviceOnly` でデバイス間の漏洩リスクを排除
 :::
 
-### Keychain クエリ構成
+### Keychain 書き込み経路（v1.9+ / #167）
 
-```swift
-let query: [String: Any] = [
-    kSecClass as String:          kSecClassGenericPassword,
-    kSecAttrService as String:    "com.aieo.aikeychain",
-    kSecAttrAccount as String:    envVarName,     // "ANTHROPIC_API_KEY"
-    kSecValueData as String:      tokenData,       // UTF-8 encoded
-    kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-]
+::: danger シークレットの書き込みに in-process SecItem API を使わないこと
+GUI/CLI とも、ユーザーシークレットの書き込みは **subprocess `/usr/bin/security`
+（managed namespace `com.aieo.aikeychain.managed`）が唯一の経路**
+（`SecurityCLIKeychainService` / `cli/src/keychain.js`）。
+`SecItemAdd`/`SecItemUpdate` で書くと作成者がアプリになり、PartitionID の分離で
+`akc run` のヘッドレス読取がプロンプト/失敗する — C2/C3 (#169/#170) で排除した
+アーキテクチャの再生産になる。値は `security -i` の stdin + hex で渡し、
+argv・環境変数に露出させない（#94）。
+:::
+
+```bash
+# 実際の書き込み形（値は stdin 経由の hex。argv に出さない）
+/usr/bin/security -i <<'EOF'
+add-generic-password -U -s "com.aieo.aikeychain.managed" -a "ANTHROPIC_API_KEY" -X <hex>
+EOF
 ```
+
+例外はアプリ内部鍵（共有/署名鍵、`KeyShareService`）のみ: akc の読取対象ではなく、
+アプリだけが無音で読める in-process 所有が正しい。
 
 ## Secret Reference モードのセキュリティ
 

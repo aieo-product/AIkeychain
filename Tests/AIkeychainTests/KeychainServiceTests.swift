@@ -50,12 +50,4 @@ struct KeychainServiceTests {
         #expect(result == "new")
     }
 
-    @Test("Save overwrites for both new and existing keys")
-    func newAndExistingStillSave() throws {
-        let service = MockKeychainService()
-        try service.save(value: "v1", for: "GITHUB_TOKEN")
-        #expect(try service.retrieve(for: "GITHUB_TOKEN") == "v1")
-        try service.save(value: "v2", for: "GITHUB_TOKEN")
-        #expect(try service.retrieve(for: "GITHUB_TOKEN") == "v2")
-    }
 }

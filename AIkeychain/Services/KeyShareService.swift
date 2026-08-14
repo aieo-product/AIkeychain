@@ -21,6 +21,10 @@ import Security
 /// （security 所有にするとアプリの読取が ~7 秒ブロック + SecurityAgent 起動になる, E6-1）。
 enum KeyShareService {
 
+    // アプリ予約の service 名（#183 レビュー D-Q1）: ユーザーキー名は
+    // EnvVarName.isValid がドットを禁止するため、manual スキーム (service=キー名) が
+    // この 2 つと衝突することは構造的に不可能。managed/旧 GUI service とも別文字列。
+    // saveRawKey の delete→add はこの予約を前提に無条件で行う。
     private static let privateKeyTag = "com.aieo.aikeychain.sharekey"
     private static let signKeyTag = "com.aieo.aikeychain.signkey"
 

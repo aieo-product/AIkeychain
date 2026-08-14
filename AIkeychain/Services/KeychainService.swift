@@ -30,14 +30,15 @@ protocol KeychainServiceProtocol {
     func retrieveNoninteractive(for account: String) throws -> String?
     func delete(for account: String) throws
     func exists(for account: String) -> Bool
-    /// AI KeyChain の保存 service (com.aieo.aikeychain) に存在する全アカウント名を列挙する。
-    /// CLI (`akc set`) で追加され GUI 索引に無いキーを発見するために使う (#153)。
-    /// 秘密値は読まない（アカウント名のみ）。
+    /// 主ストア（managed namespace, com.aieo.aikeychain.managed / #167）に存在する
+    /// 全アカウント名を列挙する。CLI (`akc set`) で追加され GUI 索引に無いキーを
+    /// 発見するために使う (#153)。秘密値は読まない（アカウント名のみ）。
     func allAccounts() -> [String]
-    /// manual スキーム (service=<キー名>) で保存されているキー名を列挙する (#160)。
-    /// `security add-generic-password -s KEY_NAME` による手動登録や、既存 manual
-    /// エントリを `akc set` が更新した場合のアイテムが対象。npm CLI の判定規則と同じく
-    /// env 変数名形式の service のみを manual と見なす。秘密値は読まない。
+    /// レガシー manual スキーム (service=<キー名>) で保存されているキー名を列挙する
+    /// (#160)。`security add-generic-password -s KEY_NAME` による手動登録アイテムが
+    /// 対象（#179 以降、akc set の書込先は managed であり manual には書かない）。
+    /// npm CLI の判定規則と同じく env 変数名形式の service のみを manual と見なす。
+    /// 秘密値は読まない。C5 (#172) の移行完了とともに廃止予定。
     func manualServices() -> [String]
 }
 

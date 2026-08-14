@@ -2,8 +2,9 @@ import Testing
 import Foundation
 @testable import AIkeychain
 
-/// SecurityCLIKeychainService のテスト。実 Keychain には触れず、`security` を模す
-/// スタブスクリプト（npm CLI の cli/test と同じ発想）に差し替えて検証する。
+/// SecurityCLIKeychainService のテスト。実 Keychain のアイテムには触れず、`security`
+/// を模すスタブスクリプト（npm CLI の cli/test と同じ発想）と、ロック状態の
+/// テストプローブ（makeStub が { false } を注入）に差し替えて検証する。
 @Suite("SecurityCLIKeychainService Tests (stub security)")
 struct SecurityCLIKeychainServiceTests {
 
@@ -25,6 +26,7 @@ struct SecurityCLIKeychainServiceTests {
           acct=$(printf '%s' "$line" | sed -n 's/.*-a "\\([^"]*\\)".*/\\1/p')
           hex=$(printf '%s' "$line" | sed -n 's/.*-X \\([0-9a-fA-F]*\\).*/\\1/p')
           [ -n "$svc" ] && [ -n "$acct" ] && [ -n "$hex" ] || exit 1
+          echo "add $svc|$acct" >> "$dir/calls.log"
           mkdir -p "$dir/$svc"
           printf '%s' "$hex" | xxd -r -p > "$dir/$svc/$acct"
           exit 0
@@ -60,6 +62,10 @@ struct SecurityCLIKeychainServiceTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stub.path)
         let service = SecurityCLIKeychainService()
         service.securityBinOverrideForTesting = stub.path
+        // 実ユーザーの keychain ロック状態に依存させない（ロック中のランナーで
+        // スイート全体が落ちる環境依存を防ぐ — #183 レビュー SF-1）。
+        // ロック挙動のテストだけがこのプローブを上書きする。
+        service.keychainLockedProbeForTesting = { false }
         return (service, dir.appendingPathComponent("state"))
     }
 
@@ -255,14 +261,24 @@ struct SecurityCLIKeychainServiceTests {
         let (service, stateDir) = try makeStub()
         var locked = true
         service.keychainLockedProbeForTesting = { locked }
-        try? service.save(value: "v", for: "LOCK_KEY") // 事前準備は不可（ロック中）
 
-        // 全エントリポイントが spawn せず即時 interactionRequired
-        #expect(throws: KeychainError.self) { try service.save(value: "v", for: "LOCK_KEY") }
-        #expect(throws: KeychainError.self) { _ = try service.retrieve(for: "LOCK_KEY") }
-        #expect(throws: KeychainError.self) { _ = try service.retrieveNoninteractive(for: "LOCK_KEY") }
-        #expect(throws: KeychainError.self) { try service.delete(for: "LOCK_KEY") }
-        #expect(callLog(stateDir).isEmpty) // security は一度も呼ばれない
+        // 全エントリポイントが spawn せず、正確に interactionRequired で即時失敗する
+        // （型だけの検証だと unexpectedStatus 経由の別ルートでも緑になり、Proxy の
+        // 503 写像を保証できない — #183 レビュー SF-5）
+        func expectInteractionRequired(_ body: () throws -> Void) {
+            do { try body(); Issue.record("expected interactionRequired, nothing thrown") }
+            catch KeychainError.interactionRequired {}
+            catch { Issue.record("expected interactionRequired, got \(error)") }
+        }
+        expectInteractionRequired { try service.save(value: "v", for: "LOCK_KEY") }
+        expectInteractionRequired { _ = try service.retrieve(for: "LOCK_KEY") }
+        expectInteractionRequired { _ = try service.retrieveNoninteractive(for: "LOCK_KEY") }
+        expectInteractionRequired { try service.delete(for: "LOCK_KEY") }
+        // stub は -i（書込）も含め全コマンドを記録する — save がガードを素通りして
+        // 書き込んでいれば calls.log と state ファイルに現れる
+        #expect(callLog(stateDir).isEmpty)
+        #expect(!FileManager.default.fileExists(
+            atPath: statePath(stateDir, service: SecurityCLIKeychainService.managedService, name: "LOCK_KEY").path))
 
         // 解錠後は即座に使える（ロックは quarantine を残さない）
         locked = false

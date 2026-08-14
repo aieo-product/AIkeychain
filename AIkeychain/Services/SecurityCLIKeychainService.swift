@@ -67,7 +67,9 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     // MARK: - KeychainServiceProtocol
 
     func save(value: String, for account: String) throws {
-        try ensureKeychainUnlocked()
+        // 純粋な入力検証はロック判定より先に行う: 外部状態（ロック）で不正入力の
+        // エラー種別が interactionRequired に化けると、呼び出し側の
+        // unsupported/failed 分類が解錠の前後で変わってしまう（#183 レビュー SF-2）
         guard EnvVarName.isValid(account) else {
             throw KeychainError.invalidAccount
         }
@@ -86,6 +88,7 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         guard value.count <= Self.maxValueLength else {
             throw KeychainError.invalidData
         }
+        try ensureKeychainUnlocked()
 
         let hex = value.data(using: .utf8)!.map { String(format: "%02x", $0) }.joined()
         // -U: 既存アイテムの更新。security 所有アイテムへの -U は所有権・headless

