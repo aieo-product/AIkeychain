@@ -122,11 +122,13 @@ final class KeyListViewModel {
         }
 
         // manual スキーム (service=<キー名>) のキーも同様に発見する (#160)。
-        // `security add-generic-password -s KEY_NAME` による手動登録や、既存 manual
-        // エントリを `akc set` が更新した場合はこちらにしか存在しない。値の解決は
-        // KeychainService の 2 段ルックアップ (GUI → manual) が引き受けるため、
-        // GUI からは他の発見キーと同じに扱える。名前は厳格形（大文字スネークケース）
-        // のみ採用 — 緩くすると iCloud 等のシステムアイテムを誤検出する。
+        // `security add-generic-password -s KEY_NAME` による手動登録のアイテムが対象。
+        // 値の解決は akc の 3 段ルックアップ (managed → 旧GUI → manual) が引き受ける。
+        // GUI の値読取（SecurityCLIKeychainService）は managed のみを見るため、
+        // manual キーの値はエディタでは空になる — C5 (#172) 移行アシスタントで
+        // managed へ移行するまでの過渡状態（akc run では従来どおり解決可能）。
+        // 名前は厳格形（大文字スネークケース）のみ採用 — 緩くすると iCloud 等の
+        // システムアイテムを誤検出する。
         for svc in keychainService.manualServices()
         where EnvVarName.isManualSchemeCandidate(svc) && known.insert(svc).inserted {
             let discovered = CustomKey(

@@ -250,6 +250,26 @@ struct SecurityCLIKeychainServiceTests {
         ])
     }
 
+    @Test("A locked keychain fails fast without spawning and without quarantining (#170)")
+    func lockedKeychainFailsFast() throws {
+        let (service, stateDir) = try makeStub()
+        var locked = true
+        service.keychainLockedProbeForTesting = { locked }
+        try? service.save(value: "v", for: "LOCK_KEY") // 事前準備は不可（ロック中）
+
+        // 全エントリポイントが spawn せず即時 interactionRequired
+        #expect(throws: KeychainError.self) { try service.save(value: "v", for: "LOCK_KEY") }
+        #expect(throws: KeychainError.self) { _ = try service.retrieve(for: "LOCK_KEY") }
+        #expect(throws: KeychainError.self) { _ = try service.retrieveNoninteractive(for: "LOCK_KEY") }
+        #expect(throws: KeychainError.self) { try service.delete(for: "LOCK_KEY") }
+        #expect(callLog(stateDir).isEmpty) // security は一度も呼ばれない
+
+        // 解錠後は即座に使える（ロックは quarantine を残さない）
+        locked = false
+        try service.save(value: "v2", for: "LOCK_KEY")
+        #expect(try service.retrieveNoninteractive(for: "LOCK_KEY") == "v2")
+    }
+
     @Test("Delete propagates a legacy cleanup failure and leaves the managed copy intact")
     func deleteLegacyFailureIsPropagated() throws {
         let (service, stateDir) = try makeStub()

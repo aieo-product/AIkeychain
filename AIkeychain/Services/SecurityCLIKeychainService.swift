@@ -43,6 +43,9 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     /// 環境変数ではなくコード（@testable）からのみ変更できる internal プロパティにする。
     var securityBinOverrideForTesting: String?
 
+    /// テスト専用: ロック検出の差し替え口（実 Keychain の状態に依存させない）。
+    var keychainLockedProbeForTesting: (() -> Bool)?
+
     private var effectiveSecurityBin: String { securityBinOverrideForTesting ?? securityBin }
 
     // MARK: - 直列化・coalescing・quarantine (#169 Proxy ハードニング)
@@ -64,6 +67,7 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     // MARK: - KeychainServiceProtocol
 
     func save(value: String, for account: String) throws {
+        try ensureKeychainUnlocked()
         guard EnvVarName.isValid(account) else {
             throw KeychainError.invalidAccount
         }
@@ -106,10 +110,14 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     }
 
     func retrieve(for account: String) throws -> String? {
-        try subprocessRead(account: account, timeout: writeTimeout)
+        try ensureKeychainUnlocked()
+        return try subprocessRead(account: account, timeout: writeTimeout)
     }
 
     func retrieveNoninteractive(for account: String) throws -> String? {
+        // ロック中は spawn せず即時失敗（quarantine より前 — ロックはキー単位の
+        // 状態ではないので、解錠後まで 60 秒隔離を残さない）
+        try ensureKeychainUnlocked()
         // Proxy 経路: quarantine 済みキーは spawn せず即時失敗（fail fast）
         stateLock.lock()
         if let until = quarantinedUntil[account], until > Date() {
@@ -155,6 +163,7 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     }
 
     func delete(for account: String) throws {
+        try ensureKeychainUnlocked()
         // 掃除の順序が要（#179 二段レビュー B3）: fallback ストア（manual → 旧 GUI）を
         // **先に**消し、権威コピー（managed）を最後に消す。逆順で legacy 掃除が失敗すると
         // 「削除成功と報告したのに `akc get` の fallback が古い値を解決し続ける」状態になる。
@@ -271,6 +280,31 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
                   EnvVarName.isManualSchemeCandidate(svc),
                   seen.insert(svc).inserted else { return nil }
             return svc
+        }
+    }
+
+    // MARK: - ロック検出 (#170: #169 チェックリストの残)
+
+    /// default keychain がロックされているか。ロック中の subprocess `security` は
+    /// SecurityAgent の解錠ダイアログでブロックし timeout-kill 行きになるため、
+    /// spawn 前に検出して UI を出さず即時失敗させる（Proxy は 503 に写像される）。
+    /// SecKeychain* API は deprecated だがロック状態を無音で読める代替が無い。
+    private func isDefaultKeychainLocked() -> Bool {
+        if let probe = keychainLockedProbeForTesting { return probe() }
+        var keychain: SecKeychain?
+        guard SecKeychainCopyDefault(&keychain) == errSecSuccess, let keychain else {
+            return false // 判定不能はブロックしない（従来挙動 = timeout に委ねる）
+        }
+        var status = SecKeychainStatus(0)
+        guard SecKeychainGetStatus(keychain, &status) == errSecSuccess else { return false }
+        return (status & SecKeychainStatus(kSecUnlockStateStatus)) == 0
+    }
+
+    /// ロック中は interactionRequired を即時 throw する。quarantine はしない
+    /// （ロックはキー単位でなく全体の状態で、解錠後に 60 秒待たせる理由が無い）。
+    private func ensureKeychainUnlocked() throws {
+        if isDefaultKeychainLocked() {
+            throw KeychainError.interactionRequired
         }
     }
 

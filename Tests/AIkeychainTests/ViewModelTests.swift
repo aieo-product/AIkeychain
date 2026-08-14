@@ -174,21 +174,21 @@ struct KeyListViewModelTests {
         #expect(discovered?.storage == .manual)
     }
 
-    @Test("Editing a manual-only (CLI-managed) key fails closed instead of poisoning (#177)")
-    func savingManualKeyFailsClosed() throws {
+    @Test("Editing a manual-only key writes a managed copy without touching the manual item (#170)")
+    func savingManualKeyWritesManagedCopy() throws {
+        // 旧 #177 の fail-closed は managed namespace 移行（C2/C3）で構造的に不要化:
+        // GUI の書込は subprocess security による managed への新規コピー作成であり、
+        // manual アイテム自体には触れない（毒化が起きない）。akc の解決順は
+        // managed が優先なので、新しい値が正しく勝つ。
         let (vm, mock) = makeSUT()
         let name = uniqueEnvName()
         mock.manualStore[name] = "old-value"
         vm.loadKeys()
         let discovered = try #require(vm.keys.first { $0.envVarName == name })
 
-        // in-process 編集は security 所有 manual アイテムを毒化するため拒否される。
-        #expect(throws: KeychainError.self) {
-            try vm.save(value: "new-value", for: discovered)
-        }
-        // 値は未変更（毒化も GUI 影コピーも起きない）
-        #expect(mock.manualStore[name] == "old-value")
-        #expect(mock.store[name] == nil)
+        try vm.save(value: "new-value", for: discovered)
+        #expect(mock.manualStore[name] == "old-value") // manual アイテムは無傷
+        #expect(mock.store[name] == "new-value")       // managed 相当に新コピー
     }
 
     @Test("Deleting a dual-scheme key removes both copies")
