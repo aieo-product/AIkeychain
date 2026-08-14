@@ -28,7 +28,8 @@ struct ZshrcExporterSecretRefTests {
     @Test("Standard format includes service name comments")
     func standardComments() {
         let keys = [makeKey(service: .github)]
-        let output = ZshrcExporter.export(keys: keys, format: .zshrc)
+        // managed に未移行のキー（旧 GUI store に実在）を模す
+        let output = ZshrcExporter.export(keys: keys, format: .zshrc, managedExists: { _ in false })
         #expect(output.contains("# [AI KeyChain]"))
         #expect(output.contains("/usr/bin/security find-generic-password"))
         // 生成される .zshrc 行が GUI 保存形式 (service=com.aieo.aikeychain, account=KEY) に
@@ -42,6 +43,19 @@ struct ZshrcExporterSecretRefTests {
         #expect(!output.contains("||"))
     }
 
+    @Test("Standard format emits the managed lookup for keys living in the managed namespace")
+    func standardManagedScheme() {
+        // GUI の新規保存は managed namespace (#167/#169) に行く。旧 service 固定の
+        // export だと保存直後のキーが新しいシェルで空になる（#179 二段レビュー B1）。
+        let keys = [makeKey(service: .github)]
+        let output = ZshrcExporter.export(keys: keys, format: .zshrc, managedExists: { _ in true })
+        #expect(output.contains(
+            "export GITHUB_TOKEN=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain.managed\" -a \"GITHUB_TOKEN\" -w)"
+        ))
+        #expect(!output.contains("-s \"com.aieo.aikeychain\" -a \"GITHUB_TOKEN\""))
+        #expect(!output.contains("||"))
+    }
+
     @Test("Standard format emits the manual-scheme lookup for manual-scheme keys")
     func standardManualScheme() {
         // manual スキーム (service=KEY_NAME) のキーは、そのスキームに厳密一致する
@@ -49,7 +63,7 @@ struct ZshrcExporterSecretRefTests {
         let custom = CustomKey(envVarName: "MANUAL_ONLY_KEY", displayName: "MANUAL_ONLY_KEY",
                                categoryId: KeyCategory.cliAdded.stableId)
         let keys = [APIKey(customKey: custom, isConfigured: true, storage: .manual)]
-        let output = ZshrcExporter.export(keys: keys, format: .zshrc)
+        let output = ZshrcExporter.export(keys: keys, format: .zshrc, managedExists: { _ in false })
         #expect(output.contains(
             "export MANUAL_ONLY_KEY=$(/usr/bin/security find-generic-password -s \"MANUAL_ONLY_KEY\" -w)"
         ))
@@ -62,7 +76,7 @@ struct ZshrcExporterSecretRefTests {
             makeKey(service: .github),
             makeKey(service: .openAI),
         ]
-        let output = ZshrcExporter.export(keys: keys, format: .zshrc)
+        let output = ZshrcExporter.export(keys: keys, format: .zshrc, managedExists: { _ in false })
         let lookupLines = output.split(separator: "\n").filter {
             $0.contains("find-generic-password")
         }

@@ -72,7 +72,7 @@ export function buildServer() {
       return json({
         reference: `keychain://${name}`,
         exists: exists.exists,
-        stores: { app: exists.app, manual: exists.manual },
+        stores: { managed: exists.managed, app: exists.app, manual: exists.manual },
         usage: exportable
           ? `export ${name}=keychain://${name} && akc run -- <command>`
           : `env '${name}=keychain://${name}' akc run -- <command>`,
@@ -84,21 +84,17 @@ export function buildServer() {
     'set_secret',
     {
       description:
-        'Store or update a key in the AI KeyChain store (overwrites in place, no duplicates). ' +
+        'Store or update a key in the managed namespace (com.aieo.aikeychain.managed; overwrites in place, no duplicates). ' +
         'CAUTION: the secret value passes through the model context when you call this tool — ' +
         'prefer asking the user to run `akc set <KEY>` themselves unless they explicitly pasted ' +
         'the value into the conversation already.',
       inputSchema: {
         name: keyNameSchema,
         value: z.string().min(1).describe('The secret value to store'),
-        manual: z
-          .boolean()
-          .optional()
-          .describe('Store as a manual entry (service=<name>) instead of the AI KeyChain GUI store'),
       },
     },
-    async ({ name, value, manual }) => {
-      const saved = await setKey(name, value, { manual: manual ?? false });
+    async ({ name, value }) => {
+      const saved = await setKey(name, value);
       return json({ saved: true, service: saved.service, account: saved.account });
     }
   );
@@ -107,7 +103,7 @@ export function buildServer() {
     'delete_secret',
     {
       description:
-        'Delete a key from the Keychain (both the AI KeyChain store and manual entries). ' +
+        'Delete a key from the Keychain (managed namespace plus legacy AI KeyChain store / manual copies). ' +
         'Destructive — requires confirm=true, and you should confirm with the user first.',
       inputSchema: {
         name: keyNameSchema,

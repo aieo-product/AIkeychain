@@ -58,7 +58,9 @@
 		E6EF4BDCA836753730368031 /* AIkeychainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42FBF226CDBB7B16615DB078 /* AIkeychainApp.swift */; };
 		E805C8A422ADCA7B2042DE29 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BBC08B62D864042131E96C /* AppState.swift */; };
 		E963094220E71C64DEA96121 /* FingerprintTOFUStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D8C7190C24537528AD2B987 /* FingerprintTOFUStore.swift */; };
+		F0BB7FFD1936E579F9D65861 /* SecurityCLIKeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6B529E3962BE2F851B2297B /* SecurityCLIKeychainServiceTests.swift */; };
 		F1FCE802F6B8CD69C82050FD /* CategoryIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5564B99419540E50E1276D79 /* CategoryIcon.swift */; };
+		F600C34E56EF17E276B8E5B8 /* SecurityCLIKeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956D2DFA56DC4FD7D699EC36 /* SecurityCLIKeychainService.swift */; };
 		F620D2BC08B405183D3732AB /* AppAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1D3DCA2727A4F0E3B73623 /* AppAnimations.swift */; };
 		F76438E441201123E08CCBA2 /* KeyListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2999D8FAA2B2AA1066D5B7 /* KeyListView.swift */; };
 /* End PBXBuildFile section */
@@ -114,6 +116,7 @@
 		86254B995FB20769DA53656A /* KeyListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyListViewModel.swift; sourceTree = "<group>"; };
 		8BAA59605A0988605BDA9071 /* APIKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKey.swift; sourceTree = "<group>"; };
 		92065103580C94C2BB99FB48 /* CustomKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomKeyStore.swift; sourceTree = "<group>"; };
+		956D2DFA56DC4FD7D699EC36 /* SecurityCLIKeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityCLIKeychainService.swift; sourceTree = "<group>"; };
 		99B69E8B22FA2C8C00A6DF9A /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
 		9C17D41EA989227C3858DBEE /* AIkeychain.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIkeychain.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5AE0FFA12A5A654B81D2DBA /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -123,6 +126,7 @@
 		B76CC5D338AC4C682B18BBA6 /* ProxyRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyRoute.swift; sourceTree = "<group>"; };
 		BBB424D42EDE63D9E03A86DD /* ProxyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyTests.swift; sourceTree = "<group>"; };
 		CFEC2C4A62A257212BEE4D95 /* SetupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupManagerTests.swift; sourceTree = "<group>"; };
+		D6B529E3962BE2F851B2297B /* SecurityCLIKeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityCLIKeychainServiceTests.swift; sourceTree = "<group>"; };
 		DDE2E88F59640366B8EE60C8 /* ProxyServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyServer.swift; sourceTree = "<group>"; };
 		E18270833BDFFEACBE8F6B44 /* KeyShareServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyShareServiceTests.swift; sourceTree = "<group>"; };
 		E18E322C52277BDBD022D701 /* SecretHygiene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretHygiene.swift; sourceTree = "<group>"; };
@@ -158,6 +162,7 @@
 				0F4D6C9DC84B322FB385ACE3 /* ModelTests.swift */,
 				BBB424D42EDE63D9E03A86DD /* ProxyTests.swift */,
 				1EDF5F4F543FDCFEAE87669B /* SecretRefTests.swift */,
+				D6B529E3962BE2F851B2297B /* SecurityCLIKeychainServiceTests.swift */,
 				CFEC2C4A62A257212BEE4D95 /* SetupManagerTests.swift */,
 				F69D54AA42B1FDEBB2AD036B /* ViewModelTests.swift */,
 			);
@@ -319,6 +324,7 @@
 				7DF81328B72F2A8A703BEFF2 /* L10n.swift */,
 				DDE2E88F59640366B8EE60C8 /* ProxyServer.swift */,
 				E18E322C52277BDBD022D701 /* SecretHygiene.swift */,
+				956D2DFA56DC4FD7D699EC36 /* SecurityCLIKeychainService.swift */,
 				524109D967A855636B5BECB8 /* SetupManager.swift */,
 				728E72380D1F60902EF105B2 /* ZshrcExporter.swift */,
 			);
@@ -449,6 +455,7 @@
 				1FBDB678ABCDB9503FE0DCEA /* ProxyServer.swift in Sources */,
 				C4C7726A2BDC408D034DC23A /* RecoveryView.swift in Sources */,
 				ADD892CA115969AC2CF3C169 /* SecretHygiene.swift in Sources */,
+				F600C34E56EF17E276B8E5B8 /* SecurityCLIKeychainService.swift in Sources */,
 				47D0324B8366C625BD452CE3 /* ServiceIcon.swift in Sources */,
 				6857A9D9465864324DC7F284 /* ServiceType.swift in Sources */,
 				E60B2BDDB0E9793C2CC58C5C /* SetupManager.swift in Sources */,
@@ -469,6 +476,7 @@
 				CC6B7823B5DCA500A9A20A4D /* ModelTests.swift in Sources */,
 				434F7D7FEE37A6CDED3AD084 /* ProxyTests.swift in Sources */,
 				4013BBEA241CC555169FCF65 /* SecretRefTests.swift in Sources */,
+				F0BB7FFD1936E579F9D65861 /* SecurityCLIKeychainServiceTests.swift in Sources */,
 				63BB58A5661CD588F35B64D7 /* SetupManagerTests.swift in Sources */,
 				30C8DB25105498065C1AF8F5 /* ViewModelTests.swift in Sources */,
 			);
@@ -583,7 +591,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aieo.aikeychain;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;
@@ -681,7 +689,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aieo.aikeychain;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.9;

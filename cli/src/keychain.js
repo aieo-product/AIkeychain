@@ -1,7 +1,10 @@
 // Thin wrapper around the macOS `security` CLI.
-// Lookup order matches scripts/akc (issue #91):
-//   1. service="com.aieo.aikeychain" account="<KEY>"  (AI KeyChain GUI store)
-//   2. service="<KEY>" with NO account               (only when GUI exits 44/not-found)
+// Lookup order matches scripts/akc (issues #91, #167):
+//   1. service="com.aieo.aikeychain.managed" account="<KEY>"  (managed namespace, v1.9+)
+//   2. service="com.aieo.aikeychain" account="<KEY>"          (legacy GUI store)
+//   3. service="<KEY>" with NO account                        (legacy manual scheme)
+// Each tier falls through ONLY on exit 44 (not found) — any other failure is
+// authoritative and fails closed (#147/#150 semantics).
 // Manual keys are looked up by service only because their `acct` attribute is
 // not consistent ($USER or the service name) — pinning -a can grab a stale
 // duplicate entry and return an invalid value.
@@ -54,16 +57,25 @@ export function assertMacOS() {
   }
 }
 
+// Bound every subprocess: a prompt-blocked keychain operation must fail after
+// SUBPROCESS_TIMEOUT_MS instead of hanging `akc run`/`akc set` forever — the
+// whole point of the headless epic (#167). Matches the Swift service's
+// timeout + SIGKILL semantics.
+export const SUBPROCESS_TIMEOUT_MS = 10_000;
+
 async function security(args) {
   try {
     const { stdout, stderr } = await pExecFile(SECURITY_BIN, args, {
       maxBuffer: 16 * 1024 * 1024,
+      timeout: SUBPROCESS_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
     });
     return { ok: true, code: 0, stdout, stderr };
   } catch (err) {
     return {
       ok: false,
       code: err.code ?? null,
+      killed: err.killed ?? false,
       stdout: err.stdout ?? '',
       stderr: err.stderr ?? String(err),
     };
@@ -98,11 +110,25 @@ export async function resolveKey(name) {
   return null;
 }
 
-/** Check where a key exists without reading its secret value. */
+/**
+ * Check where a key exists without reading its secret value.
+ * Fails closed (#150 semantics, same as resolveKey): only exit 44 means
+ * "not in this store" — any other failure throws instead of being silently
+ * treated as absent, so `akc check`/`akc get` never report a key as usable
+ * (or missing) based on a store we could not actually query.
+ */
 export async function keyExists(name) {
-  const managed = (await security(['find-generic-password', '-s', MANAGED_SERVICE, '-a', name])).ok;
-  const app = (await security(['find-generic-password', '-s', GUI_SERVICE, '-a', name])).ok;
-  const manual = (await security(['find-generic-password', '-s', name])).ok;
+  const probe = async (args) => {
+    const r = await security(args);
+    if (r.ok) return true;
+    if (r.code === 44) return false;
+    throw new KeychainError(
+      `keychain probe failed (exit ${r.code}): ${r.stderr.trim() || 'unknown error'}`
+    );
+  };
+  const managed = await probe(['find-generic-password', '-s', MANAGED_SERVICE, '-a', name]);
+  const app = await probe(['find-generic-password', '-s', GUI_SERVICE, '-a', name]);
+  const manual = await probe(['find-generic-password', '-s', name]);
   return { name, managed, app, manual, exists: managed || app || manual };
 }
 
@@ -117,39 +143,64 @@ function securityInteractive(commandLine) {
     const child = spawn(SECURITY_BIN, ['-i'], { stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    // Same bound as security(): a prompt-blocked write must fail, not hang (#167).
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      settle({ ok: false, stdout, stderr: 'security -i timed out (prompt-blocked?)' });
+    }, SUBPROCESS_TIMEOUT_MS);
     child.stdout.on('data', (chunk) => (stdout += chunk));
     child.stderr.on('data', (chunk) => (stderr += chunk));
-    child.on('error', (err) => resolve({ ok: false, stdout, stderr: String(err) }));
-    child.on('close', (code) => resolve({ ok: code === 0, stdout, stderr }));
+    child.on('error', (err) => settle({ ok: false, stdout, stderr: String(err) }));
+    child.on('close', (code) => settle({ ok: code === 0, stdout, stderr }));
     child.stdin.write(`${commandLine}\n`);
     child.stdin.end();
   });
 }
 
+// Maximum value length, matching the Swift service (SecurityCLIKeychainService
+// .maxValueLength): keeps the whole `security -i` command within the 64KB pipe
+// buffer after hex expansion, so the stdin write can never deadlock.
+export const MAX_VALUE_LENGTH = 8192;
+
 /**
- * Store a key. Defaults to the AI KeyChain GUI store so the entry shows up in
- * the app. `-U` updates in place to avoid acct-mismatched duplicates.
+ * Store a key in the managed namespace (#167) — the single write target for
+ * both CLI and GUI. `-U` updates in place to avoid acct-mismatched duplicates
+ * (safe for headless reads even on security-owned items, spike S7').
  *
  * The secret never appears in any process's argv (issue #94): the command is
  * fed to `security -i` via stdin, and the value is hex-encoded with -X so no
  * quoting of the interactive command line is needed.
  */
-export async function setKey(name, value, { manual = false } = {}) {
+export async function setKey(name, value) {
   if (!name) throw new KeychainError('key name is required');
   if (!KEY_NAME_PATTERN.test(name)) {
     throw new KeychainError('key name must match [A-Za-z0-9_.-]+');
   }
   if (!value) throw new KeychainError('refusing to store an empty value');
-  // Control characters would store fine but `find-generic-password -w` falls
-  // back to hex output for them, breaking round-trips — reject up front.
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f\u007f]/.test(value)) {
-    throw new KeychainError('value must not contain control characters (newlines, tabs, NUL)');
+  // Printable ASCII only, matching the Swift service: `find-generic-password
+  // -w` prints hex for any value containing a non-printable byte, and guessing
+  // "looks like hex -> decode it" corrupts legitimate all-hex secrets (#179
+  // review). Restrict the write side so the read side is always raw.
+  // Non-ASCII/multi-line support is deferred to the C7 (#174) encoding convention.
+  if (!/^[\x20-\x7e]+$/.test(value)) {
+    throw new KeychainError(
+      'value must be printable ASCII (no newlines, tabs, control or non-ASCII characters) — non-ASCII/multi-line values are not supported yet'
+    );
   }
-  // New writes always target the managed namespace (#167). Updating a legacy
-  // manual entry in place is no longer offered: the managed copy wins the
-  // resolve order, and legacy copies are cleaned up by delete/migration.
-  const service = manual ? name : MANAGED_SERVICE;
+  if (value.length > MAX_VALUE_LENGTH) {
+    throw new KeychainError(`value exceeds the ${MAX_VALUE_LENGTH}-character limit`);
+  }
+  // All writes target the managed namespace (#167). The legacy manual scheme
+  // is no longer a write target (the old --manual path could create
+  // acct-mismatched duplicates — the exact #91 failure mode).
+  const service = MANAGED_SERVICE;
   const hex = Buffer.from(value, 'utf8').toString('hex');
   const r = await securityInteractive(
     `add-generic-password -U -s "${service}" -a "${name}" -X ${hex}`
@@ -161,10 +212,11 @@ export async function setKey(name, value, { manual = false } = {}) {
   }
   // Read-back verification against the exact target item: -U can report
   // success in odd keychain states while leaving a stale value behind.
-  // (`find -w` prints hex for non-ASCII payloads, so accept that form too.)
+  // Values are printable ASCII (enforced above), so `find -w` always prints
+  // them raw — a hex-shaped readback is a real mismatch, not an encoding.
   const readBack = await security(['find-generic-password', '-s', service, '-a', name, '-w']);
   const got = readBack.ok ? stripTrailingNewline(readBack.stdout) : null;
-  if (got !== value && got?.toLowerCase() !== hex) {
+  if (got !== value) {
     throw new KeychainError(
       `save reported success but reading "${name}" back returned a different value — check Keychain state`
     );
@@ -172,20 +224,44 @@ export async function setKey(name, value, { manual = false } = {}) {
   return { service, account: name };
 }
 
-/** Delete a key from the GUI store and/or the manual store. Returns which stores were deleted. */
-export async function deleteKey(name, { app = true, manual = true } = {}) {
+/**
+ * Delete a key from every store it lives in. Returns which stores were deleted.
+ *
+ * Order matters (#179 review): fallback stores (manual -> legacy GUI) are
+ * cleaned up BEFORE the authoritative managed copy. If a fallback delete
+ * fails, we throw with the managed copy intact — the key still resolves and
+ * the user sees the failure, instead of "deleted" being reported while a
+ * stale fallback copy keeps resolving. Exit 44 (not found) is the only benign
+ * failure; anything else throws.
+ */
+export async function deleteKey(name) {
   const deleted = [];
-  if (app) {
-    const m = await security(['delete-generic-password', '-s', MANAGED_SERVICE, '-a', name]);
-    if (m.ok) deleted.push('managed');
+  const del = async (args) => {
+    const r = await security(args);
+    if (r.ok) return true;
+    if (r.code === 44) return false;
+    throw new KeychainError(
+      `failed to delete "${name}" (exit ${r.code}): ${r.stderr.trim() || 'unknown error'}`
+    );
+  };
+
+  // Manual scheme: strict env-var-shaped names only — KEY_NAME_PATTERN also
+  // allows dots/lowercase, and deleting service="com.vendor.foo" would remove
+  // an unrelated app's item. `delete-generic-password -s NAME` removes only
+  // the first match, so loop until exit 44 to clear duplicates (#100).
+  if (MANUAL_NAME_PATTERN.test(name)) {
+    let removedAny = false;
+    for (let i = 0; i < 10; i++) {
+      if (!(await del(['delete-generic-password', '-s', name]))) break;
+      removedAny = true;
+    }
+    if (removedAny) deleted.push('manual');
   }
-  if (app) {
-    const r = await security(['delete-generic-password', '-s', GUI_SERVICE, '-a', name]);
-    if (r.ok) deleted.push('app');
+  if (await del(['delete-generic-password', '-s', GUI_SERVICE, '-a', name])) {
+    deleted.push('app');
   }
-  if (manual) {
-    const r = await security(['delete-generic-password', '-s', name]);
-    if (r.ok) deleted.push('manual');
+  if (await del(['delete-generic-password', '-s', MANAGED_SERVICE, '-a', name])) {
+    deleted.push('managed');
   }
   return deleted;
 }

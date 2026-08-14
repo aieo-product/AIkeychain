@@ -365,7 +365,7 @@ struct EnvImportView: View {
                 .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Label(L10n.s(ja: "保存先: macOS Keychain (com.aieo.aikeychain)", en: "Destination: macOS Keychain (com.aieo.aikeychain)"), systemImage: "lock.shield")
+                    Label(L10n.s(ja: "保存先: macOS Keychain (com.aieo.aikeychain.managed)", en: "Destination: macOS Keychain (com.aieo.aikeychain.managed)"), systemImage: "lock.shield")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
@@ -393,7 +393,7 @@ struct EnvImportView: View {
             Spacer()
 
             if let result = importResult {
-                let clean = result.failed == 0 && result.cliManaged.isEmpty
+                let clean = result.failed == 0 && result.unsupported.isEmpty
                 Image(systemName: clean ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(clean ? AppColors.configured : .orange)
@@ -418,11 +418,11 @@ struct EnvImportView: View {
                         ResultRow(icon: "xmark.circle.fill", color: .red,
                                   text: "\(result.failed) keys failed")
                     }
-                    if !result.cliManaged.isEmpty {
-                        ResultRow(icon: "terminal.fill", color: .orange,
+                    if !result.unsupported.isEmpty {
+                        ResultRow(icon: "textformat.abc.dottedunderline", color: .orange,
                                   text: L10n.s(
-                                    ja: "\(result.cliManaged.count) 件は akc CLI 管理のため未更新。ターミナルで更新してください: akc set \(result.cliManaged.joined(separator: " / akc set "))",
-                                    en: "\(result.cliManaged.count) key(s) are managed by the akc CLI and were not updated. Update them in a terminal: akc set \(result.cliManaged.joined(separator: " / akc set "))"))
+                                    ja: "\(result.unsupported.count) 件は未対応の値形式（非 ASCII / 複数行 / 8KB 超）のため保存されませんでした: \(result.unsupported.joined(separator: ", "))",
+                                    en: "\(result.unsupported.count) key(s) were not saved because the value format is not supported yet (non-ASCII / multi-line / over 8KB): \(result.unsupported.joined(separator: ", "))"))
                     }
                 }
                 .padding(.horizontal, 40)
@@ -455,7 +455,7 @@ struct EnvImportView: View {
         var failed = 0
         var removedFromZshrc = 0
         var savedKeys: [String] = []
-        var cliManagedKeys: [String] = []
+        var unsupportedKeys: [String] = []
 
         for entry in selected {
             let account = entry.matchedService?.envVarName ?? entry.key
@@ -463,11 +463,12 @@ struct EnvImportView: View {
                 try SecurityCLIKeychainService.shared.save(value: entry.value, for: account)
                 saved += 1
                 savedKeys.append(account)
-            } catch KeychainError.cliManaged {
-                // #177: このキーは akc CLI 管理（security 所有）。GUI から上書きすると
-                // 毒化するため save() が fail-closed した。古い値のまま黙って放置せず、
-                // 「akc set で更新して」と明示する。
-                cliManagedKeys.append(account)
+            } catch KeychainError.invalidData {
+                // 値形式が未対応（非 ASCII / 複数行 / 8KB 超 — .env に多い複数行 PEM 鍵
+                // 等）。一般の failed に混ぜず理由付きで別掲する（#179 二段レビュー N1）。
+                // ※ 旧 KeychainService の cliManaged fail-closed (#177) は、書き込みが
+                // security subprocess 単一経路になったことで構造的に不要になった。
+                unsupportedKeys.append(account)
             } catch {
                 failed += 1
             }
@@ -485,7 +486,7 @@ struct EnvImportView: View {
 
         let skipped = parsedEntries.count - selected.count
         importResult = ImportResult(saved: saved, skipped: skipped, failed: failed,
-                                    removedFromZshrc: removedFromZshrc, cliManaged: cliManagedKeys)
+                                    removedFromZshrc: removedFromZshrc, unsupported: unsupportedKeys)
     }
 
     private func isAIKey(_ key: String) -> Bool {
@@ -607,9 +608,10 @@ private struct ImportResult {
     let skipped: Int
     let failed: Int
     let removedFromZshrc: Int
-    /// #177: akc CLI 管理（security 所有）で GUI から上書きできなかったキー。
-    /// 古い値のまま残るため `akc set <KEY>` での更新を案内する。
-    var cliManaged: [String] = []
+    /// 値の形式が未対応（非 ASCII / 複数行 / 8KB 超 — 複数行 PEM 鍵など）で保存
+    /// できなかったキー。C7 (#174) のエンコーディング規約が入るまでの制約。
+    /// 一般の failed に混ぜると理由が見えないため別掲する（#179 二段レビュー N1/D-Q1）。
+    var unsupported: [String] = []
 }
 
 struct EnvEntry: Identifiable {

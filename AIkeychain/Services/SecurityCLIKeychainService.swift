@@ -27,6 +27,12 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     /// 復元/同期/旧アプリ由来の GUI 所有アイテムが混入しても不変条件が壊れない。
     static let managedService = "com.aieo.aikeychain.managed"
 
+    /// 旧 GUI ストアの service 名（読み取り fallback / 削除時の掃除にのみ使う）。
+    static let legacyGUIService = "com.aieo.aikeychain"
+
+    /// 値の最大長。stdin 一括書き込みのパイプバッファ束縛（save() 参照）。
+    static let maxValueLength = 8192
+
     private let securityBin = "/usr/bin/security"
     /// subprocess 読み取りの上限。プロンプト待ち等でブロックした子はこれで kill する。
     /// Proxy の外側タイムアウト(3s)より短くし、permit を先に返せるようにする。
@@ -67,6 +73,13 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         // 代わりに保存側で printable ASCII のみに制限し、読み出しが常に raw に
         // なることを保証する。非 ASCII/複数行の対応は C7 #174 で規約を決めてから。
         guard value.range(of: "^[\\x20-\\x7e]+$", options: .regularExpression) != nil else {
+            throw KeychainError.invalidData
+        }
+        // 長さ上限: hex 展開後も `security -i` への stdin 一括書き込みがパイプ
+        // バッファ (64KB) 内に収まることを保証する（超えると「親は write で、子は
+        // 出力でブロック」のデッドロックが timeout の外で起き得る — #179 二段レビュー）。
+        // CLI (cli/src/keychain.js) と同じ値。
+        guard value.count <= Self.maxValueLength else {
             throw KeychainError.invalidData
         }
 
@@ -142,12 +155,42 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     }
 
     func delete(for account: String) throws {
-        let result = runSecurity(
-            arguments: ["delete-generic-password", "-s", Self.managedService, "-a", account],
-            stdin: nil, timeout: writeTimeout)
-        switch result {
+        // 掃除の順序が要（#179 二段レビュー B3）: fallback ストア（manual → 旧 GUI）を
+        // **先に**消し、権威コピー（managed）を最後に消す。逆順で legacy 掃除が失敗すると
+        // 「削除成功と報告したのに `akc get` の fallback が古い値を解決し続ける」状態になる。
+        // fallback 掃除が失敗した場合は managed に触らず throw する — キーは無傷のまま
+        // 解決可能で、ユーザーには削除失敗が見える（half-deleted 状態を作らない）。
+
+        if EnvVarName.isManualSchemeCandidate(account) {
+            // manual スキームは厳格名（大文字スネーク）のみ対象（#163 と同じガード —
+            // 他アプリの小文字/ドット付き service 名アイテムを巻き添えにしない）。
+            // `delete-generic-password -s NAME` は最初に一致した 1 件しか消さないため、
+            // 重複エントリ（#100）が残らないよう 44 (not found) まで繰り返す。
+            var remaining = 10 // 暴走防止の上限（実キーチェーンで重複が 10 超は想定外）
+            while remaining > 0 {
+                remaining -= 1
+                switch runSecurity(arguments: ["delete-generic-password", "-s", account],
+                                   stdin: nil, timeout: writeTimeout) {
+                case .exited(0, _, _):
+                    continue
+                case .exited(44, _, _):
+                    remaining = 0
+                case .exited(let status, _, _):
+                    throw KeychainError.unexpectedStatus(OSStatus(status))
+                case .timedOut:
+                    throw KeychainError.interactionRequired
+                case .failedToLaunch:
+                    throw KeychainError.unexpectedStatus(errSecIO)
+                }
+            }
+        }
+
+        // 旧 GUI ストアの同名コピー。旧 GUI 所有はプロンプトになり得るが、削除は
+        // headed 前提の操作なので許容（timeout なら throw し、managed は無傷）。
+        switch runSecurity(arguments: ["delete-generic-password", "-s", Self.legacyGUIService, "-a", account],
+                           stdin: nil, timeout: writeTimeout) {
         case .exited(0, _, _), .exited(44, _, _):
-            break // 44 (not found) は冪等成功扱い（従来の delete と同じ意味論）
+            break
         case .exited(let status, _, _):
             throw KeychainError.unexpectedStatus(OSStatus(status))
         case .timedOut:
@@ -156,19 +199,17 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
             throw KeychainError.unexpectedStatus(errSecIO)
         }
 
-        // 旧 namespace（GUI store / manual スキーム）の同名コピーも best-effort で
-        // 掃除する。残すと `akc get/run` の legacy fallback が「削除したはずのキー」を
-        // 解決し続ける（#179 レビュー CONFIRMED）。akc set 由来の legacy は security
-        // 所有なので無音で消える。旧 GUI 所有はプロンプトになり得るため headed 前提の
-        // 削除操作でのみ発生し、timeout で kill されても本体（managed）は削除済み。
-        var legacyDeletes = [["delete-generic-password", "-s", "com.aieo.aikeychain", "-a", account]]
-        if EnvVarName.isManualSchemeCandidate(account) {
-            // manual スキームは厳格名（大文字スネーク）のみ対象（#163 と同じガード —
-            // 他アプリの小文字 service 名アイテムを巻き添えにしない）
-            legacyDeletes.append(["delete-generic-password", "-s", account])
-        }
-        for legacy in legacyDeletes {
-            _ = runSecurity(arguments: legacy, stdin: nil, timeout: writeTimeout)
+        // 最後に権威コピー（managed）。44 は冪等成功扱い（従来の delete と同じ意味論）。
+        switch runSecurity(arguments: ["delete-generic-password", "-s", Self.managedService, "-a", account],
+                           stdin: nil, timeout: writeTimeout) {
+        case .exited(0, _, _), .exited(44, _, _):
+            break
+        case .exited(let status, _, _):
+            throw KeychainError.unexpectedStatus(OSStatus(status))
+        case .timedOut:
+            throw KeychainError.interactionRequired
+        case .failedToLaunch:
+            throw KeychainError.unexpectedStatus(errSecIO)
         }
     }
 
@@ -205,9 +246,32 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     }
 
     func manualServices() -> [String] {
-        // managed namespace 移行に伴い manual スキームの発見は廃止 (#167)。
-        // 旧キーは移行アシスタント (C5 #172) の専用導線でのみ扱う。
-        []
+        // manual スキーム (service=<キー名>) の発見。値は読まない属性列挙なので
+        // 所有者に関係なく無音（旧 KeychainService と同じ実装 / #160）。
+        // #167 では最終的に manual スキーム自体を廃止するが、その置き換えは
+        // C5 (#172) 移行アシスタント / C7 (#174) の担当。C2 で列挙まで止めると
+        // (a) 既存 manual キーが GUI から突然消える、(b) delete() は manual コピーを
+        // 掃除するのに KeyEditorViewModel.deletesManualEntryToo の巻き添え警告が
+        // 恒久 false になり無警告削除が走る（#179 二段レビュー B4）。
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
+            return []
+        }
+        var seen = Set<String>()
+        return items.compactMap { item -> String? in
+            guard let svc = item[kSecAttrService as String] as? String,
+                  svc != Self.managedService,
+                  svc != Self.legacyGUIService,
+                  EnvVarName.isManualSchemeCandidate(svc),
+                  seen.insert(svc).inserted else { return nil }
+            return svc
+        }
     }
 
     // MARK: - subprocess 基盤
@@ -256,26 +320,40 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         let stdinPipe = Pipe()
         process.standardInput = stdinPipe
 
-        do { try process.run() } catch { return .failedToLaunch }
-
-        if let stdin {
-            stdinPipe.fileHandleForWriting.write(stdin.data(using: .utf8)!)
+        do {
+            try process.run()
+        } catch {
+            // 一時的な資源枯渇 (fork EAGAIN 等) は 1 回だけ短い待機後に再試行する
+            usleep(50_000)
+            do { try process.run() } catch { return .failedToLaunch }
         }
-        stdinPipe.fileHandleForWriting.closeFile()
 
-        // 出力はバックグラウンドで吸い上げる（パイプ詰まりで子が固まらないように）
+        // 出力の吸い上げは **stdin 書き込みより先に** 開始する（パイプ詰まりで
+        // 「親は write・子は出力」の相互ブロックを作らない — #179 二段レビュー S4）。
+        // バッファはロック越しにのみ触り、timeout 帰還後にクロージャが走っても
+        // 呼び出し元とデータ競合しないようにする。
+        let ioLock = NSLock()
         var stdoutData = Data(), stderrData = Data()
         let ioGroup = DispatchGroup()
         ioGroup.enter()
         DispatchQueue.global().async {
-            stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            ioLock.lock(); stdoutData = data; ioLock.unlock()
             ioGroup.leave()
         }
         ioGroup.enter()
         DispatchQueue.global().async {
-            stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            ioLock.lock(); stderrData = data; ioLock.unlock()
             ioGroup.leave()
         }
+
+        // stdin は同期書き込みでよい: save() が値長を maxValueLength に制限するため
+        // コマンド全体が hex 展開後もパイプバッファ (64KB) に収まり、ブロックしない。
+        if let stdin {
+            stdinPipe.fileHandleForWriting.write(stdin.data(using: .utf8)!)
+        }
+        stdinPipe.fileHandleForWriting.closeFile()
 
         let deadline = Date().addingTimeInterval(timeout)
         while process.isRunning && Date() < deadline {
@@ -289,12 +367,21 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
             kill(process.processIdentifier, SIGKILL)
             process.waitUntilExit() // reap（ゾンビ防止, S5 実測どおり）
             _ = ioGroup.wait(timeout: .now() + 1)
-            return .timedOut
+            return .timedOut // バッファには触らない（読み手がまだ走っていても安全）
         }
 
         process.waitUntilExit()
-        _ = ioGroup.wait(timeout: .now() + 2)
-        return .exited(process.terminationStatus, stdout: stdoutData, stderr: stderrData)
+        // 排出待ちは subprocess 本体と同等の猶予を与える。短すぎると正常終了した
+        // 読み取りを（GCD スレッドが混雑しているだけで）timeout 扱いに誤変換する
+        guard ioGroup.wait(timeout: .now() + max(2, timeout)) == .success else {
+            // 子孫プロセスが pipe を握り続けて出力が閉じない異常系。不完全な出力を
+            // 「成功した読み取り値」として返さない（値の取り違えを防ぐ）。
+            return .timedOut
+        }
+        ioLock.lock()
+        let out = stdoutData, err = stderrData
+        ioLock.unlock()
+        return .exited(process.terminationStatus, stdout: out, stderr: err)
     }
 
     private func resultDescription(_ result: RunResult, stderr: Bool) -> String {
