@@ -5,7 +5,7 @@
 
 import { spawn } from 'node:child_process';
 import { constants as osConstants } from 'node:os';
-import { resolveKey, maskValue, KeychainError } from './keychain.js';
+import { resolveKey, maskValue, KeychainError, SUBPROCESS_TIMEOUT_MS } from './keychain.js';
 
 export const REF_PREFIX = 'keychain://';
 
@@ -18,24 +18,45 @@ export function collectRefs(env) {
 
 /**
  * Resolve refs sequentially (parallel lookups can stack keychain auth prompts).
- * Failures carry a `reason`: 'not-found', or a bounded-failure message from
- * resolveKey (migration required / keychain locked — #171). One key's bounded
- * failure must not abort the scan: the user should see ALL broken refs at once.
+ * Failures carry a `reason`: null for plain not-found, or a bounded-failure
+ * message from resolveKey (migration required / keychain locked — #171).
+ * One key's bounded failure must not abort the scan (the user should see ALL
+ * broken refs at once) — but the scan as a whole is still bounded (#185 S7):
+ * - duplicate keyNames are resolved once (cache)
+ * - after `deadlineMs`, remaining unresolved keys are skipped with an
+ *   explanatory reason instead of stacking N x timeout
  */
-export async function resolveRefs(refs) {
+export async function resolveRefs(refs, { deadlineMs = SUBPROCESS_TIMEOUT_MS * 3 } = {}) {
   const resolved = {};
   const failed = [];
+  const cache = new Map(); // keyName -> { value } | { err }
+  const deadline = Date.now() + deadlineMs;
   for (const { varName, keyName } of refs) {
-    try {
-      const value = await resolveKey(keyName);
-      if (value) {
-        resolved[varName] = value;
+    let entry = cache.get(keyName);
+    if (!entry) {
+      if (Date.now() > deadline) {
+        entry = {
+          err: new KeychainError(
+            'skipped: command deadline exceeded after earlier keychain timeouts — ' +
+              'fix the keys reported above, then retry (see `akc doctor`)'
+          ),
+        };
       } else {
-        failed.push({ varName, keyName, reason: null });
+        try {
+          entry = { value: await resolveKey(keyName) };
+        } catch (err) {
+          if (!(err instanceof KeychainError)) throw err;
+          entry = { err };
+        }
       }
-    } catch (err) {
-      if (!(err instanceof KeychainError)) throw err;
-      failed.push({ varName, keyName, reason: err.message });
+      cache.set(keyName, entry);
+    }
+    if (entry.err) {
+      failed.push({ varName, keyName, reason: entry.err.message });
+    } else if (entry.value) {
+      resolved[varName] = entry.value;
+    } else {
+      failed.push({ varName, keyName, reason: null });
     }
   }
   return { resolved, failed };

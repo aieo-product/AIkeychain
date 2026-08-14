@@ -82,12 +82,13 @@ test('findUnmigratedKeys reports legacy-only keys and skips migrated ones (#171)
     { service: 'com.vendor.other', account: 'x' },
     { service: 'lowercase_svc', account: 'x' },
   ];
-  const result = findUnmigratedKeys(records);
-  assert.deepEqual(result, [
+  const { keys, unparseable } = findUnmigratedKeys(records);
+  assert.deepEqual(keys, [
     { name: 'BOTH_LEGACY_KEY', stores: ['gui', 'manual'] },
     { name: 'GUI_ONLY_KEY', stores: ['gui'] },
     { name: 'MANUAL_ONLY_KEY', stores: ['manual'] },
   ]);
+  assert.equal(unparseable, 0);
 });
 
 test('findUnmigratedKeys returns empty when everything is migrated', () => {
@@ -95,7 +96,31 @@ test('findUnmigratedKeys returns empty when everything is migrated', () => {
     { service: 'com.aieo.aikeychain.managed', account: 'A_KEY' },
     { service: 'com.aieo.aikeychain.managed', account: 'B_KEY' },
   ];
-  assert.deepEqual(findUnmigratedKeys(records), []);
+  assert.deepEqual(findUnmigratedKeys(records), { keys: [], unparseable: 0 });
+});
+
+test('findUnmigratedKeys never reports the app-reserved service names (#185 S10)', () => {
+  // KeyShareService の予約 service（共有秘密鍵/署名鍵）はドット+小文字を含み、
+  // MANUAL_NAME_PATTERN（大文字スネーク限定）が除外する。パターンが緩む回帰が
+  // 入ると「akc set com.aieo.aikeychain.sharekey しろ」と誤案内する事故になる。
+  const records = [
+    { service: 'com.aieo.aikeychain.sharekey', account: 'private_key' },
+    { service: 'com.aieo.aikeychain.signkey', account: 'signing_key' },
+  ];
+  assert.deepEqual(findUnmigratedKeys(records), { keys: [], unparseable: 0 });
+});
+
+test('findUnmigratedKeys counts unparseable store records instead of dropping them (#185 S8)', () => {
+  // GUI/managed store のレコードで acct が解析できない場合、そのキーが未移行か
+  // どうか判定できない。黙って捨てると「未移行なし」の false negative になる。
+  const records = [
+    { service: 'com.aieo.aikeychain', account: null },
+    { service: 'com.aieo.aikeychain.managed', account: null },
+    { service: 'com.aieo.aikeychain', account: 'GUI_ONLY_KEY' },
+  ];
+  const { keys, unparseable } = findUnmigratedKeys(records);
+  assert.equal(unparseable, 2);
+  assert.deepEqual(keys, [{ name: 'GUI_ONLY_KEY', stores: ['gui'] }]);
 });
 
 test('findAmbiguousDuplicates flags same-service multi-acct entries (issue #91)', () => {

@@ -56,31 +56,67 @@ USAGE
 
 # security の有界実行 (#171): GUI 所有のレガシーキーの読取は SecurityAgent の
 # 同意プロンプトで無期限にブロックし得る。macOS に timeout(1) は無いため、
-# バックグラウンド起動 + ポーリング + SIGKILL で上限を設ける。
-# 戻り値: security の rc をそのまま。124 = タイムアウト（kill 済み）。
-# 値は stdout へ（一時ファイル経由。プロセス置換だと kill 後の回収が複雑になる）。
+# watchdog サブシェル + SIGKILL で上限を設ける。
+#
+# 設計上の不変条件 (#185 レビュー B1): シークレット値は**ディスクに書かない**。
+# 値は command substitution のパイプ内だけを流れる（一時ファイル方式は同一 UID
+# 攻撃者に平文を窃取される実証があり不採用）。watchdog の stdout は /dev/null に
+# 切り離してパイプを握らせない。
+#
+# 戻り値: security の rc。124 = タイムアウト（watchdog が SIGKILL 済み）。
+# 注: 非対話シェルの background job は自プロセスグループを共有するため、
+# グループ kill（kill -9 -PID）は自分ごと殺してしまい使えない。代わりに
+# 直接の子孫 1 世代を pkill -P で先に回収してから子 PID を kill する。
+# Swift 側 (SecurityCLIKeychainService) は別プロセスグループを持つため
+# グループ kill を使う — 意味論の差は意図的（#185 レビュー S2 参照）。
 AKC_SECURITY_TIMEOUT_SECS="${AKC_SECURITY_TIMEOUT_SECS:-10}"
+# 算術評価 $(( )) は変数展開時に配列添字のコマンド置換まで評価するため、
+# 未検証の環境変数を入れると env 注入 → 任意コマンド実行になる (#185 レビュー B2)。
+# 数字のみ・1〜600 秒に厳格制限し、それ以外は既定 10 秒に落とす。
+case "$AKC_SECURITY_TIMEOUT_SECS" in
+    ''|*[!0-9]*) AKC_SECURITY_TIMEOUT_SECS=10 ;;
+esac
+if [ "$AKC_SECURITY_TIMEOUT_SECS" -lt 1 ] || [ "$AKC_SECURITY_TIMEOUT_SECS" -gt 600 ]; then
+    AKC_SECURITY_TIMEOUT_SECS=10
+fi
 
 security_bounded() {
-    local tmp rc pid waited limit
-    tmp=$(mktemp "${TMPDIR:-/tmp}/akc-sec.XXXXXX") || return 1
-    "$SECURITY_BIN" "$@" >"$tmp" 2>/dev/null &
-    pid=$!
-    waited=0
-    limit=$((AKC_SECURITY_TIMEOUT_SECS * 10))
-    while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$limit" ]; do
-        sleep 0.1
-        waited=$((waited + 1))
-    done
-    if kill -0 "$pid" 2>/dev/null; then
-        kill -9 "$pid" 2>/dev/null || true
-        wait "$pid" 2>/dev/null || true
-        rm -f "$tmp"
+    local out rc
+    out=$(
+        "$SECURITY_BIN" "$@" 2>/dev/null &
+        pid=$!
+        (
+            w=0
+            lim=$((AKC_SECURITY_TIMEOUT_SECS * 10))
+            while kill -0 "$pid" 2>/dev/null && [ "$w" -lt "$lim" ]; do
+                sleep 0.1
+                w=$((w + 1))
+            done
+            if kill -0 "$pid" 2>/dev/null; then
+                # 子孫(1世代)の PID を先に控えてから、親 → 子孫の順で kill する。
+                # 子孫を放置すると stdout パイプを握り続けてコマンド置換が
+                # パイプ閉鎖まで待たされ有界性が壊れる。親 kill 後は reparent
+                # されて -P で辿れないため、リストは kill 前に取る。親を先に
+                # 殺すのは rc=137 (timeout 判定) を確実にするため。
+                # (/usr/bin/security は単一プロセスなので通常は no-op)
+                kids=$(/usr/bin/pgrep -P "$pid" 2>/dev/null || true)
+                kill -9 "$pid" 2>/dev/null
+                if [ -n "$kids" ]; then
+                    # shellcheck disable=SC2086 — PID リストの word splitting は意図
+                    kill -9 $kids 2>/dev/null || true
+                fi
+            fi
+        ) >/dev/null 2>&1 &
+        wpid=$!
+        if wait "$pid"; then rc=0; else rc=$?; fi
+        kill "$wpid" 2>/dev/null || true
+        exit "$rc"
+    )
+    rc=$?
+    if [ "$rc" -eq 137 ]; then   # 128+SIGKILL = watchdog による timeout
         return 124
     fi
-    if wait "$pid"; then rc=0; else rc=$?; fi
-    cat "$tmp"
-    rm -f "$tmp"
+    printf '%s' "$out"
     return "$rc"
 }
 
@@ -91,13 +127,15 @@ resolve_keychain() {
 
     # managed namespace (#167, v1.9+): akc/GUI の新規保存は全てここ。
     # 44 (not found) のときだけ次の段へ落ちる（それ以外は権威的失敗 / #150）。
-    # 124 (timeout) は managed では「keychain ロック等」、レガシー段では
-    # 「GUI 所有キーのプロンプト待ち = migration required」(#171)。
+    # timeout の意味は段で異なる (#171/#185 S1): managed は security 所有で
+    # プロンプトし得ない → 124 は「keychain ロック等」= 125 に変換して区別。
+    # レガシー段の 124 は「GUI 所有キーのプロンプト待ち = migration required」。
     if value=$(security_bounded find-generic-password -s "com.aieo.aikeychain.managed" -a "$key_name" -w); then
         [ -n "$value" ] && { printf '%s' "$value"; return 0; }
         return 1
     else
         rc=$?
+        [ "$rc" -eq 124 ] && return 125
         [ "$rc" -eq 44 ] || return "$rc"
     fi
 
@@ -192,11 +230,16 @@ cmd_run() {
                 else
                     failed_count=$((failed_count + 1))
                     if [ "$rk_rc" -eq 124 ]; then
-                        # 有界失敗 (#171): プロンプト待ちを kill した。原因はレガシー
-                        # (GUI 所有) キー or ロック中 keychain。移行を明示的に案内する。
-                        echo "  ❌ $var_name — keychain://$key_name: read blocked on a keychain prompt and was killed (timeout). Legacy GUI-owned key? Migrate with: akc set $key_name" >&2
-                    else
+                        # 有界失敗 (#171): レガシー段がプロンプト待ちで kill された
+                        # = GUI 所有キー。移行を明示的に案内する。
+                        echo "  ❌ $var_name — keychain://$key_name: legacy GUI-owned key blocked on a keychain prompt (killed after timeout). Migrate with: akc set $key_name" >&2
+                    elif [ "$rk_rc" -eq 125 ]; then
+                        # managed 段の timeout = keychain ロック/不可用（移行では直らない）
+                        echo "  ❌ $var_name — keychain://$key_name: managed read timed out — keychain locked or unavailable. Unlock the login keychain and retry." >&2
+                    elif [ "$rk_rc" -eq 1 ] || [ "$rk_rc" -eq 44 ]; then
                         echo "  ❌ $var_name — keychain://$key_name not found in Keychain" >&2
+                    else
+                        echo "  ❌ $var_name — keychain://$key_name: keychain lookup failed (exit $rk_rc)" >&2
                     fi
                 fi
                 ;;

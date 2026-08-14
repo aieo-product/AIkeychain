@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 let resolveKey;
 let keyExists;
+let resolveRefs;
 let MigrationRequiredError;
 let stubDir;
 let callsPath;
@@ -36,7 +37,7 @@ fi
 if [ "$svc" = "com.aieo.aikeychain" ]; then
   case "$acct" in
     MGERR_KEY) printf '%s\\n' "stale-gui-value"; exit 0 ;;
-    GUIHANG_KEY) sleep 60 ;;   # SecurityAgent プロンプト待ちを模す (#171)
+    GUIHANG_KEY|HANG?_KEY) sleep 60 ;;   # SecurityAgent プロンプト待ちを模す (#171)
   esac
 fi
 
@@ -69,6 +70,7 @@ before(async () => {
   // ハング経路のテストを 60s 待たずに検証する（テスト専用オーバーライド / #171）
   process.env.AIKEYCHAIN_SUBPROCESS_TIMEOUT_MS = '500';
   ({ resolveKey, keyExists, MigrationRequiredError } = await import('../src/keychain.js'));
+  ({ resolveRefs } = await import('../src/run.js'));
 });
 
 beforeEach(async () => {
@@ -81,8 +83,10 @@ after(async () => {
   await rm(stubDir, { recursive: true, force: true });
 });
 
-test('resolveKey fails closed on a non-44 GUI lookup error (#147)', async () => {
-  assert.equal(await resolveKey('ERROR_KEY'), null);
+test('resolveKey fails closed on a non-44 GUI lookup error, with a reason (#147/#185 S4)', async () => {
+  // manual 段には攻撃者値が待ち構えているが、GUI 段の権威的失敗 (exit 51) で
+  // チェーンは止まる。null で「無い」と偽るのではなく理由を説明して throw する。
+  await assert.rejects(() => resolveKey('ERROR_KEY'), /legacy GUI store failed \(exit 51\)/);
   const calls = await readFile(callsPath, 'utf8');
   assert.equal(calls, 'com.aieo.aikeychain.managed|ERROR_KEY\ncom.aieo.aikeychain|ERROR_KEY\n');
 });
@@ -114,7 +118,7 @@ test('resolveKey returns the managed value without touching legacy tiers (#167)'
 test('resolveKey fails closed on a non-44 managed lookup error (#179 review)', async () => {
   // GUI 段には stale な値が存在するが、managed 段の権威的失敗 (exit 51) で
   // チェーンは止まらなければならない（#150 の GUI 応答=権威と同じ原則）。
-  assert.equal(await resolveKey('MGERR_KEY'), null);
+  await assert.rejects(() => resolveKey('MGERR_KEY'), /managed namespace failed \(exit 51\)/);
   const calls = await readFile(callsPath, 'utf8');
   assert.equal(calls, 'com.aieo.aikeychain.managed|MGERR_KEY\n');
 });
@@ -148,8 +152,11 @@ test('a prompt-blocked legacy read is killed and raises MigrationRequiredError (
       return true;
     }
   );
-  // 有界: 60s の stub ハングに対し timeout(500ms) + kill で返る
-  assert.ok(Date.now() - t0 < 10_000);
+  // 有界: 60s の stub ハングに対し timeout(500ms) + kill で返る。
+  // 下限も検証 — 即時失敗するようなら timeout ではなく別の壊れ方をしている
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed >= 400, `should actually wait for the timeout (took ${elapsed}ms)`);
+  assert.ok(elapsed < 5_000, `bounded well under the 60s hang (took ${elapsed}ms)`);
   const calls = await readFile(callsPath, 'utf8');
   assert.equal(calls, 'com.aieo.aikeychain.managed|GUIHANG_KEY\ncom.aieo.aikeychain|GUIHANG_KEY\n');
 });
@@ -164,8 +171,38 @@ test('a managed-tier timeout raises a locked-keychain error, not migration guida
       return true;
     }
   );
-  assert.ok(Date.now() - t0 < 10_000);
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed >= 400 && elapsed < 5_000, `bounded (took ${elapsed}ms)`);
   // fail-closed: レガシー段へは落ちない
   const calls = await readFile(callsPath, 'utf8');
   assert.equal(calls, 'com.aieo.aikeychain.managed|MGHANG_KEY\n');
+});
+
+test('resolveRefs caches duplicate keys and enforces a command-level deadline (#185 S7)', async () => {
+  const t0 = Date.now();
+  const refs = [
+    { varName: 'V1', keyName: 'HANG1_KEY' },
+    { varName: 'V1B', keyName: 'HANG1_KEY' }, // 重複 — キャッシュで 2 回目は引かない
+    { varName: 'V2', keyName: 'HANG2_KEY' },
+    { varName: 'V3', keyName: 'HANG3_KEY' },
+    { varName: 'V4', keyName: 'HANG4_KEY' },
+    { varName: 'V5', keyName: 'HANG5_KEY' },
+  ];
+  const { resolved, failed } = await resolveRefs(refs);
+  const elapsed = Date.now() - t0;
+  assert.equal(Object.keys(resolved).length, 0);
+  assert.equal(failed.length, 6);
+  // deadline = timeout(500ms) x 3 = 1.5s が効き、5 キーを無制限に直列待ちしない
+  // （上限は並列テスト負荷のマージン込み。本質の検証は下の skip 理由の存在）
+  assert.ok(elapsed < 8_000, `command-level deadline bounds the scan (took ${elapsed}ms)`);
+  // 後半のキーは deadline 超過でスキップされ、その旨の理由を持つ
+  assert.ok(failed.some((f) => /deadline exceeded/.test(f.reason ?? '')));
+  // 重複キーは 1 回しか解決を試みない（キャッシュ）
+  const calls = await readFile(callsPath, 'utf8');
+  const hang1Calls = calls.split('\n').filter((l) => l.endsWith('|HANG1_KEY')).length;
+  assert.equal(hang1Calls, 2); // managed + GUI の 2 段 x 1 回のみ
+  // どちらの失敗も同じ理由を共有する
+  const v1 = failed.find((f) => f.varName === 'V1');
+  const v1b = failed.find((f) => f.varName === 'V1B');
+  assert.equal(v1.reason, v1b.reason);
 });

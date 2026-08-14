@@ -82,10 +82,18 @@ export function assertMacOS() {
 // timeout + SIGKILL semantics.
 //
 // AIKEYCHAIN_SUBPROCESS_TIMEOUT_MS is a test-only override (so the hang path
-// can be exercised without waiting 10s). Production always uses the default.
-const timeoutOverride = Number(process.env.AIKEYCHAIN_SUBPROCESS_TIMEOUT_MS);
+// can be exercised without waiting 10s). Strictly validated (#185 S3): a
+// positive integer between 100ms and 600s — anything else (floats break
+// execFile's integer timeout, tiny values would fail healthy reads, huge
+// values clamp weirdly in Node's timers) falls back to the default.
+const timeoutOverride = process.env.AIKEYCHAIN_SUBPROCESS_TIMEOUT_MS;
 export const SUBPROCESS_TIMEOUT_MS =
-  Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : 10_000;
+  typeof timeoutOverride === 'string' &&
+  /^\d+$/.test(timeoutOverride) &&
+  Number(timeoutOverride) >= 100 &&
+  Number(timeoutOverride) <= 600_000
+    ? Number(timeoutOverride)
+    : 10_000;
 
 async function security(args) {
   try {
@@ -133,14 +141,25 @@ export async function resolveKey(name) {
         'or unavailable. Unlock the login keychain and retry.'
     );
   }
-  if (managed.code !== 44) return null; // fail closed on unexpected errors (#147 semantics)
+  if (managed.code !== 44) {
+    // fail closed on unexpected errors (#147 semantics) — but say why (#185 S4)
+    throw new KeychainError(
+      `reading "${name}" from the managed namespace failed (exit ${managed.code}): ` +
+        `${managed.stderr.trim() || 'unknown error'}`
+    );
+  }
   const gui = await security(['find-generic-password', '-s', GUI_SERVICE, '-a', name, '-w']);
   if (gui.ok) {
     const value = stripTrailingNewline(gui.stdout);
     return value || null;
   }
   if (gui.timedOut) throw new MigrationRequiredError(name, 'GUI-store');
-  if (gui.code !== 44) return null;
+  if (gui.code !== 44) {
+    throw new KeychainError(
+      `reading "${name}" from the legacy GUI store failed (exit ${gui.code}): ` +
+        `${gui.stderr.trim() || 'unknown error'}`
+    );
+  }
 
   const manual = await security(['find-generic-password', '-s', name, '-w']);
   if (manual.ok) {
@@ -148,6 +167,12 @@ export async function resolveKey(name) {
     if (value) return value;
   }
   if (manual.timedOut) throw new MigrationRequiredError(name, 'manual');
+  if (!manual.ok && manual.code !== 44) {
+    throw new KeychainError(
+      `reading "${name}" from the manual scheme failed (exit ${manual.code}): ` +
+        `${manual.stderr.trim() || 'unknown error'}`
+    );
+  }
   return null;
 }
 
@@ -383,8 +408,16 @@ export function findUnmigratedKeys(records) {
   const managed = new Set(
     records.filter((r) => r.service === MANAGED_SERVICE && r.account).map((r) => r.account)
   );
+  // GUI/managed store のレコードで account が解析できなかったものは、未移行判定の
+  // 信頼性を落とす（false negative の芽）。黙って捨てず件数を返して doctor が
+  // 「判定不能あり」と警告できるようにする (#185 S8)。
+  let unparseable = 0;
   const byName = new Map();
   for (const { service, account } of records) {
+    if ((service === GUI_SERVICE || service === MANAGED_SERVICE) && !account) {
+      unparseable += 1;
+      continue;
+    }
     let name = null;
     let store = null;
     if (service === GUI_SERVICE && account) {
@@ -398,18 +431,25 @@ export function findUnmigratedKeys(records) {
     if (!byName.has(name)) byName.set(name, new Set());
     byName.get(name).add(store);
   }
-  return [...byName.entries()]
+  const keys = [...byName.entries()]
     .map(([name, stores]) => ({ name, stores: [...stores].sort() }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  return { keys, unparseable };
 }
 
-/** Convenience wrapper around the live keychain dump (names/accts only). */
-export async function listUnmigratedKeys() {
+/** One dump-keychain call, parsed. Shared by doctor so a hanging enumeration
+ *  costs one bounded subprocess, not three (#185 S7). Names/accts only. */
+export async function dumpRecords() {
   const r = await security(['dump-keychain']);
   if (!r.ok) {
     throw new KeychainError(`failed to enumerate keychain items: ${r.stderr.trim()}`);
   }
-  return findUnmigratedKeys(parseDump(r.stdout));
+  return parseDump(r.stdout);
+}
+
+/** Convenience wrapper around the live keychain dump (names/accts only). */
+export async function listUnmigratedKeys() {
+  return findUnmigratedKeys(await dumpRecords());
 }
 
 /** Convenience wrapper around the live keychain dump (names/accts only). */
