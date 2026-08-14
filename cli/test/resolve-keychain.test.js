@@ -67,8 +67,10 @@ before(async () => {
   await writeFile(stubPath, STUB);
   await chmod(stubPath, 0o755);
   process.env.AIKEYCHAIN_SECURITY_BIN = stubPath;
-  // ハング経路のテストを 60s 待たずに検証する（テスト専用オーバーライド / #171）
-  process.env.AIKEYCHAIN_SUBPROCESS_TIMEOUT_MS = '500';
+  // ハング経路のテストを 60s 待たずに検証する（テスト専用オーバーライド / #171）。
+  // 2000ms: 非ハングの stub 応答が並列テスト負荷でこの値を超えて fail-closed
+  // 検証が timeout 分類に化けるフレークを避ける余裕を取る（#185 再検証の指摘）。
+  process.env.AIKEYCHAIN_SUBPROCESS_TIMEOUT_MS = '2000';
   ({ resolveKey, keyExists, MigrationRequiredError } = await import('../src/keychain.js'));
   ({ resolveRefs } = await import('../src/run.js'));
 });
@@ -156,7 +158,7 @@ test('a prompt-blocked legacy read is killed and raises MigrationRequiredError (
   // 下限も検証 — 即時失敗するようなら timeout ではなく別の壊れ方をしている
   const elapsed = Date.now() - t0;
   assert.ok(elapsed >= 400, `should actually wait for the timeout (took ${elapsed}ms)`);
-  assert.ok(elapsed < 5_000, `bounded well under the 60s hang (took ${elapsed}ms)`);
+  assert.ok(elapsed < 10_000, `bounded well under the 60s hang (took ${elapsed}ms)`);
   const calls = await readFile(callsPath, 'utf8');
   assert.equal(calls, 'com.aieo.aikeychain.managed|GUIHANG_KEY\ncom.aieo.aikeychain|GUIHANG_KEY\n');
 });
@@ -172,7 +174,7 @@ test('a managed-tier timeout raises a locked-keychain error, not migration guida
     }
   );
   const elapsed = Date.now() - t0;
-  assert.ok(elapsed >= 400 && elapsed < 5_000, `bounded (took ${elapsed}ms)`);
+  assert.ok(elapsed >= 400 && elapsed < 10_000, `bounded (took ${elapsed}ms)`);
   // fail-closed: レガシー段へは落ちない
   const calls = await readFile(callsPath, 'utf8');
   assert.equal(calls, 'com.aieo.aikeychain.managed|MGHANG_KEY\n');
@@ -192,9 +194,10 @@ test('resolveRefs caches duplicate keys and enforces a command-level deadline (#
   const elapsed = Date.now() - t0;
   assert.equal(Object.keys(resolved).length, 0);
   assert.equal(failed.length, 6);
-  // deadline = timeout(500ms) x 3 = 1.5s が効き、5 キーを無制限に直列待ちしない
-  // （上限は並列テスト負荷のマージン込み。本質の検証は下の skip 理由の存在）
-  assert.ok(elapsed < 8_000, `command-level deadline bounds the scan (took ${elapsed}ms)`);
+  // deadline = timeout(2000ms) x 3 = 6s が効き、5 キーを無制限に直列待ちしない。
+  // 最初のキー(managed+gui の 2 段ハング ~4s)後に deadline 超過し残りは skip。
+  // 上限は並列テスト負荷のマージン込み。本質の検証は下の skip 理由の存在
+  assert.ok(elapsed < 14_000, `command-level deadline bounds the scan (took ${elapsed}ms)`);
   // 後半のキーは deadline 超過でスキップされ、その旨の理由を持つ
   assert.ok(failed.some((f) => /deadline exceeded/.test(f.reason ?? '')));
   // 重複キーは 1 回しか解決を試みない（キャッシュ）
