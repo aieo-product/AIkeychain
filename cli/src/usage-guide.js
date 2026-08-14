@@ -20,31 +20,37 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
    --reveal only when you truly need the raw value on stdout; to inject it into
    a process instead, use \`akc run -- <command>\`. If you must use the raw
    security CLI directly, use the form that matches where the key lives:
-     [app] store keys (saved via the AI KeyChain GUI):
+     [managed] keys (saved by akc or the AI KeyChain GUI, v1.9+):
+       /usr/bin/security find-generic-password -s "com.aieo.aikeychain.managed" -a "<KEY>" -w
+     [app] legacy store keys (saved via an older AI KeyChain GUI):
        /usr/bin/security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w
-     [manual] keys (registered by hand) — service name only, do NOT pin the
-     account with -a "$USER":
+     [manual] legacy keys (registered by hand) — service name only, do NOT pin
+     the account with -a "$USER":
        /usr/bin/security find-generic-password -s "<KEY>" -w
    ⚠️ The bare -s "<KEY>" form (no -a) returns "could not be found" (exit 44)
-   for [app] store keys — that is NOT proof the key is unregistered. Confirm
-   with \`akc check <KEY>\` / \`akc get <KEY>\` before concluding a key is
-   missing. (Account attributes on [manual] entries are inconsistent across
+   for [managed]/[app] keys — that is NOT proof the key is unregistered.
+   Confirm with \`akc check <KEY>\` / \`akc get <KEY>\` before concluding a key
+   is missing. (Account attributes on [manual] entries are inconsistent across
    entries; pinning -a there can return a stale/invalid duplicate — AIkeychain
    issue #91.)
-4. To save/update a key, overwrite with -U so no duplicate entries are created:
-     security add-generic-password -s "KEY_NAME" -a "KEY_NAME" -w "<value>" -U
-   (prefer \`akc set KEY_NAME\`: the value is read from a hidden prompt or stdin
-   and handed to \`security -i\` via stdin as hex — it never appears in any
-   process's argv, shell history, or logs.)
+4. To save/update a key, use \`akc set KEY_NAME\`: it writes to the managed
+   namespace with -U (no duplicate entries), and the value is read from a
+   hidden prompt or stdin and handed to \`security -i\` via stdin as hex — it
+   never appears in any process's argv, shell history, or logs. Do NOT invent
+   your own \`security add-generic-password\` invocation: a -w "<value>" form
+   leaks the secret into argv/shell history, and writing to any other service
+   name creates entries outside the managed namespace.
 
 ## Where keys live
 
 | Store | service attribute | account attribute |
 |---|---|---|
-| AI KeyChain GUI store | com.aieo.aikeychain | <KEY_NAME> |
-| Manually-registered keys | <KEY_NAME> | (varies — do not rely on it) |
+| Managed namespace (v1.9+, all new writes) | com.aieo.aikeychain.managed | <KEY_NAME> |
+| AI KeyChain GUI store (legacy, read-only) | com.aieo.aikeychain | <KEY_NAME> |
+| Manually-registered keys (legacy, read-only) | <KEY_NAME> | (varies — do not rely on it) |
 
-\`akc\` looks up the GUI store first, then falls back to service-only lookup.
+\`akc\` looks up managed first, then the legacy GUI store, then the service-only
+manual lookup — falling through ONLY when a tier reports "not found" (exit 44).
 
 ## CLI quick reference
 

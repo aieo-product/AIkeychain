@@ -28,6 +28,12 @@ if [ "$cmd" = "-i" ]; then
   read -r line
   case "$line" in
     add-generic-password*-a\\ \\"NEW_KEY\\"*-X\\ *)
+      # The managed namespace is the ONLY legal write target (#167). A write
+      # to any other service must fail loudly so tests catch a wrong -s.
+      case "$line" in
+        *-s\\ \\"com.aieo.aikeychain.managed\\"*) ;;
+        *) echo "stub -i: write outside the managed namespace: $line" >&2; exit 98 ;;
+      esac
       printf '%s' "\${line##* }" | xxd -r -p > "$state_dir/state-NEW_KEY"
       exit 0 ;;
     add-generic-password*-a\\ \\"ECHO_KEY\\"*-X\\ *)
@@ -51,7 +57,7 @@ case "$cmd" in
     if [ "$svc" = "com.aieo.aikeychain" ] && [ "$acct" = "GOOD_KEY" ]; then
       $want_value && echo "stub-good-value"; exit 0
     fi
-    if [ "$svc" = "com.aieo.aikeychain" ] && [ "$acct" = "NEW_KEY" ] && [ -f "$state_dir/state-NEW_KEY" ]; then
+    if [ "$svc" = "com.aieo.aikeychain.managed" ] && [ "$acct" = "NEW_KEY" ] && [ -f "$state_dir/state-NEW_KEY" ]; then
       $want_value && { cat "$state_dir/state-NEW_KEY"; echo; }; exit 0
     fi
     if [ "$svc" = "MANUAL_KEY" ]; then
@@ -276,5 +282,57 @@ test('set rejects invalid names and control characters before touching security'
     (e) => ({ code: e.code ?? 1, stderr: e.stderr ?? '' })
   );
   assert.equal(ctrl.code, 1);
-  assert.match(ctrl.stderr, /control characters/);
+  assert.match(ctrl.stderr, /printable ASCII/);
+});
+
+test('set stores an all-hex ASCII secret verbatim (#179 review: no hex-decode guessing)', async () => {
+  const r = await pExecFile(
+    'bash',
+    ['-c', `printf '4142434445464748' | ${process.execPath} ${AKC} set NEW_KEY`],
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
+  ).then(
+    (r) => ({ code: 0, ...r }),
+    (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
+  );
+  assert.equal(r.code, 0);
+
+  const back = await runAkc(['get', 'NEW_KEY', '--reveal']);
+  assert.equal(back.code, 0);
+  // 値がそのまま返ること — "ABCDEFGH" に化けたら hex 推測復号が復活している
+  assert.equal(back.stdout.trim(), '4142434445464748');
+});
+
+test('set rejects non-ASCII values until the C7 encoding convention lands', async () => {
+  const r = await pExecFile(
+    'bash',
+    ['-c', `printf '秘密のトークン' | ${process.execPath} ${AKC} set NEW_KEY`],
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
+  ).then(
+    () => ({ code: 0 }),
+    (e) => ({ code: e.code ?? 1, stderr: e.stderr ?? '' })
+  );
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /printable ASCII/);
+});
+
+test('set --manual is rejected (#167: managed namespace is the only write target)', async () => {
+  const r = await pExecFile(
+    'bash',
+    ['-c', `echo "v" | ${process.execPath} ${AKC} set NEW_KEY --manual`],
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
+  ).then(
+    () => ({ code: 0 }),
+    (e) => ({ code: e.code ?? 1, stderr: e.stderr ?? '' })
+  );
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /--manual is no longer supported/);
+});
+
+test('check shows the managed store and hints the managed `security` form', async () => {
+  // NEW_KEY was stored to the managed namespace by the earlier set test
+  const r = await runAkc(['check', 'NEW_KEY']);
+  assert.equal(r.code, 0);
+  assert.match(r.stdout, /managed store/);
+  assert.doesNotMatch(r.stdout, /exists \(\)/); // 空括弧にならない (#179 S2)
+  assert.match(r.stdout, /-s "com\.aieo\.aikeychain\.managed" -a "NEW_KEY" -w/);
 });

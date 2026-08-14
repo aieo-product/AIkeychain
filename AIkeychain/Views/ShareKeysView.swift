@@ -469,7 +469,7 @@ private struct SendTab: View {
             var failed: [String] = []
             for key in configuredKeys {
                 do {
-                    if let value = try KeychainService.shared.retrieve(for: key.envVarName),
+                    if let value = try SecurityCLIKeychainService.shared.retrieve(for: key.envVarName),
                        !value.isEmpty {
                         values[key.envVarName] = value
                     }
@@ -540,8 +540,8 @@ private struct ReceiveTab: View {
     @State private var imported = false
     @State private var importCount = 0
     /// #177: 受信キーのうちローカルが akc CLI 管理で上書きできなかった件数。
-    @State private var cliManagedCount = 0
-    /// #177: cliManaged 以外の理由（keychain ロック等）で保存できなかった件数。
+    @State private var unsupportedCount = 0
+    /// 値形式以外の理由（keychain ロック等）で保存できなかった件数。
     @State private var failedCount = 0
     @State private var errorMessage: String?
     // 復号時に envVarName で重複排除（先勝ち）した表示用エントリ（finding 10）と、
@@ -863,12 +863,12 @@ private struct ReceiveTab: View {
             Text(L10n.s(ja: "Keychain に保存されました", en: "Saved to Keychain"))
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
-            if cliManagedCount > 0 {
-                // #177: akc CLI 管理キーは GUI から上書きできない（毒化防止）
+            if unsupportedCount > 0 {
+                // 値形式が未対応（非 ASCII / 複数行 / 8KB 超）。C7 (#174) までの制約
                 Label(L10n.s(
-                    ja: "\(cliManagedCount) 件は akc CLI 管理のため未更新です。ターミナルで `akc set <KEY>` で更新してください。",
-                    en: "\(cliManagedCount) key(s) are managed by the akc CLI and were not updated. Update them with `akc set <KEY>` in a terminal."),
-                      systemImage: "terminal.fill")
+                    ja: "\(unsupportedCount) 件は未対応の値形式（非 ASCII / 複数行 / 8KB 超）のため保存されませんでした。",
+                    en: "\(unsupportedCount) key(s) were not saved because the value format is not supported yet (non-ASCII / multi-line / over 8KB)."),
+                      systemImage: "textformat.abc.dottedunderline")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
@@ -922,7 +922,7 @@ private struct ReceiveTab: View {
                 let deduped = decrypted.entries.filter { seen.insert($0.envVarName).inserted }
                 // 上書き対象は decrypt 時に一度だけ Keychain を引いて確定（毎描画で
                 // 引かない / finding 11）。
-                let owNames = Set(deduped.map(\.envVarName).filter { KeychainService.shared.exists(for: $0) })
+                let owNames = Set(deduped.map(\.envVarName).filter { SecurityCLIKeychainService.shared.exists(for: $0) })
                 entries = deduped
                 overwriteNames = owNames
                 share = decrypted
@@ -948,7 +948,7 @@ private struct ReceiveTab: View {
             tofu.confirm(fp)
         }
         var count = 0
-        var cliManaged: [String] = []
+        var unsupported: [String] = []
         var failed: [String] = []
         for entry in entries {
             // 外部由来の .aikeychain ファイルの envVarName は信頼できない。
@@ -956,20 +956,21 @@ private struct ReceiveTab: View {
             // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
             guard EnvVarName.isValid(entry.envVarName) else { continue }
             do {
-                try KeychainService.shared.save(value: entry.value, for: entry.envVarName)
+                try SecurityCLIKeychainService.shared.save(value: entry.value, for: entry.envVarName)
                 count += 1
-            } catch KeychainError.cliManaged {
-                // #177: 受信キーと同名のローカルキーが akc CLI 管理（security 所有）。
-                // GUI から上書きすると毒化するため fail-closed。黙って捨てず件数を surface。
-                cliManaged.append(entry.envVarName)
+            } catch KeychainError.invalidData {
+                // 値形式が未対応（非 ASCII / 複数行 / 8KB 超）。share フォーマット自体は
+                // UTF-8 を運べるため、受信側の制約として理由付きで surface する
+                // （#179 二段レビュー N1/D-Q1。C7 #174 のエンコーディング規約で解消予定）。
+                unsupported.append(entry.envVarName)
             } catch {
-                // その他の失敗（keychain ロック等）は cliManaged と混同せず別集計。
-                // 「akc set で更新」の誤案内で本当の失敗を隠さないため（codex 指摘）。
+                // その他の失敗（keychain ロック等）は理由別に別集計。
+                // 誤案内で本当の失敗を隠さないため（codex 指摘）。
                 failed.append(entry.envVarName)
             }
         }
         importCount = count
-        cliManagedCount = cliManaged.count
+        unsupportedCount = unsupported.count
         failedCount = failed.count
         imported = true
         onImport() // キーリストを更新

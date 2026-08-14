@@ -24,9 +24,20 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+if [ "$svc" = "com.aieo.aikeychain.managed" ]; then
+  printf '%s\\n' managed >> "$CALLS_PATH"
+  case "$SCENARIO" in
+    managed_value) printf '%s\\n' managed-value; exit 0 ;;
+    managed_51) exit 51 ;;
+    managed_empty) exit 0 ;;
+  esac
+  exit 44
+fi
+
 if [ "$svc" = "com.aieo.aikeychain" ]; then
   printf '%s\\n' gui >> "$CALLS_PATH"
   case "$SCENARIO" in
+    managed_51) printf '%s\\n' stale-gui-value; exit 0 ;;
     gui_51) exit 51 ;;
     gui_empty) exit 0 ;;
     gui_44_manual) exit 44 ;;
@@ -102,35 +113,57 @@ async function assertScenario(scenario, expected) {
 test('scripts/akc resolve_keychain fails closed on GUI exit 51', async () => {
   await assertScenario('gui_51', {
     result: { status: 51, stdout: '', stderr: '' },
-    calls: 'gui\n',
+    calls: 'managed\ngui\n',
   });
 });
 
 test('scripts/akc resolve_keychain fails closed on successful empty GUI value', async () => {
   await assertScenario('gui_empty', {
     result: { status: 1, stdout: '', stderr: '' },
-    calls: 'gui\n',
+    calls: 'managed\ngui\n',
   });
 });
 
 test('scripts/akc resolve_keychain falls back to manual only on GUI exit 44', async () => {
   await assertScenario('gui_44_manual', {
     result: { status: 0, stdout: 'manual-value', stderr: '' },
-    calls: 'gui\nmanual\n',
+    calls: 'managed\ngui\nmanual\n',
   });
 });
 
 test('scripts/akc resolve_keychain returns nonzero on GUI exit 44 and successful empty manual value', async () => {
   await assertScenario('gui_44_manual_empty', {
     result: { status: 1, stdout: '', stderr: '' },
-    calls: 'gui\nmanual\n',
+    calls: 'managed\ngui\nmanual\n',
   });
 });
 
 test('scripts/akc resolve_keychain returns a nonempty GUI value without manual fallback', async () => {
   await assertScenario('gui_value', {
     result: { status: 0, stdout: 'gui-value', stderr: '' },
-    calls: 'gui\n',
+    calls: 'managed\ngui\n',
+  });
+});
+
+test('scripts/akc resolve_keychain returns a managed value without legacy fallback (#167)', async () => {
+  await assertScenario('managed_value', {
+    result: { status: 0, stdout: 'managed-value', stderr: '' },
+    calls: 'managed\n',
+  });
+});
+
+test('scripts/akc resolve_keychain fails closed on managed exit 51 (#179 review B1)', async () => {
+  // GUI 段は stale な値を返せる状態だが、managed の権威的失敗で止まること
+  await assertScenario('managed_51', {
+    result: { status: 51, stdout: '', stderr: '' },
+    calls: 'managed\n',
+  });
+});
+
+test('scripts/akc resolve_keychain fails closed on successful empty managed value', async () => {
+  await assertScenario('managed_empty', {
+    result: { status: 1, stdout: '', stderr: '' },
+    calls: 'managed\n',
   });
 });
 
@@ -145,5 +178,5 @@ test('scripts/akc cmd_run rejects nonempty resolver output when its exit status 
   assert.match(result.stdout, /Resolved: 0, Failed: 1/);
   assert.doesNotMatch(result.stdout, /rejected-value/);
   assert.match(result.stderr, /TEST_REF .* not found in Keychain/);
-  assert.equal(await readFile(callsPath, 'utf8'), 'gui\nmanual\n');
+  assert.equal(await readFile(callsPath, 'utf8'), 'managed\ngui\nmanual\n');
 });

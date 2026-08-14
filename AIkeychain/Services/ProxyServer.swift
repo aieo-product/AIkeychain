@@ -47,7 +47,7 @@ final class ProxyServer {
     /// 差し替えてストリーミング/フレーミングを検証できるようにする。
     private let makeUpstream: (_ host: String) -> NWConnection
 
-    init(keychainService: KeychainServiceProtocol = KeychainService.shared,
+    init(keychainService: KeychainServiceProtocol = SecurityCLIKeychainService.shared,
          keychainTimeout: TimeInterval = 3,
          upstreamTimeout: TimeInterval = 30,
          keychainCooldown: TimeInterval = 10,

@@ -10,9 +10,10 @@
 # via macOS Keychain (security find-generic-password) and injected into the
 # child process environment. The parent process env is never modified.
 #
-# Lookup order:
-#   1. service="com.aieo.aikeychain" account="<KEY_NAME>"  (AI KeyChain GUI store)
-#   2. service="<KEY_NAME>"  (GUI が exit 44/not-found の場合のみ; account 非指定)
+# Lookup order (各段は exit 44/not-found の場合のみ次へ / #150):
+#   1. service="com.aieo.aikeychain.managed" account="<KEY_NAME>"  (managed namespace, v1.9+ / #167)
+#   2. service="com.aieo.aikeychain" account="<KEY_NAME>"  (旧 AI KeyChain GUI store)
+#   3. service="<KEY_NAME>"  (旧 manual スキーム; account 非指定)
 #      -a は付けない: 手動登録キーは acct の値が一定しないため、
 #      service 名のみで引く方が安定する (issue #91)
 
@@ -57,6 +58,16 @@ resolve_keychain() {
     local key_name="$1"
     local value
     local rc
+
+    # managed namespace (#167, v1.9+): akc/GUI の新規保存は全てここ。
+    # 44 (not found) のときだけ次の段へ落ちる（それ以外は権威的失敗 / #150）
+    if value=$("$SECURITY_BIN" find-generic-password -s "com.aieo.aikeychain.managed" -a "$key_name" -w 2>/dev/null); then
+        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+        return 1
+    else
+        rc=$?
+        [ "$rc" -eq 44 ] || return "$rc"
+    fi
 
     if value=$("$SECURITY_BIN" find-generic-password -s "com.aieo.aikeychain" -a "$key_name" -w 2>/dev/null); then
         [ -n "$value" ] && { printf '%s' "$value"; return 0; }

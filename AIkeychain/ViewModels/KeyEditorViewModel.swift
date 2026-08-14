@@ -85,7 +85,7 @@ final class KeyEditorViewModel {
     }
 
     init(editingKey: APIKey? = nil,
-         keychainService: KeychainServiceProtocol = KeychainService.shared,
+         keychainService: KeychainServiceProtocol = SecurityCLIKeychainService.shared,
          customStore: CustomKeyStore = .shared) {
         self.editingKey = editingKey
         self.keychainService = keychainService

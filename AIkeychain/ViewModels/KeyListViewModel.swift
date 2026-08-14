@@ -21,7 +21,7 @@ final class KeyListViewModel {
     private let keychainService: KeychainServiceProtocol
     private let customStore: CustomKeyStore
 
-    init(keychainService: KeychainServiceProtocol = KeychainService.shared,
+    init(keychainService: KeychainServiceProtocol = SecurityCLIKeychainService.shared,
          customStore: CustomKeyStore = .shared) {
         self.keychainService = keychainService
         self.customStore = customStore

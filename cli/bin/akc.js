@@ -13,6 +13,7 @@ import {
   maskValue,
   KeychainError,
   GUI_SERVICE,
+  MANAGED_SERVICE,
 } from '../src/keychain.js';
 import { cmdRun } from '../src/run.js';
 import { runDoctor, formatReport } from '../src/doctor.js';
@@ -29,7 +30,7 @@ Usage:
   akc list
   akc check <KEY>
   akc get <KEY> [--reveal]
-  akc set <KEY> [--manual]
+  akc set <KEY>
   akc delete <KEY>
   akc doctor
   akc guide
@@ -122,15 +123,20 @@ async function cmdList() {
 async function cmdCheck(name) {
   const result = await keyExists(name);
   if (result.exists) {
-    const stores = [result.app && 'AI KeyChain store', result.manual && 'manual entry']
+    const stores = [
+      result.managed && 'managed store',
+      result.app && 'AI KeyChain store (legacy)',
+      result.manual && 'manual entry',
+    ]
       .filter(Boolean)
       .join(', ');
     process.stdout.write(`✅ ${name} exists (${stores})\n`);
-    if (result.app && !result.manual) {
-      // Store-only key: the bare `security -s <KEY> -w` form (no -a) returns
+    if ((result.managed || result.app) && !result.manual) {
+      // Namespaced key: the bare `security -s <KEY> -w` form (no -a) returns
       // exit 44 for these — a false "not registered" signal (issue #137).
+      const svc = result.managed ? MANAGED_SERVICE : GUI_SERVICE;
       process.stdout.write(
-        `   ↳ security CLI: use -s "${GUI_SERVICE}" -a "${name}" -w  (or: akc get ${name})\n`
+        `   ↳ security CLI: use -s "${svc}" -a "${name}" -w  (or: akc get ${name})\n`
       );
     }
     return 0;
@@ -161,13 +167,13 @@ async function cmdGet(name, { reveal }) {
   return 0;
 }
 
-async function cmdSet(name, { manual }) {
+async function cmdSet(name) {
   const value = await readSecret(name);
   if (!value) {
     process.stderr.write('akc: empty value, nothing saved\n');
     return 1;
   }
-  const saved = await setKey(name, value, { manual });
+  const saved = await setKey(name, value);
   process.stdout.write(
     `✅ Saved ${name} (${maskValue(value)}) to service "${saved.service}"\n`
   );
@@ -233,7 +239,16 @@ async function main() {
     }
     case 'set': {
       const name = requireKeyArg(rest, 'set');
-      return name === null ? 1 : cmdSet(name, { manual: rest.includes('--manual') });
+      if (rest.includes('--manual')) {
+        // #167: every write targets the managed namespace; the legacy manual
+        // scheme is read-only. The old --manual path could create
+        // acct-mismatched duplicates (issue #91).
+        process.stderr.write(
+          'akc: --manual is no longer supported: all writes go to the managed namespace\n'
+        );
+        return 1;
+      }
+      return name === null ? 1 : cmdSet(name);
     }
     case 'delete': {
       const name = requireKeyArg(rest, 'delete');

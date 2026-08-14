@@ -3,6 +3,21 @@ import Network
 import Testing
 @testable import AIkeychain
 
+/// テスト用ポートの重複しない払い出し。以前の `UInt16.random(in:)` は並列 suite 間で
+/// 誕生日衝突し、別テストのサーバへ接続して 404/トークン不一致になる flake があった。
+enum TestPorts {
+    private static let lock = NSLock()
+    // プロセス起動毎にベースをずらし、前回実行の TIME_WAIT ソケットとの衝突も避ける
+    private static var current: UInt16 = UInt16.random(in: 19000...24000)
+
+    static func next() -> UInt16 {
+        lock.lock()
+        defer { lock.unlock() }
+        current += 1
+        return current
+    }
+}
+
 @Suite("ProxyRoute Tests")
 struct ProxyRouteTests {
 
@@ -211,7 +226,7 @@ enum TestHTTPClient {
 struct ProxyHangRegressionTests {
 
     /// Pick a high port unlikely to collide.
-    private func testPort() -> UInt16 { UInt16.random(in: 19000...19900) }
+    private func testPort() -> UInt16 { TestPorts.next() }
 
     @Test("A blocked keychain read does NOT wedge other requests")
     func blockedReadDoesNotWedgeOthers() throws {
@@ -442,20 +457,21 @@ final class RawClient {
 
 @Suite("Proxy HTTP Streaming & Framing Tests (issue #98)")
 struct ProxyStreamingTests {
-    private func port() -> UInt16 { UInt16.random(in: 20000...20900) }
+    private func port() -> UInt16 { TestPorts.next() }
 
     @Test("Upstream response is streamed to the client, not buffered until completion")
     func responseIsStreamed() throws {
         let upstreamPort = port()
         let proxyPort = port()
-        // Upstream sends headers + first SSE event immediately, then waits 1.5s
+        // Upstream sends headers + first SSE event immediately, then waits 4s
         // before the second event and close. A buffering proxy would deliver
-        // nothing until ~1.5s; a streaming proxy delivers event 1 right away.
+        // nothing until ~4s; a streaming proxy delivers event 1 right away.
+        // (ギャップと観測窓は並列テストの CPU 混雑でも誤判定しない幅を取る)
         let upstream = try FakeUpstream(port: upstreamPort) { conn, queue in
             conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { _, _, _, _ in
                 let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: 1\n\n"
                 conn.send(content: Data(head.utf8), completion: .contentProcessed { _ in
-                    queue.asyncAfter(deadline: .now() + 1.5) {
+                    queue.asyncAfter(deadline: .now() + 4.0) {
                         conn.send(content: Data("data: 2\n\n".utf8), completion: .contentProcessed { _ in
                             conn.cancel()
                         })
@@ -477,20 +493,29 @@ struct ProxyStreamingTests {
         defer { client.disconnect() }
         client.send("GET /v1/models HTTP/1.1\r\nHost: api.anthropic.com\r\n\(ProxyServer.tokenHeaderName): \(server.sessionToken)\r\n\r\n")
 
-        // Within 0.8s (well before the upstream's 1.5s gap), we must already have
-        // the status line and the first event — proof of streaming.
-        let early = client.recv(timeout: 0.8)
+        // Well before the upstream's 4s gap, we must already have the status
+        // line and the first event — proof of streaming. Loop small recvs until
+        // the first event arrives: a single recv returns one TCP segment's worth
+        // and can miss data under parallel-test CPU load (flake observed on
+        // unmodified code too). The 3s deadline still cannot observe "data: 2",
+        // which is sent no earlier than 4s after the head.
+        var early = Data()
+        let earlyDeadline = Date().addingTimeInterval(3.0)
+        while Date() < earlyDeadline {
+            early.append(client.recv(timeout: 0.2))
+            if (String(data: early, encoding: .utf8) ?? "").contains("data: 1") { break }
+        }
         let earlyStr = String(data: early, encoding: .utf8) ?? ""
         #expect(earlyStr.contains("200"))
         #expect(earlyStr.contains("data: 1"))
         #expect(!earlyStr.contains("data: 2")) // second event hasn't been sent yet
 
-        // Drain the rest.
+        // Drain the rest (2 個目のイベントは head 送信の 4s 後 — 混雑を見込んで待つ).
         var rest = Data()
-        for _ in 0..<5 {
-            let chunk = client.recv(timeout: 2)
-            if chunk.isEmpty { break }
-            rest.append(chunk)
+        let drainDeadline = Date().addingTimeInterval(10)
+        while Date() < drainDeadline {
+            rest.append(client.recv(timeout: 2))
+            if (String(data: rest, encoding: .utf8) ?? "").contains("data: 2") { break }
         }
         #expect((String(data: rest, encoding: .utf8) ?? "").contains("data: 2"))
     }
