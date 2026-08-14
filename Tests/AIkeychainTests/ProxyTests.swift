@@ -463,15 +463,17 @@ struct ProxyStreamingTests {
     func responseIsStreamed() throws {
         let upstreamPort = port()
         let proxyPort = port()
-        // Upstream sends headers + first SSE event immediately, then waits 4s
+        // Upstream sends headers + first SSE event immediately, then waits 8s
         // before the second event and close. A buffering proxy would deliver
-        // nothing until ~4s; a streaming proxy delivers event 1 right away.
-        // (ギャップと観測窓は並列テストの CPU 混雑でも誤判定しない幅を取る)
+        // nothing until ~8s; a streaming proxy delivers event 1 right away.
+        // (ギャップと観測窓は並列テスト時のスレッドプール枯渇でも誤判定しない幅を
+        //  取る — 窓は wall-clock なので、テストバイナリのスケジューリング次第で
+        //  数秒単位の遅延が観測された)
         let upstream = try FakeUpstream(port: upstreamPort) { conn, queue in
             conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { _, _, _, _ in
                 let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: 1\n\n"
                 conn.send(content: Data(head.utf8), completion: .contentProcessed { _ in
-                    queue.asyncAfter(deadline: .now() + 4.0) {
+                    queue.asyncAfter(deadline: .now() + 8.0) {
                         conn.send(content: Data("data: 2\n\n".utf8), completion: .contentProcessed { _ in
                             conn.cancel()
                         })
@@ -493,14 +495,14 @@ struct ProxyStreamingTests {
         defer { client.disconnect() }
         client.send("GET /v1/models HTTP/1.1\r\nHost: api.anthropic.com\r\n\(ProxyServer.tokenHeaderName): \(server.sessionToken)\r\n\r\n")
 
-        // Well before the upstream's 4s gap, we must already have the status
+        // Well before the upstream's 8s gap, we must already have the status
         // line and the first event — proof of streaming. Loop small recvs until
         // the first event arrives: a single recv returns one TCP segment's worth
         // and can miss data under parallel-test CPU load (flake observed on
-        // unmodified code too). The 3s deadline still cannot observe "data: 2",
-        // which is sent no earlier than 4s after the head.
+        // unmodified code too). The 6s deadline still cannot observe "data: 2",
+        // which is sent no earlier than 8s after the head.
         var early = Data()
-        let earlyDeadline = Date().addingTimeInterval(3.0)
+        let earlyDeadline = Date().addingTimeInterval(6.0)
         while Date() < earlyDeadline {
             early.append(client.recv(timeout: 0.2))
             if (String(data: early, encoding: .utf8) ?? "").contains("data: 1") { break }
@@ -510,9 +512,9 @@ struct ProxyStreamingTests {
         #expect(earlyStr.contains("data: 1"))
         #expect(!earlyStr.contains("data: 2")) // second event hasn't been sent yet
 
-        // Drain the rest (2 個目のイベントは head 送信の 4s 後 — 混雑を見込んで待つ).
+        // Drain the rest (2 個目のイベントは head 送信の 8s 後 — 混雑を見込んで待つ).
         var rest = Data()
-        let drainDeadline = Date().addingTimeInterval(10)
+        let drainDeadline = Date().addingTimeInterval(15)
         while Date() < drainDeadline {
             rest.append(client.recv(timeout: 2))
             if (String(data: rest, encoding: .utf8) ?? "").contains("data: 2") { break }
@@ -563,11 +565,12 @@ struct ProxyStreamingTests {
         Thread.sleep(forTimeInterval: 0.3)
         client.send(String(repeating: "x", count: bodyLen))
 
+        // 空 recv 1 回で打ち切らず deadline まで待つ（並列テストの CPU 混雑で
+        // 応答が recv timeout を跨いで届く flake があった — streaming テストと同型）
         var resp = Data()
-        for _ in 0..<5 {
-            let chunk = client.recv(timeout: 3)
-            if chunk.isEmpty { break }
-            resp.append(chunk)
+        let respDeadline = Date().addingTimeInterval(10)
+        while Date() < respDeadline {
+            resp.append(client.recv(timeout: 2))
             if (String(data: resp, encoding: .utf8) ?? "").contains("\r\n\r\n") { break }
         }
         let respStr = String(data: resp, encoding: .utf8) ?? ""

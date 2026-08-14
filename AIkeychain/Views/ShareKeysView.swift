@@ -539,7 +539,7 @@ private struct ReceiveTab: View {
     @State private var overwriteConfirmed = false          // 既存上書きの明示承諾
     @State private var imported = false
     @State private var importCount = 0
-    /// #177: 受信キーのうちローカルが akc CLI 管理で上書きできなかった件数。
+    /// 受信キーのうち値形式が未対応（非 ASCII / 複数行 / 8KB 超）で保存できなかった件数。
     @State private var unsupportedCount = 0
     /// 値形式以外の理由（keychain ロック等）で保存できなかった件数。
     @State private var failedCount = 0
@@ -952,7 +952,7 @@ private struct ReceiveTab: View {
         var failed: [String] = []
         for entry in entries {
             // 外部由来の .aikeychain ファイルの envVarName は信頼できない。
-            // シェル export に不正な名前はスキップする（KeychainService.save 側でも
+            // シェル export に不正な名前はスキップする（SecurityCLIKeychainService.save 側でも
             // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
             guard EnvVarName.isValid(entry.envVarName) else { continue }
             do {

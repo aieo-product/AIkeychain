@@ -12,8 +12,19 @@ import Security
 /// 掴ませる（credential substitution）ことが可能。これを防ぐため送信者の
 /// 署名鍵で正規メッセージに署名し、受信者はフィンガープリントを帯域外で
 /// 照合する（有効な署名 ≠ 信頼できる送信者。UI がこの照合を強制する）。
+///
+/// ## Keychain アクセス経路について（#167/#170）
+/// ここで扱う共有秘密鍵・署名鍵は**アプリ内部鍵**であり、ユーザーの API シークレット
+/// とは別物。`akc`/CLI から読む対象ではないため、「書込は subprocess `/usr/bin/security`」
+/// という #167 の単一作成アイデンティティ原則の**意図的な例外**として in-process
+/// SecItem* を使い続ける — アプリ自身だけが無音で読める in-proc 所有がむしろ正しい
+/// （security 所有にするとアプリの読取が ~7 秒ブロック + SecurityAgent 起動になる, E6-1）。
 enum KeyShareService {
 
+    // アプリ予約の service 名（#183 レビュー D-Q1）: ユーザーキー名は
+    // EnvVarName.isValid がドットを禁止するため、manual スキーム (service=キー名) が
+    // この 2 つと衝突することは構造的に不可能。managed/旧 GUI service とも別文字列。
+    // saveRawKey の delete→add はこの予約を前提に無条件で行う。
     private static let privateKeyTag = "com.aieo.aikeychain.sharekey"
     private static let signKeyTag = "com.aieo.aikeychain.signkey"
 
