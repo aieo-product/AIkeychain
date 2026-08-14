@@ -143,6 +143,9 @@ akc init                     # set up AI-agent discovery machine-wide (Claude + 
 # Secret Reference workflow
 export OPENAI_API_KEY=keychain://OPENAI_API_KEY
 akc run -- claude            # real value injected into the child process only
+# Headless contract: managed keys resolve silently; a legacy GUI-owned key
+# never hangs akc — the read times out with an explicit "migration required"
+# error (migrate with `akc set <KEY>`; `akc doctor` lists unmigrated keys)
 
 akc list                     # key names (never prints values)
 akc set GITHUB_TOKEN         # hidden prompt, overwrites in place

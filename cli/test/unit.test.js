@@ -4,6 +4,7 @@ import {
   parseDump,
   maskValue,
   findAmbiguousDuplicates,
+  findUnmigratedKeys,
   MANUAL_NAME_PATTERN,
   GUI_SERVICE,
 } from '../src/keychain.js';
@@ -63,6 +64,38 @@ test('maskValue never includes the value nor its length', () => {
   // 桁数が出力に含まれないこと
   assert.doesNotMatch(maskValue('super-secret'), /\d/);
   assert.doesNotMatch(maskValue('super-secret'), /chars/);
+});
+
+test('findUnmigratedKeys reports legacy-only keys and skips migrated ones (#171)', () => {
+  const records = [
+    // managed 済み → 対象外（GUI store に古いコピーが残っていても）
+    { service: 'com.aieo.aikeychain.managed', account: 'MIGRATED_KEY' },
+    { service: 'com.aieo.aikeychain', account: 'MIGRATED_KEY' },
+    // GUI store のみ → 未移行
+    { service: 'com.aieo.aikeychain', account: 'GUI_ONLY_KEY' },
+    // manual スキームのみ → 未移行
+    { service: 'MANUAL_ONLY_KEY', account: 'takehiro' },
+    // 両レガシーに存在 → 1 件にまとめて両 store を列挙
+    { service: 'com.aieo.aikeychain', account: 'BOTH_LEGACY_KEY' },
+    { service: 'BOTH_LEGACY_KEY', account: null },
+    // env 変数形でない service は manual と見なさない（他アプリのアイテム）
+    { service: 'com.vendor.other', account: 'x' },
+    { service: 'lowercase_svc', account: 'x' },
+  ];
+  const result = findUnmigratedKeys(records);
+  assert.deepEqual(result, [
+    { name: 'BOTH_LEGACY_KEY', stores: ['gui', 'manual'] },
+    { name: 'GUI_ONLY_KEY', stores: ['gui'] },
+    { name: 'MANUAL_ONLY_KEY', stores: ['manual'] },
+  ]);
+});
+
+test('findUnmigratedKeys returns empty when everything is migrated', () => {
+  const records = [
+    { service: 'com.aieo.aikeychain.managed', account: 'A_KEY' },
+    { service: 'com.aieo.aikeychain.managed', account: 'B_KEY' },
+  ];
+  assert.deepEqual(findUnmigratedKeys(records), []);
 });
 
 test('findAmbiguousDuplicates flags same-service multi-acct entries (issue #91)', () => {

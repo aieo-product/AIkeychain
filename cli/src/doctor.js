@@ -6,7 +6,13 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { collectRefs, resolveRefs } from './run.js';
-import { listKeys, resolveKey, listAmbiguousDuplicates, KeychainError } from './keychain.js';
+import {
+  listKeys,
+  resolveKey,
+  listAmbiguousDuplicates,
+  listUnmigratedKeys,
+  KeychainError,
+} from './keychain.js';
 
 /** Extract keychain://KEY and `security find-generic-password -s "KEY"` keys from shell config text. */
 export function scanShellConfig(text) {
@@ -168,6 +174,31 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
     // keychain access already reported above; skip duplicate scan on failure
   }
 
+  // Unmigrated legacy keys (#171): exist only in the GUI store / manual scheme
+  // with no managed copy. Headless reads of GUI-owned ones prompt/hang (bounded
+  // to a timeout since #171). Detection is non-destructive — dump-keychain
+  // attributes only, no `find -w` probes (those would rain consent dialogs).
+  try {
+    const unmigrated = await listUnmigratedKeys();
+    if (unmigrated.length === 0) {
+      check('migration', true, 'no unmigrated legacy keys (all keys have a managed copy)');
+    } else {
+      check(
+        'migration',
+        false,
+        `${unmigrated.length} key(s) exist only in legacy stores — headless reads may be ` +
+          'bounded-failed (migration required):' + '\n' +
+          unmigrated
+            .map((k) => `       - ${k.name} [${k.stores.join(', ')}] → migrate: akc set ${k.name}`)
+            .join('\n') +
+          '\n       (or use the AI KeyChain app to migrate; legacy copies are cleaned up on delete)'
+      );
+    }
+  } catch (err) {
+    if (!(err instanceof KeychainError)) throw err;
+    // keychain access failure already reported above; skip migration scan
+  }
+
   // MCP registration path-independence (issue #131): warn on bare `akc` or a
   // stale absolute path. Read config files directly (read-only, testable) —
   // no `claude mcp list` (which health-checks every server and can hang).
@@ -204,8 +235,13 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
     } else {
       const missing = [];
       for (const key of keys) {
-        const value = await resolveKey(key);
-        if (!value) missing.push(key);
+        try {
+          const value = await resolveKey(key);
+          if (!value) missing.push(key);
+        } catch (err) {
+          if (!(err instanceof KeychainError)) throw err;
+          missing.push(`${key} (${err.message.split('.')[0]})`); // 有界失敗の理由を短く添える
+        }
       }
       check(
         'shell config',

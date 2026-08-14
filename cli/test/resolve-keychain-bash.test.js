@@ -30,8 +30,15 @@ if [ "$svc" = "com.aieo.aikeychain.managed" ]; then
     managed_value) printf '%s\\n' managed-value; exit 0 ;;
     managed_51) exit 51 ;;
     managed_empty) exit 0 ;;
+    gui_hang) exit 44 ;;
   esac
   exit 44
+fi
+
+if [ "$svc" = "com.aieo.aikeychain" ] && [ "$SCENARIO" = "gui_hang" ]; then
+  printf '%s\\n' gui >> "$CALLS_PATH"
+  sleep 60   # SecurityAgent プロンプト待ちを模す (#171)
+  exit 0
 fi
 
 if [ "$svc" = "com.aieo.aikeychain" ]; then
@@ -62,9 +69,11 @@ printf '%s\\n' 'TEST_REF=keychain://TEST_KEY'
 
 before(async () => {
   const script = await readFile(new URL('../../scripts/akc', import.meta.url), 'utf8');
-  const start = script.indexOf('resolve_keychain() {');
+  // security_bounded (#171) が resolve_keychain の依存になったため、有界実行の
+  // 定義（タイムアウト変数から）ごと切り出す。
+  const start = script.indexOf('AKC_SECURITY_TIMEOUT_SECS=');
   const end = script.indexOf('\n}\n\nmask_value()', start);
-  assert.notEqual(start, -1, 'resolve_keychain function start must exist');
+  assert.notEqual(start, -1, 'security_bounded prelude must exist');
   assert.notEqual(end, -1, 'resolve_keychain function end must exist');
   const resolver = script.slice(start, end + 2);
   const functionsEnd = script.indexOf('\n\n# Main dispatch', start);
@@ -79,7 +88,7 @@ before(async () => {
   callsPath = join(tempDir, 'calls');
   await writeFile(
     harnessPath,
-    `#!/bin/bash\nset -uo pipefail\nSECURITY_BIN="$1"\nCALLS_PATH="$2"\nSCENARIO="$3"\nexport CALLS_PATH SCENARIO\n${resolver}\nresolve_keychain TEST_KEY\n`
+    `#!/bin/bash\nset -uo pipefail\nSECURITY_BIN="$1"\nCALLS_PATH="$2"\nSCENARIO="$3"\nAKC_SECURITY_TIMEOUT_SECS="\${AKC_SECURITY_TIMEOUT_SECS:-10}"\nexport CALLS_PATH SCENARIO\n${resolver}\nresolve_keychain TEST_KEY\n`
   );
   await writeFile(
     cmdHarnessPath,
@@ -97,9 +106,10 @@ after(async () => {
   await rm(tempDir, { recursive: true, force: true });
 });
 
-function runResolver(scenario) {
+function runResolver(scenario, env = {}) {
   const result = spawnSync('/bin/bash', [harnessPath, securityPath, callsPath, scenario], {
     encoding: 'utf8',
+    env: { ...process.env, ...env },
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
@@ -165,6 +175,17 @@ test('scripts/akc resolve_keychain fails closed on successful empty managed valu
     result: { status: 1, stdout: '', stderr: '' },
     calls: 'managed\n',
   });
+});
+
+test('scripts/akc resolve_keychain kills a prompt-blocked read and returns 124 (#171)', async () => {
+  await writeFile(callsPath, '');
+  const t0 = Date.now();
+  const result = runResolver('gui_hang', { AKC_SECURITY_TIMEOUT_SECS: '1' });
+  const elapsed = Date.now() - t0;
+  assert.equal(result.status, 124); // 有界失敗（ハングもプロンプトもしない）
+  assert.equal(result.stdout, ''); // 値は漏れない
+  assert.ok(elapsed < 10_000, `bounded well under the 60s hang (took ${elapsed}ms)`);
+  assert.equal(await readFile(callsPath, 'utf8'), 'managed\ngui\n');
 });
 
 test('scripts/akc cmd_run rejects nonempty resolver output when its exit status is nonzero', async () => {

@@ -41,6 +41,19 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
    leaks the secret into argv/shell history, and writing to any other service
    name creates entries outside the managed namespace.
 
+## Headless contract (what akc promises)
+
+- Keys in the **managed namespace** (saved by \`akc set\` or the AI KeyChain app
+  v1.9+) resolve **silently** — no prompts, no hangs, ever.
+- **Legacy keys** (old GUI store / manually registered) may be readable, but a
+  GUI-owned item can block on a keychain consent prompt. akc **never hangs**:
+  the read is killed after a timeout and you get an explicit
+  "migration required" error telling you to re-register the key
+  (\`akc set <KEY>\`) or use the app's migration assistant.
+- The promise is "new/migrated keys succeed silently; legacy keys fail bounded"
+  — NOT "mixed stores always succeed". Run \`akc doctor\` to list unmigrated
+  keys before relying on headless execution.
+
 ## Where keys live
 
 | Store | service attribute | account attribute |
@@ -60,7 +73,7 @@ manual lookup — falling through ONLY when a tier reports "not found" (exit 44)
   akc check <KEY>             check whether a key exists and where
   akc set <KEY>               store/update a key (value via hidden prompt or stdin)
   akc delete <KEY>            delete a key
-  akc doctor                  diagnose env + ~/.zshrc keychain references
+  akc doctor                  diagnose env + ~/.zshrc refs + unmigrated legacy keys
   akc mcp                     start the MCP server (stdio)
 
 ## MCP setup (Claude Code)

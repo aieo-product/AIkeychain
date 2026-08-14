@@ -54,14 +54,46 @@ Examples:
 USAGE
 }
 
+# security の有界実行 (#171): GUI 所有のレガシーキーの読取は SecurityAgent の
+# 同意プロンプトで無期限にブロックし得る。macOS に timeout(1) は無いため、
+# バックグラウンド起動 + ポーリング + SIGKILL で上限を設ける。
+# 戻り値: security の rc をそのまま。124 = タイムアウト（kill 済み）。
+# 値は stdout へ（一時ファイル経由。プロセス置換だと kill 後の回収が複雑になる）。
+AKC_SECURITY_TIMEOUT_SECS="${AKC_SECURITY_TIMEOUT_SECS:-10}"
+
+security_bounded() {
+    local tmp rc pid waited limit
+    tmp=$(mktemp "${TMPDIR:-/tmp}/akc-sec.XXXXXX") || return 1
+    "$SECURITY_BIN" "$@" >"$tmp" 2>/dev/null &
+    pid=$!
+    waited=0
+    limit=$((AKC_SECURITY_TIMEOUT_SECS * 10))
+    while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$limit" ]; do
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        rm -f "$tmp"
+        return 124
+    fi
+    if wait "$pid"; then rc=0; else rc=$?; fi
+    cat "$tmp"
+    rm -f "$tmp"
+    return "$rc"
+}
+
 resolve_keychain() {
     local key_name="$1"
     local value
     local rc
 
     # managed namespace (#167, v1.9+): akc/GUI の新規保存は全てここ。
-    # 44 (not found) のときだけ次の段へ落ちる（それ以外は権威的失敗 / #150）
-    if value=$("$SECURITY_BIN" find-generic-password -s "com.aieo.aikeychain.managed" -a "$key_name" -w 2>/dev/null); then
+    # 44 (not found) のときだけ次の段へ落ちる（それ以外は権威的失敗 / #150）。
+    # 124 (timeout) は managed では「keychain ロック等」、レガシー段では
+    # 「GUI 所有キーのプロンプト待ち = migration required」(#171)。
+    if value=$(security_bounded find-generic-password -s "com.aieo.aikeychain.managed" -a "$key_name" -w); then
         [ -n "$value" ] && { printf '%s' "$value"; return 0; }
         return 1
     else
@@ -69,7 +101,7 @@ resolve_keychain() {
         [ "$rc" -eq 44 ] || return "$rc"
     fi
 
-    if value=$("$SECURITY_BIN" find-generic-password -s "com.aieo.aikeychain" -a "$key_name" -w 2>/dev/null); then
+    if value=$(security_bounded find-generic-password -s "com.aieo.aikeychain" -a "$key_name" -w); then
         [ -n "$value" ] && { printf '%s' "$value"; return 0; }
         return 1
     else
@@ -79,8 +111,13 @@ resolve_keychain() {
 
     # 手動登録キーのフォールバック。-a はあえて指定しない: acct の値が
     # エントリごとに一定しないため、service 名のみで引く方が安定する (issue #91)
-    value=$("$SECURITY_BIN" find-generic-password -s "$key_name" -w 2>/dev/null) && [ -n "$value" ] && { printf '%s' "$value"; return 0; }
-    return 1
+    if value=$(security_bounded find-generic-password -s "$key_name" -w); then
+        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+        return 1
+    else
+        rc=$?
+        return "$rc"
+    fi
 }
 
 mask_value() {
@@ -154,7 +191,13 @@ cmd_run() {
                     fi
                 else
                     failed_count=$((failed_count + 1))
-                    echo "  ❌ $var_name — keychain://$key_name not found in Keychain" >&2
+                    if [ "$rk_rc" -eq 124 ]; then
+                        # 有界失敗 (#171): プロンプト待ちを kill した。原因はレガシー
+                        # (GUI 所有) キー or ロック中 keychain。移行を明示的に案内する。
+                        echo "  ❌ $var_name — keychain://$key_name: read blocked on a keychain prompt and was killed (timeout). Legacy GUI-owned key? Migrate with: akc set $key_name" >&2
+                    else
+                        echo "  ❌ $var_name — keychain://$key_name not found in Keychain" >&2
+                    fi
                 fi
                 ;;
         esac

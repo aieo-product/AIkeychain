@@ -49,6 +49,25 @@ export const MANUAL_NAME_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 
 export class KeychainError extends Error {}
 
+/**
+ * A legacy (GUI-owned or manual) item blocked the headless read on a keychain
+ * consent prompt and the subprocess was killed (#171). The contract is
+ * "new/migrated (managed) keys succeed silently; legacy keys fail bounded" —
+ * NOT "mixed stores always succeed". The fix is migration, so say so.
+ */
+export class MigrationRequiredError extends KeychainError {
+  constructor(name, store) {
+    super(
+      `"${name}" is stored as a legacy ${store} item that cannot be read headlessly ` +
+        `(the read blocked on a keychain prompt and was killed after ${SUBPROCESS_TIMEOUT_MS / 1000}s). ` +
+        `Migrate it to the managed namespace: re-register with \`akc set ${name}\`, ` +
+        `or use the AI KeyChain app's migration assistant.`
+    );
+    this.keyName = name;
+    this.store = store;
+  }
+}
+
 export function assertMacOS() {
   if (process.platform !== 'darwin') {
     throw new KeychainError(
@@ -59,9 +78,14 @@ export function assertMacOS() {
 
 // Bound every subprocess: a prompt-blocked keychain operation must fail after
 // SUBPROCESS_TIMEOUT_MS instead of hanging `akc run`/`akc set` forever — the
-// whole point of the headless epic (#167). Matches the Swift service's
+// whole point of the headless epic (#167/#171). Matches the Swift service's
 // timeout + SIGKILL semantics.
-export const SUBPROCESS_TIMEOUT_MS = 10_000;
+//
+// AIKEYCHAIN_SUBPROCESS_TIMEOUT_MS is a test-only override (so the hang path
+// can be exercised without waiting 10s). Production always uses the default.
+const timeoutOverride = Number(process.env.AIKEYCHAIN_SUBPROCESS_TIMEOUT_MS);
+export const SUBPROCESS_TIMEOUT_MS =
+  Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : 10_000;
 
 async function security(args) {
   try {
@@ -75,7 +99,10 @@ async function security(args) {
     return {
       ok: false,
       code: err.code ?? null,
-      killed: err.killed ?? false,
+      // execFile sets killed=true when OUR timeout fired and we sent the kill
+      // signal — the marker for "the read blocked (keychain prompt) and was
+      // killed", which callers turn into a bounded, explanatory error (#171).
+      timedOut: err.killed === true,
       stdout: err.stdout ?? '',
       stderr: err.stderr ?? String(err),
     };
@@ -86,7 +113,13 @@ function stripTrailingNewline(s) {
   return s.endsWith('\n') ? s.slice(0, -1) : s;
 }
 
-/** Resolve a key to its secret value, or null if not found. */
+/**
+ * Resolve a key to its secret value, or null if not found.
+ * Throws MigrationRequiredError when a legacy tier blocks on a prompt (#171),
+ * and KeychainError when the managed tier times out (managed items are
+ * security-owned and never prompt — a timeout there means a locked/unavailable
+ * keychain, not an ownership problem).
+ */
 export async function resolveKey(name) {
   // Lookup order: managed (v1.9+, always headless-readable) -> legacy GUI -> manual.
   const managed = await security(['find-generic-password', '-s', MANAGED_SERVICE, '-a', name, '-w']);
@@ -94,12 +127,19 @@ export async function resolveKey(name) {
     const value = stripTrailingNewline(managed.stdout);
     return value || null;
   }
+  if (managed.timedOut) {
+    throw new KeychainError(
+      `reading "${name}" from the managed namespace timed out — the keychain is likely locked ` +
+        'or unavailable. Unlock the login keychain and retry.'
+    );
+  }
   if (managed.code !== 44) return null; // fail closed on unexpected errors (#147 semantics)
   const gui = await security(['find-generic-password', '-s', GUI_SERVICE, '-a', name, '-w']);
   if (gui.ok) {
     const value = stripTrailingNewline(gui.stdout);
     return value || null;
   }
+  if (gui.timedOut) throw new MigrationRequiredError(name, 'GUI-store');
   if (gui.code !== 44) return null;
 
   const manual = await security(['find-generic-password', '-s', name, '-w']);
@@ -107,6 +147,7 @@ export async function resolveKey(name) {
     const value = stripTrailingNewline(manual.stdout);
     if (value) return value;
   }
+  if (manual.timedOut) throw new MigrationRequiredError(name, 'manual');
   return null;
 }
 
@@ -329,6 +370,46 @@ export function findAmbiguousDuplicates(records) {
     .filter(([, accts]) => accts.size > 1)
     .map(([service, accts]) => ({ service, accounts: [...accts].sort() }))
     .sort((a, b) => a.service.localeCompare(b.service));
+}
+
+/**
+ * Detect keys that exist only in legacy namespaces (GUI store / manual scheme)
+ * with no managed copy (#171). These are exactly the keys whose headless reads
+ * can prompt/hang; the doctor surfaces them with migration guidance.
+ * Non-destructive: derived from dump-keychain attributes — no values are read
+ * and no `find -w` probes run (a probe would rain consent dialogs when headed).
+ */
+export function findUnmigratedKeys(records) {
+  const managed = new Set(
+    records.filter((r) => r.service === MANAGED_SERVICE && r.account).map((r) => r.account)
+  );
+  const byName = new Map();
+  for (const { service, account } of records) {
+    let name = null;
+    let store = null;
+    if (service === GUI_SERVICE && account) {
+      name = account;
+      store = 'gui';
+    } else if (service && service !== MANAGED_SERVICE && MANUAL_NAME_PATTERN.test(service)) {
+      name = service;
+      store = 'manual';
+    }
+    if (!name || managed.has(name)) continue;
+    if (!byName.has(name)) byName.set(name, new Set());
+    byName.get(name).add(store);
+  }
+  return [...byName.entries()]
+    .map(([name, stores]) => ({ name, stores: [...stores].sort() }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Convenience wrapper around the live keychain dump (names/accts only). */
+export async function listUnmigratedKeys() {
+  const r = await security(['dump-keychain']);
+  if (!r.ok) {
+    throw new KeychainError(`failed to enumerate keychain items: ${r.stderr.trim()}`);
+  }
+  return findUnmigratedKeys(parseDump(r.stdout));
 }
 
 /** Convenience wrapper around the live keychain dump (names/accts only). */

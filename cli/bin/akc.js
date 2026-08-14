@@ -49,7 +49,7 @@ Commands:
   get      Print the keychain:// reference for a key (--reveal prints the raw value)
   set      Store/update a key (value via hidden prompt, or piped stdin)
   delete   Delete a key from the Keychain
-  doctor   Diagnose env + ~/.zshrc keychain references (values masked)
+  doctor   Diagnose env + ~/.zshrc refs + unmigrated legacy keys (values masked)
   guide    Print the AI KeyChain usage guide
   mcp      Start the MCP server on stdio (for Claude Code / Codex etc.)
 
