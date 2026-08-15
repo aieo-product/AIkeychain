@@ -6,7 +6,16 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { collectRefs, resolveRefs } from './run.js';
-import { listKeys, resolveKey, listAmbiguousDuplicates, KeychainError } from './keychain.js';
+import {
+  resolveKey,
+  dumpRecords,
+  findAmbiguousDuplicates,
+  findUnmigratedKeys,
+  KeychainError,
+  GUI_SERVICE,
+  MANAGED_SERVICE,
+  MANUAL_NAME_PATTERN,
+} from './keychain.js';
 
 /** Extract keychain://KEY and `security find-generic-password -s "KEY"` keys from shell config text. */
 export function scanShellConfig(text) {
@@ -130,12 +139,21 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
   }
   check('platform', true, 'macOS');
 
-  // GUI / manual store reachability (names only)
-  let appKeyCount = null;
+  // Keychain enumeration — ONE bounded dump-keychain call shared by the three
+  // checks below (#185 S7: three independent dumps would stack three timeouts
+  // when the enumeration hangs). Names/accts only; values are never read.
+  let records = null;
   try {
-    const keys = await listKeys();
-    appKeyCount = keys.filter((k) => k.sources.includes('app')).length;
-    check('keychain access', true, `${keys.length} key(s) visible (${appKeyCount} in AI KeyChain store)`);
+    records = await dumpRecords();
+    const names = new Set();
+    for (const { service, account } of records) {
+      if ((service === MANAGED_SERVICE || service === GUI_SERVICE) && account) names.add(account);
+      else if (service && MANUAL_NAME_PATTERN.test(service)) names.add(service);
+    }
+    const managedCount = new Set(
+      records.filter((r) => r.service === MANAGED_SERVICE && r.account).map((r) => r.account)
+    ).size;
+    check('keychain access', true, `${names.size} key(s) visible (${managedCount} in the managed namespace)`);
   } catch (err) {
     if (err instanceof KeychainError) {
       check('keychain access', false, err.message);
@@ -144,9 +162,9 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
     }
   }
 
-  // Ambiguous duplicate entries (issue #91): same service name, multiple accts.
-  try {
-    const dups = await listAmbiguousDuplicates();
+  if (records !== null) {
+    // Ambiguous duplicate entries (issue #91): same service name, multiple accts.
+    const dups = findAmbiguousDuplicates(records);
     if (dups.length === 0) {
       check('duplicate entries', true, 'no ambiguous duplicate keychain entries');
     } else {
@@ -163,9 +181,41 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
             .join('\n')
       );
     }
-  } catch (err) {
-    if (!(err instanceof KeychainError)) throw err;
-    // keychain access already reported above; skip duplicate scan on failure
+
+    // Unmigrated legacy keys (#171): exist only in the GUI store / manual scheme
+    // with no managed copy. Headless reads of GUI-owned ones prompt/hang (bounded
+    // to a timeout since #171). Detection is non-destructive — dump attributes
+    // only, no `find -w` probes (those would rain consent dialogs). Manual-scheme
+    // hits are candidates by name shape — an unrelated app's UPPER_SNAKE service
+    // would match too (#185 D-Q1; same rule as `akc list` since #160).
+    const { keys: unmigrated, unparseable } = findUnmigratedKeys(records);
+    if (unparseable > 0) {
+      report.warnings.push(
+        `${unparseable} AI KeyChain store record(s) could not be parsed from dump-keychain — ` +
+          'migration status may be incomplete'
+      );
+    }
+    if (unmigrated.length === 0) {
+      check(
+        'migration',
+        true,
+        unparseable > 0
+          ? 'no unmigrated legacy keys detected (but see the unparseable-records warning)'
+          : 'no unmigrated legacy keys (all keys have a managed copy)'
+      );
+    } else {
+      check(
+        'migration',
+        false,
+        `${unmigrated.length} key(s) exist only in legacy stores — headless reads may be ` +
+          'bounded-failed (migration required):' + '\n' +
+          unmigrated
+            .map((k) => `       - ${k.name} [${k.stores.join(', ')}] → migrate: akc set ${k.name}`)
+            .join('\n') +
+          '\n       (or use the AI KeyChain app to migrate; legacy copies are cleaned up on delete.' +
+          '\n        [manual] entries are name-shape candidates and may belong to another tool)'
+      );
+    }
   }
 
   // MCP registration path-independence (issue #131): warn on bare `akc` or a
@@ -184,7 +234,11 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
       'env references',
       failed.length === 0,
       `${Object.keys(resolved).length}/${refs.length} resolved` +
-        (failed.length ? ` — missing: ${failed.map((f) => f.keyName).join(', ')}` : '')
+        (failed.length
+          ? ` — failed: ${failed
+              .map((f) => (f.reason ? `${f.keyName} (${f.reason.split('\n')[0]})` : `${f.keyName} (not found)`))
+              .join(', ')}`
+          : '')
     );
   }
 
@@ -204,8 +258,13 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
     } else {
       const missing = [];
       for (const key of keys) {
-        const value = await resolveKey(key);
-        if (!value) missing.push(key);
+        try {
+          const value = await resolveKey(key);
+          if (!value) missing.push(key);
+        } catch (err) {
+          if (!(err instanceof KeychainError)) throw err;
+          missing.push(`${key} (${err.message.split('\n')[0]})`); // 有界失敗の理由を添える（'.'分割はドット入りキー名で壊れる — #185 S6）
+        }
       }
       check(
         'shell config',
