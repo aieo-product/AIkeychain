@@ -59,7 +59,7 @@ test('collectRefs picks only keychain:// values', () => {
 });
 
 test('scanShellConfig finds keychain:// refs and managed export lines (v2.0 #188)', () => {
-  const { keys, warnings } = scanShellConfig(`
+  const { keys } = scanShellConfig(`
 export GITHUB_TOKEN=keychain://GITHUB_TOKEN
 export ANTHROPIC_API_KEY=$(security find-generic-password -s "com.aieo.aikeychain.managed" -a "ANTHROPIC_API_KEY" -w)
 # export COMMENTED=$(security find-generic-password -s "com.aieo.aikeychain.managed" -a "COMMENTED" -w)
@@ -67,7 +67,6 @@ export ANTHROPIC_API_KEY=$(security find-generic-password -s "com.aieo.aikeychai
   // managed export line: real key name is on -a, not the shared service name.
   assert.deepEqual(keys, ['ANTHROPIC_API_KEY', 'GITHUB_TOKEN']);
   assert.ok(!keys.includes('com.aieo.aikeychain.managed'));
-  assert.equal(warnings.length, 0);
 });
 
 test('scanShellConfig ignores non-managed security lookups (#187: managed only)', () => {

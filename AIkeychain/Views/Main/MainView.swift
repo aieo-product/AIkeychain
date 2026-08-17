@@ -6,7 +6,10 @@ struct MainView: View {
     @State private var showingHelp = false
     // v2.0 (#188): アップグレードで取り残された v1 キーがあれば、通常の onboarding より
     // 先に再登録ツアーを出す。新規インストール（旧キー無し）は従来どおり onboarding。
-    @State private var legacyKeys = LegacyKeyScanner.unmigratedKeyNames()
+    // スキャンは onAppear で 1 回だけ（@State のデフォルト式は struct 再構築のたびに
+    // 評価され、全 keychain 列挙をメインスレッドで反復してしまうため空で初期化する）。
+    @State private var legacyKeys: [String] = []
+    @State private var didScanLegacy = false
     @State private var showingUpgradeTour = false
     @State private var showingOnboarding = false
     @State private var showingCleanup = false
@@ -164,12 +167,20 @@ struct MainView: View {
         }
         .frame(minWidth: 750, minHeight: 500)
         .onAppear {
-            // アップグレードで取り残された v1 キーがあればツアーを最優先。
-            // 無ければ（新規インストール等）通常の onboarding を従来条件で。
-            if UpgradeTourView.shouldShow(legacyKeyNames: legacyKeys) {
-                showingUpgradeTour = true
-            } else if !OnboardingViewModel.hasCompleted {
-                showingOnboarding = true
+            // 起動時に 1 回だけ: 取り残された v1 キーをバックグラウンドで無音スキャンし、
+            // あればツアーを最優先。無ければ（新規インストール等）通常の onboarding。
+            guard !didScanLegacy else { return }
+            didScanLegacy = true
+            Task.detached(priority: .utility) {
+                let found = LegacyKeyScanner.unmigratedKeyNames()
+                await MainActor.run {
+                    legacyKeys = found
+                    if UpgradeTourView.shouldShow(legacyKeyNames: found) {
+                        showingUpgradeTour = true
+                    } else if !OnboardingViewModel.hasCompleted {
+                        showingOnboarding = true
+                    }
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showOnboarding)) { _ in

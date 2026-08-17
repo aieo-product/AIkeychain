@@ -56,7 +56,7 @@ Download the latest release from [Releases](https://github.com/aieo-product/AIke
 
 > **Note:** Since v1.8.0, releases are signed with a Developer ID certificate (Team `34J49FY7U7`), notarized by Apple, and stapled, so Gatekeeper accepts the app without any manual `xattr` workaround. If macOS warns that the app is damaged or from an unidentified developer, do **not** bypass Gatekeeper — verify the asset with `spctl --assess --type open --context context:primary-signature -vv AIKeyChain-vX.Y.Z.dmg` (expect `accepted / Notarized Developer ID`) and re-download the latest release.
 >
-> **Upgrading from v1.7.x or earlier:** the signing identity changed from ad-hoc to Developer ID, so macOS asks for Keychain approval once per stored key on first access. Choose **"Always Allow"** — after that, approvals persist across all future updates.
+> **Upgrading from v1.x:** v2.0 stores keys in a new single namespace and no longer reads keys registered by older versions (they are not deleted). On first launch the app shows an upgrade tour listing the keys to re-register — re-add each with the app's **+** or `akc set <KEY>`.
 
 ### Verify your download
 
@@ -116,8 +116,8 @@ Terminal                                                          API Server
 > **Common AI-agent mistake:** looking up a stored key with the bare
 > `/usr/bin/security find-generic-password -s "API_KEY" -w` (service name only, no `-a`)
 > returns "could not be found" (exit 44). That is **not** proof the key is
-> unregistered — it just means the wrong lookup form was used for a GUI-store
-> key. Use `akc get API_KEY` / `akc check API_KEY` (see [CLI & MCP
+> unregistered — it just means the wrong lookup form was used. Use `akc get
+> API_KEY` / `akc check API_KEY` (see [CLI & MCP
 > Server](#cli--mcp-server-npm) below), or the two-attribute `security` form
 > shown above, instead of concluding the key is missing.
 

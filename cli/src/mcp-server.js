@@ -120,8 +120,8 @@ export function buildServer() {
     'doctor',
     {
       description:
-        'Diagnose the local setup: keychain access, keychain:// references in the current ' +
-        'environment, and ~/.zshrc patterns (including the -a "$USER" pitfall). Values are masked.',
+        'Diagnose the local setup: keychain access and keychain:// references in the current ' +
+        'environment and ~/.zshrc. Values are masked.',
       inputSchema: {},
     },
     async () => {

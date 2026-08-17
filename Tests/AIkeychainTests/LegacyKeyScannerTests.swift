@@ -2,7 +2,8 @@ import Testing
 @testable import AIkeychain
 
 /// v1 取り残しキー検出（アップグレードツアー用 / #188）の分類ロジック。
-/// CLI の findUnmigratedKeys（cli/test/unit.test.js）と同一規則であることを保証する。
+/// 対象は旧 GUI store（service=com.aieo.aikeychain）のみ = AI KeyChain が確実に
+/// 所有していた service。managed に無いものを返す。
 @Suite("LegacyKeyScanner Tests")
 struct LegacyKeyScannerTests {
 
@@ -10,21 +11,29 @@ struct LegacyKeyScannerTests {
         LegacyKeyScanner.unmigratedKeyNames(from: records)
     }
 
-    @Test("Reports legacy-only keys and skips those already in managed")
-    func reportsLegacyOnly() {
+    @Test("Reports legacy GUI-store keys not yet in managed, sorted")
+    func reportsLegacyGuiOnly() {
         let names = scan([
             // managed 済み → 対象外（旧 GUI にコピーが残っていても）
             (service: "com.aieo.aikeychain.managed", account: "MIGRATED_KEY"),
             (service: "com.aieo.aikeychain", account: "MIGRATED_KEY"),
-            // 旧 GUI store のみ → 対象
-            (service: "com.aieo.aikeychain", account: "GUI_ONLY_KEY"),
-            // manual スキームのみ → 対象（service 名がキー名）
-            (service: "MANUAL_ONLY_KEY", account: "takehiro"),
-            // env 変数形でない service は対象外（他アプリ）
-            (service: "com.vendor.other", account: "x"),
-            (service: "lowercase_svc", account: "x"),
+            // 旧 GUI store のみ → 対象（ソート確認のため複数）
+            (service: "com.aieo.aikeychain", account: "ZEBRA_KEY"),
+            (service: "com.aieo.aikeychain", account: "ALPHA_KEY"),
         ])
-        #expect(names == ["GUI_ONLY_KEY", "MANUAL_ONLY_KEY"])
+        #expect(names == ["ALPHA_KEY", "ZEBRA_KEY"])
+    }
+
+    @Test("Does NOT report manual-scheme / other-app services (avoids false positives)")
+    func ignoresManualAndOtherApps() {
+        // v1 の manual スキームや他アプリの UPPER_SNAKE service は所有が曖昧なので
+        // 対象にしない（新規インストールでの誤発火を防ぐ / #189 レビュー D-Q）。
+        #expect(scan([
+            (service: "MANUAL_TOKEN", account: "takehiro"),   // manual スキーム
+            (service: "VPN_TOKEN", account: "user"),          // 他アプリ
+            (service: "com.apple.something", account: "x"),
+            (service: "iCloud", account: "x"),
+        ]).isEmpty)
     }
 
     @Test("Returns empty when everything is already managed")
@@ -43,13 +52,12 @@ struct LegacyKeyScannerTests {
         ]).isEmpty)
     }
 
-    @Test("Ignores manual-shape false positives (lowercase / dotted / leading digit)")
-    func ignoresNonEnvVarNames() {
+    @Test("Skips records with nil/empty account and nil service (no blank tour rows)")
+    func skipsUnusableRecords() {
         #expect(scan([
-            (service: "iCloud", account: "x"),
-            (service: "com.apple.something", account: "x"),
-            (service: "9INVALID", account: "x"),
-            (service: "lower_token", account: "x"),
+            (service: "com.aieo.aikeychain", account: nil),
+            (service: "com.aieo.aikeychain", account: ""),
+            (service: nil, account: "ORPHAN"),
         ]).isEmpty)
     }
 

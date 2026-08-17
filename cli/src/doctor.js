@@ -14,7 +14,6 @@ import { resolveKey, dumpRecords, KeychainError, MANAGED_SERVICE } from './keych
  */
 export function scanShellConfig(text) {
   const keys = new Set();
-  const warnings = [];
   for (const m of text.matchAll(/keychain:\/\/([A-Za-z0-9_.-]+)/g)) {
     keys.add(m[1]);
   }
@@ -30,7 +29,7 @@ export function scanShellConfig(text) {
       if (acct) keys.add(acct[1]);
     }
   }
-  return { keys: [...keys].sort(), warnings };
+  return { keys: [...keys].sort() };
 }
 
 // --- MCP registration path-independence (issue #131) ---
@@ -109,7 +108,7 @@ async function checkClaudeMcpRegistration(check, claudeJsonPath) {
 }
 
 export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, claudeJsonPath } = {}) {
-  const report = { platform: process.platform, checks: [], warnings: [], ok: true };
+  const report = { platform: process.platform, checks: [], ok: true };
   const check = (name, ok, detail) => {
     report.checks.push({ name, ok, detail });
     if (!ok) report.ok = false;
@@ -170,8 +169,7 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
     check('shell config', true, `${path} not found (skipped)`);
   }
   if (text !== null) {
-    const { keys, warnings } = scanShellConfig(text);
-    report.warnings.push(...warnings);
+    const { keys } = scanShellConfig(text);
     if (keys.length === 0) {
       check('shell config', true, `no keychain references in ${path}`);
     } else {
@@ -201,9 +199,6 @@ export function formatReport(report) {
   const lines = [];
   for (const { name, ok, detail } of report.checks) {
     lines.push(`  ${ok ? '✅' : '❌'} ${name}: ${detail}`);
-  }
-  for (const warning of report.warnings) {
-    lines.push(`  ⚠️  ${warning}`);
   }
   lines.push('');
   lines.push(report.ok ? 'All checks passed.' : 'Some checks failed. See above.');
