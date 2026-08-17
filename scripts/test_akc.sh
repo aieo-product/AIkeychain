@@ -45,7 +45,7 @@ echo "--- Basic commands ---"
 assert_exit 0 "$AKC" help
 assert_exit 0 "$AKC" version
 assert_exit 0 "$AKC" --help
-assert_contains "akc 1.0.0" "$AKC" version
+assert_contains "akc 2.0.0" "$AKC" version
 
 echo ""
 echo "--- Error handling ---"

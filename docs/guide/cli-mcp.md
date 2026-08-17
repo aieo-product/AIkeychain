@@ -19,7 +19,7 @@ npx aikeychain <command>
 | `akc init` | **マシン全体**のセットアップ: `~/.claude/CLAUDE.md` + `~/.codex/AGENTS.md` にスニペット、Claude MCP を user スコープ登録、`~/.codex/config.toml` に Codex MCP 追記（冪等）。`--print` プレビュー / `--no-register` / `--local`（プロジェクト単位） |
 | `akc run [--dry-run] -- <cmd>` | env の `keychain://` 参照を解決してコマンド実行（値は子プロセスのみに注入） |
 | `akc list` | キー名一覧（値は一切表示しない） |
-| `akc check <KEY>` | キーの存在・格納先（app / manual）確認 |
+| `akc check <KEY>` | キーの存在確認（managed namespace） |
 | `akc get <KEY>` | `keychain://<KEY>` 参照を出力（`--reveal` で生値） |
 | `akc set <KEY>` | キー登録・更新（隠し入力 or stdin。値は `security -i` に stdin + hex で渡すため**どのプロセスの argv にも露出しない**。`-U` 相当の上書きで重複防止） |
 | `akc delete <KEY>` | キー削除 |
@@ -32,9 +32,9 @@ npx aikeychain <command>
 bash 版 `scripts/akc` と互換（issue #91/#167 対応済み）。各段は exit 44
 (not found) のときだけ次へ落ちる（それ以外の失敗は fail-closed / #150）:
 
-1. `service="com.aieo.aikeychain.managed"` + `account=<KEY>`（managed namespace、v1.9+ の保存先）
-2. `service="com.aieo.aikeychain"` + `account=<KEY>`（旧 GUI ストア）
-3. `service=<KEY>` のみ・**account 非指定**（手動登録キー）
+1. `service="com.aieo.aikeychain.managed"` + `account=<KEY>`（managed namespace = 唯一の保管場所 / v2.0）
+
+旧 v1.x の GUI ストア / manual スキームは読まない（旧ユーザーはキーを再登録する）。
 
 ## MCP サーバー
 

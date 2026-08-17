@@ -34,22 +34,18 @@ test('AGENT_INSTRUCTIONS teaches the core rules', () => {
   assert.match(AGENT_INSTRUCTIONS, /usage_guide/);
 });
 
-test('AGENT_INSTRUCTIONS recommends `akc get` and presents both security lookup forms (#137)', () => {
-  // Root cause of #137: the old guidance taught a single `-s ENV_VAR_NAME -w`
-  // form. That form only works for [manual] keys; for AI KeyChain GUI ("app"
-  // store) keys it returns exit 44, so agents falsely concluded the key was
-  // unregistered. `akc get` handles both stores and must be the primary
-  // recommendation; if raw `security` is shown, both forms must be present
-  // and labeled, with a warning that exit 44 on the bare -s form is not proof
-  // of "unregistered".
+test('AGENT_INSTRUCTIONS recommends `akc get` and the managed security form (v2.0 #188)', () => {
+  // v2.0: a single managed namespace. `akc get` is the primary method; the raw
+  // security form uses the managed service, and exit 44 on the bare -s form is
+  // not proof of "unregistered" (#137). Legacy GUI/manual forms must be gone.
   assert.match(AGENT_INSTRUCTIONS, /akc get <KEY>/);
-  assert.match(AGENT_INSTRUCTIONS, /-s "com\.aieo\.aikeychain" -a "<KEY>" -w/); // [app] store form
-  assert.match(AGENT_INSTRUCTIONS, /-s "<KEY>" -w/); // [manual] form
+  assert.match(AGENT_INSTRUCTIONS, /-s "com\.aieo\.aikeychain\.managed" -a "<KEY>" -w/);
   assert.match(AGENT_INSTRUCTIONS, /exit 44/);
   assert.match(AGENT_INSTRUCTIONS, /akc check <KEY>/);
-  assert.match(AGENT_INSTRUCTIONS, /do NOT pin[\s\S]*-a "\$USER"/);
-  // The bare single-service form must no longer be presented as the sole method.
-  assert.doesNotMatch(AGENT_INSTRUCTIONS, /-s "ENV_VAR_NAME" -w/);
+  // legacy forms must NOT be taught anymore
+  assert.doesNotMatch(AGENT_INSTRUCTIONS, /-s "com\.aieo\.aikeychain" -a/); // 旧 GUI store
+  assert.doesNotMatch(AGENT_INSTRUCTIONS, /-s "<KEY>" -w/); // 旧 manual scheme
+  assert.doesNotMatch(AGENT_INSTRUCTIONS, /both stores/);
 });
 
 test('upsertManagedBlock creates a block in empty content', () => {
@@ -266,14 +262,11 @@ test('akc init --print previews machine-wide setup without writing, using absolu
   assert.match(claudeLine, /\bmcp$/);
   assert.ok(r.stdout.includes(`command = "${REAL_LAUNCH.nodeBin}"`));
   assert.ok(r.stdout.includes(`args = ["${REAL_LAUNCH.akcJs}", "mcp"]`));
-  // End-to-end: the rendered template shows BOTH security lookup forms
-  // (store + manual) and recommends `akc get`, so the #137 correction is
-  // guaranteed at the CLI-output level, not just in the AGENT_INSTRUCTIONS
-  // constant.
-  assert.match(r.stdout, /-s "com\.aieo\.aikeychain" -a "<KEY>" -w/); // [app] store form
-  assert.match(r.stdout, /-s "<KEY>" -w/); // [manual] form
+  // End-to-end: the rendered template shows the managed security form and
+  // recommends `akc get`, guaranteed at the CLI-output level (v2.0 #188).
+  assert.match(r.stdout, /-s "com\.aieo\.aikeychain\.managed" -a "<KEY>" -w/);
   assert.match(r.stdout, /akc get <KEY>/);
-  assert.doesNotMatch(r.stdout, /-s "ENV_VAR_NAME" -w/); // old sole-method form is gone
+  assert.doesNotMatch(r.stdout, /-s "com\.aieo\.aikeychain" -a/); // 旧 GUI store は消えた
 });
 
 test('akc init (default machine-wide) writes ~/.claude + ~/.codex under HOME, idempotently', async () => {

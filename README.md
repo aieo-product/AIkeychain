@@ -105,15 +105,15 @@ swift build -c release
 ```
 Terminal                                                          API Server
   │  export API_KEY=$(/usr/bin/security find-generic-password \   │
-  │    -s "com.aieo.aikeychain" -a "API_KEY" -w)                   │
+  │    -s "com.aieo.aikeychain.managed" -a "API_KEY" -w)           │
   │────────────────────── API key in request ────────────────────▶│
 ```
 
-> The generated `.zshrc` line pins **both** the service (`com.aieo.aikeychain`) and
-> the account (the key name), matching exactly how the GUI stores the entry — this
-> avoids the `-a "$USER"` pitfall of stale or duplicate `acct` values.
+> The generated `.zshrc` line pins **both** the service (`com.aieo.aikeychain.managed`)
+> and the account (the key name), matching how every key is stored — this avoids the
+> `-a "$USER"` pitfall of stale or duplicate `acct` values.
 
-> **Common AI-agent mistake:** looking up a GUI-stored key with the bare
+> **Common AI-agent mistake:** looking up a stored key with the bare
 > `/usr/bin/security find-generic-password -s "API_KEY" -w` (service name only, no `-a`)
 > returns "could not be found" (exit 44). That is **not** proof the key is
 > unregistered — it just means the wrong lookup form was used for a GUI-store
@@ -143,9 +143,9 @@ akc init                     # set up AI-agent discovery machine-wide (Claude + 
 # Secret Reference workflow
 export OPENAI_API_KEY=keychain://OPENAI_API_KEY
 akc run -- claude            # real value injected into the child process only
-# Headless contract: managed keys resolve silently; a legacy GUI-owned key
-# never hangs akc — the read times out with an explicit "migration required"
-# error (migrate with `akc set <KEY>`; `akc doctor` lists unmigrated keys)
+# Headless contract: every key is in the managed namespace and resolves silently
+# — no prompts, no hangs. (v2.0 dropped the v1.x GUI store / manual scheme; if you
+# upgraded, re-register your keys with `akc set <KEY>`.)
 
 akc list                     # key names (never prints values)
 akc set GITHUB_TOKEN         # hidden prompt, overwrites in place
@@ -236,12 +236,12 @@ AI 開発では多数の API キーを扱います。多くの開発者はこれ
 | セキュリティレベル | ★☆☆ | ★★☆ | ★★★ |
 | 向いている用途 | シンプルに使いたい | 1Password 方式（`op://` 同等） | セキュリティ重視の環境 |
 
-> **AI エージェントによくある誤り:** GUI ストアに保存したキーを `/usr/bin/security
+> **AI エージェントによくある誤り:** 保存したキーを `/usr/bin/security
 > find-generic-password -s "API_KEY" -w`（サービス名のみ、`-a` なし）で引くと
 > "could not be found"（exit 44）になりますが、これは**「未登録」の証拠ではありません**。
-> GUI ストアのキーには誤ったルックアップ方法を使っているだけです。
+> managed namespace のキーには誤ったルックアップ方法を使っているだけです。
 > `akc get API_KEY` / `akc check API_KEY`（後述の「CLI & MCP サーバー」）か、
-> `/usr/bin/security find-generic-password -s "com.aieo.aikeychain" -a "API_KEY" -w`
+> `/usr/bin/security find-generic-password -s "com.aieo.aikeychain.managed" -a "API_KEY" -w`
 > （service + account の両方を指定する形）を使ってください。
 
 ### インストール
