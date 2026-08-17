@@ -202,16 +202,6 @@ final class KeyEditorViewModel {
         customStore.setIconOverride(envVarName: key.envVarName, icon: nil)
     }
 
-    /// 削除確認に manual スキームの巻き添え警告を出すべきか (#163 レビュー指摘)。
-    /// delete() は manual エントリ（他ツールが作成した可能性がある
-    /// service=<キー名> のアイテム）も併せて削除するため、存在する場合は
-    /// ダイアログで事前に知らせる。
-    var deletesManualEntryToo: Bool {
-        guard let key = editingKey,
-              EnvVarName.isManualSchemeCandidate(key.envVarName) else { return false }
-        return keychainService.manualServices().contains(key.envVarName)
-    }
-
     // MARK: - Private
 
     /// 選択カテゴリをプリセット上書き文字列に変換する。

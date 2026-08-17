@@ -2,6 +2,27 @@
 
 All notable changes to AI KeyChain are documented in this file.
 
+## [2.0.0] - 2026-08-17
+
+完全リニューアル。単一の managed namespace (`com.aieo.aikeychain.managed`) を唯一の保管場所に絞り、v1.x の後方互換（旧 GUI store / manual スキーム）を全撤去した。
+
+### ⚠️ 破壊的変更（BREAKING）
+- **v1.x で登録したキーは読まれなくなります。** GUI アプリまたは `akc set <KEY>` で**キーを登録し直してください**。旧キーは削除されず macOS Keychain に残りますが、AI KeyChain / `akc` からは参照しません。
+- `akc set --manual` / MCP の `manual` フィールドを廃止（すべて managed namespace に書き込む）。
+
+### Changed
+- **単一 namespace 化** — resolver を 3 段ルックアップ（managed → 旧 GUI → manual）から **managed 単一**に簡素化。`security` 所有なのでヘッドレス読取はプロンプト/ハングしない。fail-closed 契約（exit 44 のみ not-found、それ以外は権威的失敗）は維持 (#188)
+- CLI（`cli/`）・bash 版（`scripts/akc`）・GUI（Swift）すべてを managed 単一に統一。GUI のキー発見・`.zshrc` エクスポート・削除も managed のみを対象に
+
+### Removed
+- 旧 GUI store / manual スキームの読み取り fallback・書き込み・削除掃除
+- `akc doctor` の「未移行キー検出」/ 曖昧重複検出（legacy 前提の診断）
+- `findUnmigratedKeys` / `findAmbiguousDuplicates` / `MigrationRequiredError`（CLI）、`manualServices()` / `StorageScheme` / legacy 値読取（Swift）
+- これに伴い legacy 由来の既知バグ（#186 manual 重複削除・#187 doctor の managed 行誤解析）は経路ごと解消
+
+### 注記
+- 移行アシスタント（旧 #172 C5）は、旧バージョンの利用実績がほぼ無いこと（DL 実測）を踏まえ**作らない判断**とした。互換の複雑さ（secret oracle・移行の crash-safe 化など）を丸ごと回避している。
+
 ## [1.8.1] - 2026-08-13
 
 ### Fixed

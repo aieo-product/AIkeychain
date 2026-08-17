@@ -77,41 +77,27 @@ final class KeyListViewModel {
     }
 
     func loadKeys() {
-        // スキーム判定用の集合（値は読まないので承認 UI は出ない）。
-        // 両スキームに存在する場合は 2 段ルックアップの優先順どおり .app 扱い。
-        let guiAccounts = Set(keychainService.allAccounts())
-        let manualOnly = Set(keychainService.manualServices()).subtracting(guiAccounts)
-
-        func storage(for name: String) -> StorageScheme {
-            manualOnly.contains(name) ? .manual : .app
-        }
+        // managed namespace の全アカウント（値は読まないので承認 UI は出ない / #188）。
+        let managedAccounts = Set(keychainService.allAccounts())
 
         // プリセットキー
         var allKeys: [APIKey] = ServiceType.allCases.map { service in
-            APIKey(
-                service: service,
-                isConfigured: keychainService.exists(for: service.envVarName),
-                storage: storage(for: service.envVarName)
-            )
+            APIKey(service: service, isConfigured: keychainService.exists(for: service.envVarName))
         }
 
         // カスタムキー
         for customKey in customStore.keys {
             allKeys.append(APIKey(
                 customKey: customKey,
-                isConfigured: keychainService.exists(for: customKey.envVarName),
-                storage: storage(for: customKey.envVarName)
+                isConfigured: keychainService.exists(for: customKey.envVarName)
             ))
         }
 
-        // CLI (`akc set`) で追加され、プリセットにもカスタム索引にも無い Keychain キーを
+        // CLI (`akc set`) で追加され、プリセットにもカスタム索引にも無い managed キーを
         // 発見して「コマンド追加」カテゴリに出す（種別不明のためまとめて表示 / #153）。
-        // env 変数名の形（EnvVarName.isValid）のみ採用し、内部用アイテムや
-        // シェル export で壊れる名前は除外する。
-        // known は発見ループ中も更新する。guiAccounts は Set なので同名アカウントの
-        // 重複は既に畳まれているが、insert の成否での二重追加防止は維持（Codex #2）。
+        // env 変数名の形（EnvVarName.isValid）のみ採用し、シェル export で壊れる名前は除外。
         var known = Set(allKeys.map(\.envVarName))
-        for account in guiAccounts
+        for account in managedAccounts
         where EnvVarName.isValid(account) && known.insert(account).inserted {
             let discovered = CustomKey(
                 envVarName: account,
@@ -119,24 +105,6 @@ final class KeyListViewModel {
                 categoryId: KeyCategory.cliAdded.stableId
             )
             allKeys.append(APIKey(customKey: discovered, isConfigured: true))
-        }
-
-        // manual スキーム (service=<キー名>) のキーも同様に発見する (#160)。
-        // `security add-generic-password -s KEY_NAME` による手動登録のアイテムが対象。
-        // 値の解決は akc の 3 段ルックアップ (managed → 旧GUI → manual) が引き受ける。
-        // GUI の値読取（SecurityCLIKeychainService）は managed のみを見るため、
-        // manual キーの値はエディタでは空になる — C5 (#172) 移行アシスタントで
-        // managed へ移行するまでの過渡状態（akc run では従来どおり解決可能）。
-        // 名前は厳格形（大文字スネークケース）のみ採用 — 緩くすると iCloud 等の
-        // システムアイテムを誤検出する。
-        for svc in keychainService.manualServices()
-        where EnvVarName.isManualSchemeCandidate(svc) && known.insert(svc).inserted {
-            let discovered = CustomKey(
-                envVarName: svc,
-                displayName: svc,
-                categoryId: KeyCategory.cliAdded.stableId
-            )
-            allKeys.append(APIKey(customKey: discovered, isConfigured: true, storage: .manual))
         }
 
         keys = allKeys

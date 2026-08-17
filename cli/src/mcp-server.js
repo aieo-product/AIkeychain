@@ -72,7 +72,6 @@ export function buildServer() {
       return json({
         reference: `keychain://${name}`,
         exists: exists.exists,
-        stores: { managed: exists.managed, app: exists.app, manual: exists.manual },
         usage: exportable
           ? `export ${name}=keychain://${name} && akc run -- <command>`
           : `env '${name}=keychain://${name}' akc run -- <command>`,
@@ -114,8 +113,8 @@ export function buildServer() {
       if (!confirm) {
         return json({ deleted: [], note: 'confirm=true is required to delete' });
       }
-      const deleted = await deleteKey(name);
-      return json({ deleted, found: deleted.length > 0 });
+      const removed = await deleteKey(name);
+      return json({ deleted: removed, found: removed });
     }
   );
 

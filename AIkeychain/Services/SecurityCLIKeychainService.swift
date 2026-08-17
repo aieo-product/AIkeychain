@@ -14,7 +14,8 @@ import Security
 /// ## managed namespace
 /// 書き込み先 service は `com.aieo.aikeychain.managed` に固定。「managed の下のキー =
 /// security が作成」という不変条件により、所有者判別（マーカー等）そのものを不要にする。
-/// 旧 service（com.aieo.aikeychain / manual スキーム）へは一切書かない。
+/// v2.0 (#188): managed namespace が唯一の保管場所。旧 service（com.aieo.aikeychain /
+/// manual スキーム）は読み書きしない（旧 v1.x ユーザーはキーを再登録する）。
 ///
 /// ## セキュリティ規約（#94/#117 踏襲）
 /// - security は**絶対パス**で起動（PATH ハイジャック防止）
@@ -26,9 +27,6 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     /// managed namespace（#167 オーナー決定）。旧 com.aieo.aikeychain とは別名にすることで
     /// 復元/同期/旧アプリ由来の GUI 所有アイテムが混入しても不変条件が壊れない。
     static let managedService = "com.aieo.aikeychain.managed"
-
-    /// 旧 GUI ストアの service 名（読み取り fallback / 削除時の掃除にのみ使う）。
-    static let legacyGUIService = "com.aieo.aikeychain"
 
     /// 値の最大長。stdin 一括書き込みのパイプバッファ束縛（save() 参照）。
     static let maxValueLength = 8192
@@ -167,51 +165,7 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
 
     func delete(for account: String) throws {
         try ensureKeychainUnlocked()
-        // 掃除の順序が要（#179 二段レビュー B3）: fallback ストア（manual → 旧 GUI）を
-        // **先に**消し、権威コピー（managed）を最後に消す。逆順で legacy 掃除が失敗すると
-        // 「削除成功と報告したのに `akc get` の fallback が古い値を解決し続ける」状態になる。
-        // fallback 掃除が失敗した場合は managed に触らず throw する — キーは無傷のまま
-        // 解決可能で、ユーザーには削除失敗が見える（half-deleted 状態を作らない）。
-
-        if EnvVarName.isManualSchemeCandidate(account) {
-            // manual スキームは厳格名（大文字スネーク）のみ対象（#163 と同じガード —
-            // 他アプリの小文字/ドット付き service 名アイテムを巻き添えにしない）。
-            // `delete-generic-password -s NAME` は最初に一致した 1 件しか消さないため、
-            // 重複エントリ（#100）が残らないよう 44 (not found) まで繰り返す。
-            var remaining = 10 // 暴走防止の上限（実キーチェーンで重複が 10 超は想定外）
-            while remaining > 0 {
-                remaining -= 1
-                switch runSecurity(arguments: ["delete-generic-password", "-s", account],
-                                   stdin: nil, timeout: writeTimeout) {
-                case .exited(0, _, _):
-                    continue
-                case .exited(44, _, _):
-                    remaining = 0
-                case .exited(let status, _, _):
-                    throw KeychainError.unexpectedStatus(OSStatus(status))
-                case .timedOut:
-                    throw KeychainError.interactionRequired
-                case .failedToLaunch:
-                    throw KeychainError.unexpectedStatus(errSecIO)
-                }
-            }
-        }
-
-        // 旧 GUI ストアの同名コピー。旧 GUI 所有はプロンプトになり得るが、削除は
-        // headed 前提の操作なので許容（timeout なら throw し、managed は無傷）。
-        switch runSecurity(arguments: ["delete-generic-password", "-s", Self.legacyGUIService, "-a", account],
-                           stdin: nil, timeout: writeTimeout) {
-        case .exited(0, _, _), .exited(44, _, _):
-            break
-        case .exited(let status, _, _):
-            throw KeychainError.unexpectedStatus(OSStatus(status))
-        case .timedOut:
-            throw KeychainError.interactionRequired
-        case .failedToLaunch:
-            throw KeychainError.unexpectedStatus(errSecIO)
-        }
-
-        // 最後に権威コピー（managed）。44 は冪等成功扱い（従来の delete と同じ意味論）。
+        // v2.0 (#188): managed namespace が唯一の保管場所。44 は冪等成功扱い。
         switch runSecurity(arguments: ["delete-generic-password", "-s", Self.managedService, "-a", account],
                            stdin: nil, timeout: writeTimeout) {
         case .exited(0, _, _), .exited(44, _, _):
@@ -257,34 +211,6 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         }
     }
 
-    func manualServices() -> [String] {
-        // manual スキーム (service=<キー名>) の発見。値は読まない属性列挙なので
-        // 所有者に関係なく無音（旧 KeychainService と同じ実装 / #160）。
-        // #167 では最終的に manual スキーム自体を廃止するが、その置き換えは
-        // C5 (#172) 移行アシスタント / C7 (#174) の担当。C2 で列挙まで止めると
-        // (a) 既存 manual キーが GUI から突然消える、(b) delete() は manual コピーを
-        // 掃除するのに KeyEditorViewModel.deletesManualEntryToo の巻き添え警告が
-        // 恒久 false になり無警告削除が走る（#179 二段レビュー B4）。
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecMatchLimit as String: kSecMatchLimitAll,
-            kSecReturnAttributes as String: true,
-        ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
-            return []
-        }
-        var seen = Set<String>()
-        return items.compactMap { item -> String? in
-            guard let svc = item[kSecAttrService as String] as? String,
-                  svc != Self.managedService,
-                  svc != Self.legacyGUIService,
-                  EnvVarName.isManualSchemeCandidate(svc),
-                  seen.insert(svc).inserted else { return nil }
-            return svc
-        }
-    }
 
     // MARK: - ロック検出 (#170: #169 チェックリストの残)
 

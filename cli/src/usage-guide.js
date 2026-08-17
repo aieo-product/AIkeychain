@@ -15,24 +15,14 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
    - Launch tools through akc:                  akc run -- <command>
    - akc resolves the references from the macOS Keychain and injects the real
      values ONLY into the child process. The parent shell never sees them.
-3. To check/read a key, prefer \`akc get <KEY>\`: it checks both stores and by
-   default prints only the keychain:// reference (never the value). Add
-   --reveal only when you truly need the raw value on stdout; to inject it into
-   a process instead, use \`akc run -- <command>\`. If you must use the raw
-   security CLI directly, use the form that matches where the key lives:
-     [managed] keys (saved by akc or the AI KeyChain GUI, v1.9+):
+3. To check/read a key, prefer \`akc get <KEY>\`: by default it prints only the
+   keychain:// reference (never the value). Add --reveal only when you truly
+   need the raw value on stdout; to inject it into a process instead, use
+   \`akc run -- <command>\`. If you must use the raw security CLI directly:
        /usr/bin/security find-generic-password -s "com.aieo.aikeychain.managed" -a "<KEY>" -w
-     [app] legacy store keys (saved via an older AI KeyChain GUI):
-       /usr/bin/security find-generic-password -s "com.aieo.aikeychain" -a "<KEY>" -w
-     [manual] legacy keys (registered by hand) — service name only, do NOT pin
-     the account with -a "$USER":
-       /usr/bin/security find-generic-password -s "<KEY>" -w
-   ⚠️ The bare -s "<KEY>" form (no -a) returns "could not be found" (exit 44)
-   for [managed]/[app] keys — that is NOT proof the key is unregistered.
-   Confirm with \`akc check <KEY>\` / \`akc get <KEY>\` before concluding a key
-   is missing. (Account attributes on [manual] entries are inconsistent across
-   entries; pinning -a there can return a stale/invalid duplicate — AIkeychain
-   issue #91.)
+   ⚠️ The bare -s "<KEY>" form (no -a) returns "could not be found" (exit 44) —
+   that is NOT proof the key is unregistered. Confirm with \`akc check <KEY>\` /
+   \`akc get <KEY>\`.
 4. To save/update a key, use \`akc set KEY_NAME\`: it writes to the managed
    namespace with -U (no duplicate entries), and the value is read from a
    hidden prompt or stdin and handed to \`security -i\` via stdin as hex — it
@@ -43,27 +33,16 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
 
 ## Headless contract (what akc promises)
 
-- Keys in the **managed namespace** (saved by \`akc set\` or the AI KeyChain app
-  v1.9+) resolve **silently** — no prompts, no hangs, ever.
-- **Legacy keys** (old GUI store / manually registered) may be readable, but a
-  GUI-owned item can block on a keychain consent prompt. akc **never hangs**:
-  the read is killed after a timeout and you get an explicit
-  "migration required" error telling you to re-register the key
-  (\`akc set <KEY>\`) or use the app's migration assistant.
-- The promise is "new/migrated keys succeed silently; legacy keys fail bounded"
-  — NOT "mixed stores always succeed". Run \`akc doctor\` to list unmigrated
-  keys before relying on headless execution.
+Every key lives in the **managed namespace** (\`com.aieo.aikeychain.managed\`,
+created by \`akc set\` or the AI KeyChain app). These resolve **silently** — no
+prompts, no hangs, ever. (v2.0 dropped the old v1.x GUI store / manual scheme;
+if you upgraded from v1.x, re-register your keys with \`akc set <KEY>\`.)
 
 ## Where keys live
 
 | Store | service attribute | account attribute |
 |---|---|---|
-| Managed namespace (v1.9+, all new writes) | com.aieo.aikeychain.managed | <KEY_NAME> |
-| AI KeyChain GUI store (legacy, read-only) | com.aieo.aikeychain | <KEY_NAME> |
-| Manually-registered keys (legacy, read-only) | <KEY_NAME> | (varies — do not rely on it) |
-
-\`akc\` looks up managed first, then the legacy GUI store, then the service-only
-manual lookup — falling through ONLY when a tier reports "not found" (exit 44).
+| Managed namespace (the only store) | com.aieo.aikeychain.managed | <KEY_NAME> |
 
 ## CLI quick reference
 
@@ -73,7 +52,7 @@ manual lookup — falling through ONLY when a tier reports "not found" (exit 44)
   akc check <KEY>             check whether a key exists and where
   akc set <KEY>               store/update a key (value via hidden prompt or stdin)
   akc delete <KEY>            delete a key
-  akc doctor                  diagnose env + ~/.zshrc refs + unmigrated legacy keys
+  akc doctor                  diagnose env + ~/.zshrc keychain references
   akc mcp                     start the MCP server (stdio)
 
 ## MCP setup (Claude Code)

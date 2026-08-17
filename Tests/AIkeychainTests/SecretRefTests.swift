@@ -25,49 +25,19 @@ struct ZshrcExporterSecretRefTests {
         #expect(output.contains("akc run"))
     }
 
-    @Test("Standard format includes service name comments")
-    func standardComments() {
-        let keys = [makeKey(service: .github)]
-        // managed に未移行のキー（旧 GUI store に実在）を模す
-        let output = ZshrcExporter.export(keys: keys, format: .zshrc, managedExists: { _ in false })
-        #expect(output.contains("# [AI KeyChain]"))
-        #expect(output.contains("/usr/bin/security find-generic-password"))
-        // 生成される .zshrc 行が GUI 保存形式 (service=com.aieo.aikeychain, account=KEY) に
-        // 厳密一致していること。acct 不整合による古い/無効な値の誤取得を防ぐ (issue #91)。
-        // シェル側 `||` fallback は使わない — 承認拒否や一時エラーでも別スキームの
-        // 値へ静かに落ちるため (#160 レビュー指摘)。
-        #expect(output.contains(
-            "export GITHUB_TOKEN=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain\" -a \"GITHUB_TOKEN\" -w)"
-        ))
-        #expect(!output.contains("-a \"$USER\""))
-        #expect(!output.contains("||"))
-    }
-
-    @Test("Standard format emits the managed lookup for keys living in the managed namespace")
+    @Test("Standard format emits the managed lookup (v2.0 #188)")
     func standardManagedScheme() {
-        // GUI の新規保存は managed namespace (#167/#169) に行く。旧 service 固定の
-        // export だと保存直後のキーが新しいシェルで空になる（#179 二段レビュー B1）。
+        // v2.0: 全キーは managed namespace。厳密一致の lookup を出す（`||` fallback
+        // や -a "$USER" は使わない）。
         let keys = [makeKey(service: .github)]
-        let output = ZshrcExporter.export(keys: keys, format: .zshrc, managedExists: { _ in true })
+        let output = ZshrcExporter.export(keys: keys, format: .zshrc)
+        #expect(output.contains("# [AI KeyChain]"))
         #expect(output.contains(
             "export GITHUB_TOKEN=$(/usr/bin/security find-generic-password -s \"com.aieo.aikeychain.managed\" -a \"GITHUB_TOKEN\" -w)"
         ))
-        #expect(!output.contains("-s \"com.aieo.aikeychain\" -a \"GITHUB_TOKEN\""))
+        #expect(!output.contains("-s \"com.aieo.aikeychain\" -a \"GITHUB_TOKEN\"")) // legacy service は出さない
+        #expect(!output.contains("-a \"$USER\""))
         #expect(!output.contains("||"))
-    }
-
-    @Test("Standard format emits the manual-scheme lookup for manual-scheme keys")
-    func standardManualScheme() {
-        // manual スキーム (service=KEY_NAME) のキーは、そのスキームに厳密一致する
-        // lookup (-s "KEY_NAME"、-a ピン留めなし) だけを出す (#160)。
-        let custom = CustomKey(envVarName: "MANUAL_ONLY_KEY", displayName: "MANUAL_ONLY_KEY",
-                               categoryId: KeyCategory.cliAdded.stableId)
-        let keys = [APIKey(customKey: custom, isConfigured: true, storage: .manual)]
-        let output = ZshrcExporter.export(keys: keys, format: .zshrc, managedExists: { _ in false })
-        #expect(output.contains(
-            "export MANUAL_ONLY_KEY=$(/usr/bin/security find-generic-password -s \"MANUAL_ONLY_KEY\" -w)"
-        ))
-        #expect(!output.contains("com.aieo.aikeychain\" -a \"MANUAL_ONLY_KEY\""))
     }
 
     @Test("Standard format uses absolute security path")
@@ -76,7 +46,7 @@ struct ZshrcExporterSecretRefTests {
             makeKey(service: .github),
             makeKey(service: .openAI),
         ]
-        let output = ZshrcExporter.export(keys: keys, format: .zshrc, managedExists: { _ in false })
+        let output = ZshrcExporter.export(keys: keys, format: .zshrc)
         let lookupLines = output.split(separator: "\n").filter {
             $0.contains("find-generic-password")
         }

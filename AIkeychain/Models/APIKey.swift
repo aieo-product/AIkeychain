@@ -1,15 +1,6 @@
 import Foundation
 import SwiftUI
 
-/// キー値が Keychain のどちらのスキームに保存されているか (#160)。
-/// .app    = service=com.aieo.aikeychain, account=<キー名>（GUI / akc set 新規）
-/// .manual = service=<キー名>（`security add-generic-password -s KEY` の手動登録）
-/// 両スキームに存在する場合は 2 段ルックアップの優先順に従い .app とする。
-enum StorageScheme {
-    case app
-    case manual
-}
-
 struct APIKey: Identifiable, Equatable, Hashable {
     static func == (lhs: APIKey, rhs: APIKey) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -19,28 +10,23 @@ struct APIKey: Identifiable, Equatable, Hashable {
     let customKey: CustomKey?        // カスタムの場合
     var envVarName: String
     var isConfigured: Bool
-    var storage: StorageScheme
 
     /// プリセットキー
-    init(id: UUID = UUID(), service: ServiceType, envVarName: String? = nil, isConfigured: Bool = false,
-         storage: StorageScheme = .app) {
+    init(id: UUID = UUID(), service: ServiceType, envVarName: String? = nil, isConfigured: Bool = false) {
         self.id = id
         self.service = service
         self.customKey = nil
         self.envVarName = envVarName ?? service.envVarName
         self.isConfigured = isConfigured
-        self.storage = storage
     }
 
     /// カスタムキー
-    init(id: UUID = UUID(), customKey: CustomKey, isConfigured: Bool = false,
-         storage: StorageScheme = .app) {
+    init(id: UUID = UUID(), customKey: CustomKey, isConfigured: Bool = false) {
         self.id = id
         self.service = nil
         self.customKey = customKey
         self.envVarName = customKey.envVarName
         self.isConfigured = isConfigured
-        self.storage = storage
     }
 
     var isCustom: Bool { customKey != nil }

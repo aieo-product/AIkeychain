@@ -229,31 +229,24 @@ struct SecurityCLIKeychainServiceTests {
         #expect(callLog(stateDir) == ["find com.aieo.aikeychain.managed|SOME_KEY"])
     }
 
-    @Test("Delete cleans legacy copies first (manual loop -> legacy GUI -> managed)")
-    func deleteCleansLegacyCopies() throws {
+    @Test("Delete only ever touches the managed namespace (v2.0 #188)")
+    func deleteManagedOnly() throws {
         let (service, stateDir) = try makeStub()
         try service.save(value: "v1", for: "CLEAN_KEY")
+        // 旧 namespace にゴミが残っていても触れない（v2.0 は legacy を読み書きしない）
         try seed(stateDir, service: "com.aieo.aikeychain", name: "CLEAN_KEY")
-        try seed(stateDir, service: "CLEAN_KEY", name: "CLEAN_KEY") // manual スキーム
 
         try service.delete(for: "CLEAN_KEY")
 
-        // 全 namespace から消えている（残すと akc の legacy fallback が復活させる / B3）
+        // managed の本体だけが消える
         #expect(!FileManager.default.fileExists(
             atPath: statePath(stateDir, service: SecurityCLIKeychainService.managedService, name: "CLEAN_KEY").path))
-        #expect(!FileManager.default.fileExists(
+        // legacy は触られない
+        #expect(FileManager.default.fileExists(
             atPath: statePath(stateDir, service: "com.aieo.aikeychain", name: "CLEAN_KEY").path))
-        #expect(!FileManager.default.fileExists(
-            atPath: statePath(stateDir, service: "CLEAN_KEY", name: "CLEAN_KEY").path))
 
-        // 順序: manual（44 まで反復）→ 旧 GUI → managed
         let deletes = callLog(stateDir).filter { $0.hasPrefix("delete ") }
-        #expect(deletes == [
-            "delete CLEAN_KEY|CLEAN_KEY",            // 1件目を削除 (exit 0)
-            "delete CLEAN_KEY|CLEAN_KEY",            // 重複掃除の反復 → 44 で終端 (#100)
-            "delete com.aieo.aikeychain|CLEAN_KEY",
-            "delete com.aieo.aikeychain.managed|CLEAN_KEY",
-        ])
+        #expect(deletes == ["delete com.aieo.aikeychain.managed|CLEAN_KEY"])
     }
 
     @Test("A locked keychain fails fast without spawning and without quarantining (#170)")
@@ -286,19 +279,10 @@ struct SecurityCLIKeychainServiceTests {
         #expect(try service.retrieveNoninteractive(for: "LOCK_KEY") == "v2")
     }
 
-    @Test("Delete propagates a legacy cleanup failure and leaves the managed copy intact")
-    func deleteLegacyFailureIsPropagated() throws {
-        let (service, stateDir) = try makeStub()
-        try service.save(value: "v1", for: "LEGACY_FAIL_KEY")
-
-        // 旧 GUI store の削除が拒否される（stub: exit 51）→ throw し、
-        // 権威コピー（managed）には触れない — 「削除成功と報告して fallback から
-        // 復活」という half-deleted 状態を作らない（#179 二段レビュー B3）
-        #expect(throws: KeychainError.self) {
-            try service.delete(for: "LEGACY_FAIL_KEY")
-        }
-        #expect(try service.retrieve(for: "LEGACY_FAIL_KEY") == "v1")
-        let deletes = callLog(stateDir).filter { $0.hasPrefix("delete ") }
-        #expect(!deletes.contains("delete com.aieo.aikeychain.managed|LEGACY_FAIL_KEY"))
+    @Test("Delete of a missing key is idempotent (rc=44)")
+    func deleteIdempotentMissing() throws {
+        let (service, _) = try makeStub()
+        // 保存していないキーの削除は throw しない（44 冪等）
+        try service.delete(for: "NEVER_SAVED_KEY")
     }
 }
