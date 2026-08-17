@@ -4,7 +4,11 @@ struct MainView: View {
     @State private var viewModel = KeyListViewModel()
     @State private var showingShare = false
     @State private var showingHelp = false
-    @State private var showingOnboarding = !OnboardingViewModel.hasCompleted
+    // v2.0 (#188): アップグレードで取り残された v1 キーがあれば、通常の onboarding より
+    // 先に再登録ツアーを出す。新規インストール（旧キー無し）は従来どおり onboarding。
+    @State private var legacyKeys = LegacyKeyScanner.unmigratedKeyNames()
+    @State private var showingUpgradeTour = false
+    @State private var showingOnboarding = false
     @State private var showingCleanup = false
     @State private var showingModeSelect = false
     @State private var showingRecovery = false
@@ -146,6 +150,9 @@ struct MainView: View {
         .sheet(isPresented: $showingOnboarding) {
             OnboardingView()
         }
+        .sheet(isPresented: $showingUpgradeTour) {
+            UpgradeTourView(legacyKeyNames: legacyKeys)
+        }
         .sheet(isPresented: $showingCleanup) {
             CleanupView()
         }
@@ -156,6 +163,15 @@ struct MainView: View {
             RecoveryView()
         }
         .frame(minWidth: 750, minHeight: 500)
+        .onAppear {
+            // アップグレードで取り残された v1 キーがあればツアーを最優先。
+            // 無ければ（新規インストール等）通常の onboarding を従来条件で。
+            if UpgradeTourView.shouldShow(legacyKeyNames: legacyKeys) {
+                showingUpgradeTour = true
+            } else if !OnboardingViewModel.hasCompleted {
+                showingOnboarding = true
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .showOnboarding)) { _ in
             showingOnboarding = true
         }

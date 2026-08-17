@@ -10,6 +10,9 @@ All notable changes to AI KeyChain are documented in this file.
 - **v1.x で登録したキーは読まれなくなります。** GUI アプリまたは `akc set <KEY>` で**キーを登録し直してください**。旧キーは削除されず macOS Keychain に残りますが、AI KeyChain / `akc` からは参照しません。
 - `akc set --manual` / MCP の `manual` フィールドを廃止（すべて managed namespace に書き込む）。
 
+### Added
+- **アップグレード・ツアー** — v1.x から更新したユーザーの初回起動時、旧方式（旧 GUI store / manual スキーム）にしか無いキーを**読み取り専用・無音で検出**し、「再登録が必要なキー一覧」と v2.0 の使い方を案内するツアーを表示。新規インストール（旧キー無し）は従来の onboarding のまま。検出は `dump-keychain` 相当の属性照会のみで値は読まない（プロンプトゼロ）(#188)
+
 ### Changed
 - **単一 namespace 化** — resolver を 3 段ルックアップ（managed → 旧 GUI → manual）から **managed 単一**に簡素化。`security` 所有なのでヘッドレス読取はプロンプト/ハングしない。fail-closed 契約（exit 44 のみ not-found、それ以外は権威的失敗）は維持 (#188)
 - CLI（`cli/`）・bash 版（`scripts/akc`）・GUI（Swift）すべてを managed 単一に統一。GUI のキー発見・`.zshrc` エクスポート・削除も managed のみを対象に
