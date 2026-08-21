@@ -6,7 +6,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, writeFile, chmod, access } from 'node:fs/promises';
+import { mkdtemp, writeFile, chmod, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -323,4 +323,42 @@ test('check shows the managed store and hints the managed `security` form', asyn
   assert.match(r.stdout, /managed store/);
   assert.doesNotMatch(r.stdout, /exists \(\)/); // 空括弧にならない (#179 S2)
   assert.match(r.stdout, /-s "com\.aieo\.aikeychain\.managed" -a "NEW_KEY" -w/);
+});
+
+// #191: values longer than the `security -i` line budget must be rejected up
+// front (never reach security, never echo the value/hex in the error), and a
+// value exactly at the budget must still round-trip.
+test('set rejects a value over the security -i line budget before touching security (#191)', async () => {
+  const { maxValueLength } = await import('../src/keychain.js');
+  const max = maxValueLength('NEW_KEY');
+  const r = await pExecFile(
+    'bash',
+    ['-c', `head -c ${max + 1} /dev/zero | tr '\\0' a | ${process.execPath} ${AKC} set NEW_KEY`],
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
+  ).then(
+    () => ({ code: 0, stderr: '' }),
+    (e) => ({ code: e.code ?? 1, stderr: e.stderr ?? '' })
+  );
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, new RegExp(`${max}-character limit`));
+  assert.doesNotMatch(r.stderr, /aaaa|6161/);
+  const state = await readFile(join(stubDir, 'state-NEW_KEY'), 'utf8').catch(() => '');
+  assert.notEqual(state.length, max + 1);
+});
+
+test('set accepts a value exactly at the line budget and round-trips it (#191)', async () => {
+  const { maxValueLength } = await import('../src/keychain.js');
+  const max = maxValueLength('NEW_KEY');
+  const r = await pExecFile(
+    'bash',
+    ['-c', `head -c ${max} /dev/zero | tr '\\0' a | ${process.execPath} ${AKC} set NEW_KEY`],
+    { env: { PATH: process.env.PATH, AIKEYCHAIN_SECURITY_BIN: join(stubDir, 'security') } }
+  ).then(
+    (r) => ({ code: 0, ...r }),
+    (e) => ({ code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' })
+  );
+  assert.equal(r.code, 0, r.stderr);
+  const back = await runAkc(['get', 'NEW_KEY', '--reveal']);
+  assert.equal(back.code, 0);
+  assert.equal(back.stdout.trim(), 'a'.repeat(max));
 });

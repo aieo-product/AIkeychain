@@ -134,9 +134,9 @@ struct SecurityCLIKeychainServiceTests {
         #expect(throws: KeychainError.self) {
             try service.save(value: "v", for: "9INVALID")
         }
-        // 長さ上限（stdin パイプバッファ束縛 / #179 S4）
+        // 長さ上限（`security -i` の 1 行 4095 文字 / #191）
         #expect(throws: KeychainError.self) {
-            try service.save(value: String(repeating: "a", count: SecurityCLIKeychainService.maxValueLength + 1),
+            try service.save(value: String(repeating: "a", count: SecurityCLIKeychainService.maxValueLength(forAccount: "TOO_LONG") + 1),
                              for: "TOO_LONG")
         }
         // security は一度も呼ばれていない
@@ -210,6 +210,32 @@ struct SecurityCLIKeychainServiceTests {
         let (service, _) = try makeStub()
         try service.save(value: "4142434445464748", for: "HEXLIKE_KEY")
         #expect(try service.retrieve(for: "HEXLIKE_KEY") == "4142434445464748")
+    }
+
+    @Test("Value length budget follows the security -i 4095-char line (#191)")
+    func valueLengthBudget() throws {
+        // 1 行 = prefix + hex(値) が 4095 文字以内（4096 バイトバッファ − 終端）。prefix は 66 + キー名長。
+        let prefix = "add-generic-password -U -s \"\(SecurityCLIKeychainService.managedService)\" -a \"TOO_LONG\" -X "
+        #expect(prefix.count == 66 + "TOO_LONG".count)
+        let max = SecurityCLIKeychainService.maxValueLength(forAccount: "TOO_LONG")
+        #expect(max == (SecurityCLIKeychainService.securityLineMax - prefix.count) / 2)
+        #expect(max == 2010) // (4095 - 74) / 2
+        #expect(SecurityCLIKeychainService.maxValueLength(forAccount: String(repeating: "X", count: 200)) < max)
+        // 上限ちょうどは security まで届いて往復する
+        let (service, _) = try makeStub()
+        try service.save(value: String(repeating: "a", count: max), for: "TOO_LONG")
+        #expect(try service.retrieve(for: "TOO_LONG")?.count == max)
+    }
+
+    @Test("Bare hex runs in security stderr are redacted, not only -X <hex> (#191)")
+    func redactBareHex() {
+        let leak = "security: unknown command \"" + String(repeating: "61", count: 1000) + "\"\n"
+            + String(repeating: "61", count: 20) + ": returned 1"
+        let out = SecurityCLIKeychainService.redactSecrets(leak)
+        #expect(out.range(of: "[0-9a-fA-F]{8}", options: .regularExpression) == nil)
+        #expect(out.contains("<redacted>"))
+        #expect(SecurityCLIKeychainService.redactSecrets("x -X 6161616161 y") == "x -X <redacted> y")
+        #expect(SecurityCLIKeychainService.redactSecrets("exit 44: not found") == "exit 44: not found")
     }
 
     @Test("Non-ASCII values are rejected until the C7 encoding convention lands")

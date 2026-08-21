@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDump, maskValue, MANAGED_SERVICE } from '../src/keychain.js';
+import { parseDump, maskValue, MANAGED_SERVICE, maxValueLength, redactSecrets, SECURITY_I_LINE_MAX } from '../src/keychain.js';
 import { collectRefs } from '../src/run.js';
 import {
   scanShellConfig,
@@ -135,4 +135,30 @@ test('classifyMcpCommand passes an absolute path that exists (PATH-independent)'
 test('classifyMcpCommand returns null when there is nothing to check', () => {
   assert.equal(classifyMcpCommand(undefined), null);
   assert.equal(classifyMcpCommand(''), null);
+});
+
+// #191: `security -i` reads one command per line with a 4096-byte line buffer (4095 usable chars).
+// The value is hex-encoded (2 chars per byte), so the usable value length is
+// (4095 - prefix) / 2 where prefix = `add-generic-password -U -s "<managed>" -a "<KEY>" -X `.
+test('maxValueLength follows the security -i 4095-char line budget (#191)', () => {
+  assert.equal(SECURITY_I_LINE_MAX, 4095); // 4096-byte buffer incl. terminator
+  const name = 'TEST_AKC_INT_LEN';
+  const prefix = `add-generic-password -U -s "${MANAGED_SERVICE}" -a "${name}" -X `;
+  assert.equal(prefix.length, 66 + name.length);
+  assert.equal(maxValueLength(name), Math.floor((SECURITY_I_LINE_MAX - prefix.length) / 2));
+  assert.equal(maxValueLength(name), 2006); // measured on the real binary: 2006 ok / 2007 fails
+  // longer key names shrink the budget; 8192 was never reachable
+  assert.ok(maxValueLength('X'.repeat(200)) < maxValueLength('X'));
+  assert.ok(maxValueLength('A') < 2100);
+});
+
+test('redactSecrets redacts bare hex runs, not only "-X <hex>" (#191)', () => {
+  assert.equal(redactSecrets('cmd -X 6161616161 failed'), 'cmd -X <redacted> failed');
+  // `security -i` echoes overflowed line chunks as `unknown command "<hex>"` — no -X prefix
+  const leak = `security: unknown command "${'61'.repeat(1000)}"\n${'61'.repeat(20)}: returned 1`;
+  const out = redactSecrets(leak);
+  assert.doesNotMatch(out, /[0-9a-fA-F]{8}/);
+  assert.match(out, /<redacted>/);
+  // short numeric diagnostics survive
+  assert.equal(redactSecrets('exit 44: item not found'), 'exit 44: item not found');
 });

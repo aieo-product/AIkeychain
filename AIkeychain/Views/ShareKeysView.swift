@@ -539,7 +539,7 @@ private struct ReceiveTab: View {
     @State private var overwriteConfirmed = false          // 既存上書きの明示承諾
     @State private var imported = false
     @State private var importCount = 0
-    /// 受信キーのうち値形式が未対応（非 ASCII / 複数行 / 8KB 超）で保存できなかった件数。
+    /// 受信キーのうち値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超）で保存できなかった件数。
     @State private var unsupportedCount = 0
     /// 値形式以外の理由（keychain ロック等）で保存できなかった件数。
     @State private var failedCount = 0
@@ -864,10 +864,10 @@ private struct ReceiveTab: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
             if unsupportedCount > 0 {
-                // 値形式が未対応（非 ASCII / 複数行 / 8KB 超）。C7 (#174) までの制約
+                // 値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超）。C7 (#174) までの制約
                 Label(L10n.s(
-                    ja: "\(unsupportedCount) 件は未対応の値形式（非 ASCII / 複数行 / 8KB 超）のため保存されませんでした。",
-                    en: "\(unsupportedCount) key(s) were not saved because the value format is not supported yet (non-ASCII / multi-line / over 8KB)."),
+                    ja: "\(unsupportedCount) 件は未対応の値形式（非 ASCII / 複数行 / 約 2,000 文字超）のため保存されませんでした。",
+                    en: "\(unsupportedCount) key(s) were not saved because the value format is not supported yet (non-ASCII / multi-line / over ~2,000 chars)."),
                       systemImage: "textformat.abc.dottedunderline")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
@@ -959,7 +959,7 @@ private struct ReceiveTab: View {
                 try SecurityCLIKeychainService.shared.save(value: entry.value, for: entry.envVarName)
                 count += 1
             } catch KeychainError.invalidData {
-                // 値形式が未対応（非 ASCII / 複数行 / 8KB 超）。share フォーマット自体は
+                // 値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超）。share フォーマット自体は
                 // UTF-8 を運べるため、受信側の制約として理由付きで surface する
                 // （#179 二段レビュー N1/D-Q1。C7 #174 のエンコーディング規約で解消予定）。
                 unsupported.append(entry.envVarName)

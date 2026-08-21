@@ -132,9 +132,16 @@ export async function keyExists(name) {
   );
 }
 
-/** Redact hex-encoded secret material from text destined for errors/logs. */
+/**
+ * Redact hex-encoded secret material from text destined for errors/logs.
+ * Not only `-X <hex>`: when a line overflows the `security -i` buffer the tool
+ * echoes the overflow chunks as `unknown command "<hex>"` with no -X prefix
+ * (#191), so any hex run long enough to be secret material is redacted too.
+ */
 export function redactSecrets(text) {
-  return text.replace(/-X\s+[0-9a-fA-F]+/g, '-X <redacted>');
+  return text
+    .replace(/-X\s+[0-9a-fA-F]+/g, '-X <redacted>')
+    .replace(/[0-9a-fA-F]{8,}/g, '<redacted>');
 }
 
 /** Run a command through `security -i`, which reads commands from stdin. */
@@ -164,10 +171,28 @@ function securityInteractive(commandLine) {
   });
 }
 
-// Maximum value length, matching the Swift service (SecurityCLIKeychainService
-// .maxValueLength): keeps the whole `security -i` command within the 64KB pipe
-// buffer after hex expansion, so the stdin write can never deadlock.
-export const MAX_VALUE_LENGTH = 8192;
+// `security -i` reads one command per line through a 4096-byte line buffer
+// (4095 usable characters + terminator); anything longer is split and the tail
+// is parsed as further commands (#191 — measured on the real binary: a line of
+// 4094 chars writes, 4096 chars fails with `unknown command "<tail>"`). The
+// write command is
+//   add-generic-password -U -s "<managed>" -a "<KEY>" -X <hex>
+// whose prefix is 66 chars + the key name, and the hex value takes 2 chars per
+// byte, so the usable value length is (4095 - 66 - name.length) / 2 ≈ 2000 for
+// typical key names. Matches the Swift service (SecurityCLIKeychainService
+// .maxValueLength(forAccount:)). Hex stays on purpose: it is the structural
+// guard against `security -i` tokenizer injection, not an encoding detail —
+// longer values are out of scope rather than switching to quoted -w.
+export const SECURITY_I_LINE_MAX = 4095;
+
+function writeCommandPrefix(name) {
+  return `add-generic-password -U -s "${MANAGED_SERVICE}" -a "${name}" -X `;
+}
+
+/** Longest value (in characters) that `setKey(name, …)` can store. */
+export function maxValueLength(name) {
+  return Math.max(0, Math.floor((SECURITY_I_LINE_MAX - writeCommandPrefix(name).length) / 2));
+}
 
 /**
  * Store a key in the managed namespace (#167) — the single write target for
@@ -194,17 +219,20 @@ export async function setKey(name, value) {
       'value must be printable ASCII (no newlines, tabs, control or non-ASCII characters) — non-ASCII/multi-line values are not supported yet'
     );
   }
-  if (value.length > MAX_VALUE_LENGTH) {
-    throw new KeychainError(`value exceeds the ${MAX_VALUE_LENGTH}-character limit`);
+  const limit = maxValueLength(name);
+  if (value.length > limit) {
+    throw new KeychainError(
+      `value exceeds the ${limit}-character limit for "${name}" ` +
+        `(security -i line budget: (${SECURITY_I_LINE_MAX} - 66 - key name length) / 2; ` +
+        'longer values are not supported)'
+    );
   }
   // All writes target the managed namespace (#167). The legacy manual scheme
   // is no longer a write target (the old --manual path could create
   // acct-mismatched duplicates — the exact #91 failure mode).
   const service = MANAGED_SERVICE;
   const hex = Buffer.from(value, 'utf8').toString('hex');
-  const r = await securityInteractive(
-    `add-generic-password -U -s "${service}" -a "${name}" -X ${hex}`
-  );
+  const r = await securityInteractive(`${writeCommandPrefix(name)}${hex}`);
   if (!r.ok) {
     // `security -i` stderr could in principle echo the command line (which
     // carries the hex value) — redact before it reaches CLI stderr / MCP.

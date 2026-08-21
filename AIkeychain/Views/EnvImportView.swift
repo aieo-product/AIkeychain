@@ -421,8 +421,8 @@ struct EnvImportView: View {
                     if !result.unsupported.isEmpty {
                         ResultRow(icon: "textformat.abc.dottedunderline", color: .orange,
                                   text: L10n.s(
-                                    ja: "\(result.unsupported.count) 件は未対応の値形式（非 ASCII / 複数行 / 8KB 超）のため保存されませんでした: \(result.unsupported.joined(separator: ", "))",
-                                    en: "\(result.unsupported.count) key(s) were not saved because the value format is not supported yet (non-ASCII / multi-line / over 8KB): \(result.unsupported.joined(separator: ", "))"))
+                                    ja: "\(result.unsupported.count) 件は未対応の値形式（非 ASCII / 複数行 / 約 2,000 文字超）のため保存されませんでした: \(result.unsupported.joined(separator: ", "))",
+                                    en: "\(result.unsupported.count) key(s) were not saved because the value format is not supported yet (non-ASCII / multi-line / over ~2,000 chars): \(result.unsupported.joined(separator: ", "))"))
                     }
                 }
                 .padding(.horizontal, 40)
@@ -464,7 +464,7 @@ struct EnvImportView: View {
                 saved += 1
                 savedKeys.append(account)
             } catch KeychainError.invalidData {
-                // 値形式が未対応（非 ASCII / 複数行 / 8KB 超 — .env に多い複数行 PEM 鍵
+                // 値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超 — .env に多い複数行 PEM 鍵
                 // 等）。一般の failed に混ぜず理由付きで別掲する（#179 二段レビュー N1）。
                 // ※ 旧 KeychainService の cliManaged fail-closed (#177) は、書き込みが
                 // security subprocess 単一経路になったことで構造的に不要になった。
@@ -608,7 +608,7 @@ private struct ImportResult {
     let skipped: Int
     let failed: Int
     let removedFromZshrc: Int
-    /// 値の形式が未対応（非 ASCII / 複数行 / 8KB 超 — 複数行 PEM 鍵など）で保存
+    /// 値の形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超 — 複数行 PEM 鍵など）で保存
     /// できなかったキー。C7 (#174) のエンコーディング規約が入るまでの制約。
     /// 一般の failed に混ぜると理由が見えないため別掲する（#179 二段レビュー N1/D-Q1）。
     var unsupported: [String] = []
