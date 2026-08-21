@@ -273,7 +273,7 @@ private struct SendTab: View {
                     Text(L10n.s(ja: "Keychain からキーを読み込みます", en: "Load keys from Keychain"))
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
-                    Text(L10n.s(ja: "Keychain の承認ダイアログがキーごとに表示されることがあります。\n「常に許可」を選んだキーは次回以降ダイアログが出ません。", en: "A Keychain authorization dialog may appear for each key.\nKeys you \"Always Allow\" won't ask again next time."))
+                    Text(L10n.s(ja: "managed namespace のキーは承認ダイアログ無しで読み込まれます。", en: "Keys in the managed namespace load without an authorization dialog."))
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)

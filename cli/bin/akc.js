@@ -12,7 +12,6 @@ import {
   deleteKey,
   maskValue,
   KeychainError,
-  GUI_SERVICE,
   MANAGED_SERVICE,
 } from '../src/keychain.js';
 import { cmdRun } from '../src/run.js';
@@ -45,11 +44,11 @@ Commands:
            --print previews, --no-register skips MCP registration.
   run      Resolve keychain:// env references and execute a command
   list     List known key names (never prints values)
-  check    Check whether a key exists and in which store
+  check    Check whether a key exists in the managed namespace
   get      Print the keychain:// reference for a key (--reveal prints the raw value)
   set      Store/update a key (value via hidden prompt, or piped stdin)
   delete   Delete a key from the Keychain
-  doctor   Diagnose env + ~/.zshrc refs + unmigrated legacy keys (values masked)
+  doctor   Diagnose env + ~/.zshrc keychain references (values masked)
   guide    Print the AI KeyChain usage guide
   mcp      Start the MCP server on stdio (for Claude Code / Codex etc.)
 
@@ -114,8 +113,8 @@ async function cmdList() {
     process.stdout.write('No keys found.\n');
     return 0;
   }
-  for (const { name, sources } of keys) {
-    process.stdout.write(`  ${name}  [${sources.join(', ')}]\n`);
+  for (const { name } of keys) {
+    process.stdout.write(`  ${name}\n`);
   }
   return 0;
 }
@@ -123,22 +122,12 @@ async function cmdList() {
 async function cmdCheck(name) {
   const result = await keyExists(name);
   if (result.exists) {
-    const stores = [
-      result.managed && 'managed store',
-      result.app && 'AI KeyChain store (legacy)',
-      result.manual && 'manual entry',
-    ]
-      .filter(Boolean)
-      .join(', ');
-    process.stdout.write(`✅ ${name} exists (${stores})\n`);
-    if ((result.managed || result.app) && !result.manual) {
-      // Namespaced key: the bare `security -s <KEY> -w` form (no -a) returns
-      // exit 44 for these — a false "not registered" signal (issue #137).
-      const svc = result.managed ? MANAGED_SERVICE : GUI_SERVICE;
-      process.stdout.write(
-        `   ↳ security CLI: use -s "${svc}" -a "${name}" -w  (or: akc get ${name})\n`
-      );
-    }
+    process.stdout.write(`✅ ${name} exists (managed store)\n`);
+    // The bare `security -s <KEY> -w` form (no -a) returns exit 44 for managed
+    // items — a false "not registered" signal (issue #137). Show the right form.
+    process.stdout.write(
+      `   ↳ security CLI: use -s "${MANAGED_SERVICE}" -a "${name}" -w  (or: akc get ${name})\n`
+    );
     return 0;
   }
   process.stdout.write(`❌ ${name} not found in Keychain\n`);
@@ -181,12 +170,12 @@ async function cmdSet(name) {
 }
 
 async function cmdDelete(name) {
-  const deleted = await deleteKey(name);
-  if (deleted.length === 0) {
+  const removed = await deleteKey(name);
+  if (!removed) {
     process.stderr.write(`akc: ${name} not found in Keychain\n`);
     return 1;
   }
-  process.stdout.write(`✅ Deleted ${name} (${deleted.join(', ')})\n`);
+  process.stdout.write(`✅ Deleted ${name}\n`);
   return 0;
 }
 

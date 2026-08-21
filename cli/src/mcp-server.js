@@ -39,8 +39,7 @@ export function buildServer() {
     'list_keys',
     {
       description:
-        'List key names stored in the macOS Keychain (AI KeyChain GUI store + manually-registered ' +
-        'env-var-style keys). Returns names and where they live — never secret values.',
+        'List key names stored in the AI KeyChain managed namespace. Returns names only — never secret values.',
       inputSchema: {},
     },
     async () => json(await listKeys())
@@ -50,8 +49,7 @@ export function buildServer() {
     'check_key',
     {
       description:
-        'Check whether a key exists in the Keychain and in which store (app = AI KeyChain GUI, ' +
-        'manual = service-name entry). Does not read the secret value.',
+        'Check whether a key exists in the AI KeyChain managed namespace. Does not read the secret value.',
       inputSchema: { name: keyNameSchema },
     },
     async ({ name }) => json(await keyExists(name))
@@ -72,7 +70,6 @@ export function buildServer() {
       return json({
         reference: `keychain://${name}`,
         exists: exists.exists,
-        stores: { managed: exists.managed, app: exists.app, manual: exists.manual },
         usage: exportable
           ? `export ${name}=keychain://${name} && akc run -- <command>`
           : `env '${name}=keychain://${name}' akc run -- <command>`,
@@ -103,7 +100,7 @@ export function buildServer() {
     'delete_secret',
     {
       description:
-        'Delete a key from the Keychain (managed namespace plus legacy AI KeyChain store / manual copies). ' +
+        'Delete a key from the AI KeyChain managed namespace. ' +
         'Destructive — requires confirm=true, and you should confirm with the user first.',
       inputSchema: {
         name: keyNameSchema,
@@ -112,10 +109,10 @@ export function buildServer() {
     },
     async ({ name, confirm }) => {
       if (!confirm) {
-        return json({ deleted: [], note: 'confirm=true is required to delete' });
+        return json({ deleted: false, note: 'confirm=true is required to delete' });
       }
-      const deleted = await deleteKey(name);
-      return json({ deleted, found: deleted.length > 0 });
+      const removed = await deleteKey(name);
+      return json({ deleted: removed, found: removed });
     }
   );
 
@@ -123,8 +120,8 @@ export function buildServer() {
     'doctor',
     {
       description:
-        'Diagnose the local setup: keychain access, keychain:// references in the current ' +
-        'environment, and ~/.zshrc patterns (including the -a "$USER" pitfall). Values are masked.',
+        'Diagnose the local setup: keychain access and keychain:// references in the current ' +
+        'environment and ~/.zshrc. Values are masked.',
       inputSchema: {},
     },
     async () => {

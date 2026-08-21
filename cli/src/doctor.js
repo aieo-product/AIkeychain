@@ -6,21 +6,14 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { collectRefs, resolveRefs } from './run.js';
-import {
-  resolveKey,
-  dumpRecords,
-  findAmbiguousDuplicates,
-  findUnmigratedKeys,
-  KeychainError,
-  GUI_SERVICE,
-  MANAGED_SERVICE,
-  MANUAL_NAME_PATTERN,
-} from './keychain.js';
+import { resolveKey, dumpRecords, KeychainError, MANAGED_SERVICE } from './keychain.js';
 
-/** Extract keychain://KEY and `security find-generic-password -s "KEY"` keys from shell config text. */
+/**
+ * Extract keychain://KEY and `security find-generic-password -s "..." -a "KEY"`
+ * keys from shell config text (v2.0: managed namespace only).
+ */
 export function scanShellConfig(text) {
   const keys = new Set();
-  const warnings = [];
   for (const m of text.matchAll(/keychain:\/\/([A-Za-z0-9_.-]+)/g)) {
     keys.add(m[1]);
   }
@@ -29,26 +22,14 @@ export function scanShellConfig(text) {
     const find = line.match(/security\s+find-generic-password\s+([^\n]*)/);
     if (!find) continue;
     const svc = find[1].match(/-s\s+"?([A-Za-z0-9_.-]+)"?/);
-    if (svc) {
-      if (svc[1] === 'com.aieo.aikeychain') {
-        // GUI 保存形式で pin された行 (`-s "com.aieo.aikeychain" -a "KEY"`) では
-        // 実際のキー名は -a 側にある。-s の値 (共通サービス名) ではなく -a を採る。
-        const acct = find[1].match(/-a\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/);
-        if (acct) keys.add(acct[1]);
-      } else {
-        keys.add(svc[1]);
-      }
-    }
-    if (/-a\s+"\$USER"|-a\s+\$USER/.test(find[1])) {
-      // Report the service name only — never echo the raw shell line, which
-      // could contain inline secrets or other sensitive content.
-      warnings.push(
-        `${svc ? svc[1] : '(unknown key)'}: lookup uses -a "$USER" — account attributes are ` +
-          'inconsistent; look up by service only (issue #91)'
-      );
+    if (svc && svc[1] === MANAGED_SERVICE) {
+      // managed export line: `-s "com.aieo.aikeychain.managed" -a "KEY"` — the
+      // real key name is on -a, not the shared service name.
+      const acct = find[1].match(/-a\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/);
+      if (acct) keys.add(acct[1]);
     }
   }
-  return { keys: [...keys].sort(), warnings };
+  return { keys: [...keys].sort() };
 }
 
 // --- MCP registration path-independence (issue #131) ---
@@ -127,7 +108,7 @@ async function checkClaudeMcpRegistration(check, claudeJsonPath) {
 }
 
 export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, claudeJsonPath } = {}) {
-  const report = { platform: process.platform, checks: [], warnings: [], ok: true };
+  const report = { platform: process.platform, checks: [], ok: true };
   const check = (name, ok, detail) => {
     report.checks.push({ name, ok, detail });
     if (!ok) report.ok = false;
@@ -139,82 +120,19 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
   }
   check('platform', true, 'macOS');
 
-  // Keychain enumeration — ONE bounded dump-keychain call shared by the three
-  // checks below (#185 S7: three independent dumps would stack three timeouts
-  // when the enumeration hangs). Names/accts only; values are never read.
-  let records = null;
+  // Keychain enumeration (v2.0: managed namespace only). Names/accts only;
+  // values are never read.
   try {
-    records = await dumpRecords();
-    const names = new Set();
-    for (const { service, account } of records) {
-      if ((service === MANAGED_SERVICE || service === GUI_SERVICE) && account) names.add(account);
-      else if (service && MANUAL_NAME_PATTERN.test(service)) names.add(service);
-    }
-    const managedCount = new Set(
+    const records = await dumpRecords();
+    const names = new Set(
       records.filter((r) => r.service === MANAGED_SERVICE && r.account).map((r) => r.account)
-    ).size;
-    check('keychain access', true, `${names.size} key(s) visible (${managedCount} in the managed namespace)`);
+    );
+    check('keychain access', true, `${names.size} key(s) in the managed namespace`);
   } catch (err) {
     if (err instanceof KeychainError) {
       check('keychain access', false, err.message);
     } else {
       throw err;
-    }
-  }
-
-  if (records !== null) {
-    // Ambiguous duplicate entries (issue #91): same service name, multiple accts.
-    const dups = findAmbiguousDuplicates(records);
-    if (dups.length === 0) {
-      check('duplicate entries', true, 'no ambiguous duplicate keychain entries');
-    } else {
-      check(
-        'duplicate entries',
-        false,
-        `${dups.length} service(s) have duplicate entries — \`security -s NAME -w\` is ambiguous:\n` +
-          dups
-            .map(
-              (d) =>
-                `       - ${d.service}: acct=[${d.accounts.map((a) => `"${a}"`).join(', ')}]` +
-                ` → remove the stale one: security delete-generic-password -s "${d.service}" -a "<acct>"`
-            )
-            .join('\n')
-      );
-    }
-
-    // Unmigrated legacy keys (#171): exist only in the GUI store / manual scheme
-    // with no managed copy. Headless reads of GUI-owned ones prompt/hang (bounded
-    // to a timeout since #171). Detection is non-destructive — dump attributes
-    // only, no `find -w` probes (those would rain consent dialogs). Manual-scheme
-    // hits are candidates by name shape — an unrelated app's UPPER_SNAKE service
-    // would match too (#185 D-Q1; same rule as `akc list` since #160).
-    const { keys: unmigrated, unparseable } = findUnmigratedKeys(records);
-    if (unparseable > 0) {
-      report.warnings.push(
-        `${unparseable} AI KeyChain store record(s) could not be parsed from dump-keychain — ` +
-          'migration status may be incomplete'
-      );
-    }
-    if (unmigrated.length === 0) {
-      check(
-        'migration',
-        true,
-        unparseable > 0
-          ? 'no unmigrated legacy keys detected (but see the unparseable-records warning)'
-          : 'no unmigrated legacy keys (all keys have a managed copy)'
-      );
-    } else {
-      check(
-        'migration',
-        false,
-        `${unmigrated.length} key(s) exist only in legacy stores — headless reads may be ` +
-          'bounded-failed (migration required):' + '\n' +
-          unmigrated
-            .map((k) => `       - ${k.name} [${k.stores.join(', ')}] → migrate: akc set ${k.name}`)
-            .join('\n') +
-          '\n       (or use the AI KeyChain app to migrate; legacy copies are cleaned up on delete.' +
-          '\n        [manual] entries are name-shape candidates and may belong to another tool)'
-      );
     }
   }
 
@@ -251,8 +169,7 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
     check('shell config', true, `${path} not found (skipped)`);
   }
   if (text !== null) {
-    const { keys, warnings } = scanShellConfig(text);
-    report.warnings.push(...warnings);
+    const { keys } = scanShellConfig(text);
     if (keys.length === 0) {
       check('shell config', true, `no keychain references in ${path}`);
     } else {
@@ -282,9 +199,6 @@ export function formatReport(report) {
   const lines = [];
   for (const { name, ok, detail } of report.checks) {
     lines.push(`  ${ok ? '✅' : '❌'} ${name}: ${detail}`);
-  }
-  for (const warning of report.warnings) {
-    lines.push(`  ⚠️  ${warning}`);
   }
   lines.push('');
   lines.push(report.ok ? 'All checks passed.' : 'Some checks failed. See above.');

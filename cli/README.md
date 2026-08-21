@@ -60,20 +60,19 @@ akc set GITHUB_TOKEN      # hidden prompt (or pipe via stdin); the value never
                           # via stdin as hex. Overwrites in place, no duplicates
 akc delete GITHUB_TOKEN
 
-# Diagnose your setup (env + ~/.zshrc), the -a "$USER" pitfall, and
-# ambiguous duplicate keychain entries (same service name, multiple accounts)
+# Diagnose your setup: keychain access + keychain:// references in env and ~/.zshrc
 akc doctor
 
 # Print the usage guide for AI agents
 akc guide
 ```
 
-### Keychain lookup order
+### Keychain lookup (v2.0)
 
-1. `service="com.aieo.aikeychain"`, `account=<KEY>` — the AI KeyChain GUI store
-2. `service=<KEY>` with **no account** — manually-registered keys
-
-Manual keys are looked up by service only because `acct` attributes are inconsistent across entries; pinning `-a` can return a stale duplicate ([issue #91](https://github.com/aieo-product/AIkeychain/issues/91)).
+Every key lives at `service="com.aieo.aikeychain.managed"`, `account=<KEY>` — the
+single managed namespace, created by `/usr/bin/security` so headless reads never
+prompt. The old v1.x GUI store / manual scheme are no longer read; upgrading users
+re-register their keys with `akc set <KEY>`.
 
 ## MCP server
 

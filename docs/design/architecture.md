@@ -115,21 +115,15 @@ sequenceDiagram
     Zshrc->>Shell: export ANTHROPIC_API_KEY="keychain://ANTHROPIC_API_KEY"
     Shell->>Akc: akc run -- claude
     Akc->>Akc: env をスキャン (keychain:// プレフィックス検出 / collectRefs)
-    Note over Akc,Keychain: 3 段ルックアップ (resolveKey, issue #91/#167)
-    Akc->>Security: ① security find-generic-password -s "com.aieo.aikeychain.managed" -a "ANTHROPIC_API_KEY" -w
+    Note over Akc,Keychain: 単一 namespace ルックアップ (resolveKey / v2.0 #188)
+    Akc->>Security: security find-generic-password -s "com.aieo.aikeychain.managed" -a "ANTHROPIC_API_KEY" -w
     Security->>Keychain: SecItemCopyMatching
-    alt managed namespace で見つかった
-        Keychain-->>Akc: シークレット値
-    else 見つからない (exit 44)
-        Akc->>Security: ② -s "com.aieo.aikeychain" -a "..."（旧 GUI ストア）→ ③ -s "ANTHROPIC_API_KEY"（手動登録キー）
-        Security->>Keychain: SecItemCopyMatching
-        Keychain-->>Akc: シークレット値
-    end
+    Keychain-->>Akc: シークレット値
     Akc->>Child: 子プロセスの env にのみ値を注入して spawn (親 env は不変)
     Child->>API: curl -H "x-api-key: $ANTHROPIC_API_KEY"
 ```
 
-> **3 段ルックアップ（`resolveKey` / v1.9+ #167）**: ① managed namespace `-s "com.aieo.aikeychain.managed" -a "<KEY>"`（akc/GUI の新規保存先）→ ② 旧 GUI ストア `-s "com.aieo.aikeychain" -a "<KEY>"` → ③ 手動登録キー `-s "<KEY>"`（service 名のみ、`-a` は付けない）。**各段は exit 44 (not found) のときだけ次へ落ちる** — それ以外の失敗は権威的として fail-closed（#147/#150）。手動登録キーは `acct` 値が一定しない（$USER / service 名）ため account を固定すると古い/無効な値を掴む恐れがあり、これを避ける（issue #91）。npm CLI（`cli/src/keychain.js`）と `scripts/akc` は同一手順。
+> **単一 namespace ルックアップ（`resolveKey` / v2.0 #188）**: `-s "com.aieo.aikeychain.managed" -a "<KEY>"` のみ。security 所有なのでヘッドレス読取はプロンプト/ハングしない。exit 44 (not found) は `null`、それ以外の失敗は権威的として fail-closed（#147/#150）。npm CLI（`cli/src/keychain.js`）と `scripts/akc` は同一手順。旧 v1.x の GUI ストア / manual スキームは読まない（旧ユーザーはキーを再登録する）。
 
 ### AI エージェント経由 (MCP + akc run)
 

@@ -1,13 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  parseDump,
-  maskValue,
-  findAmbiguousDuplicates,
-  findUnmigratedKeys,
-  MANUAL_NAME_PATTERN,
-  GUI_SERVICE,
-} from '../src/keychain.js';
+import { parseDump, maskValue, MANAGED_SERVICE } from '../src/keychain.js';
 import { collectRefs } from '../src/run.js';
 import {
   scanShellConfig,
@@ -19,15 +12,8 @@ const SAMPLE_DUMP = `keychain: "/Users/x/Library/Keychains/login.keychain-db"
 version: 512
 class: "genp"
 attributes:
-    0x00000007 <blob>="com.aieo.aikeychain"
     "acct"<blob>="GITHUB_TOKEN"
-    "svce"<blob>="com.aieo.aikeychain"
-keychain: "/Users/x/Library/Keychains/login.keychain-db"
-version: 512
-class: "genp"
-attributes:
-    "acct"<blob>="takehiro"
-    "svce"<blob>="QIITA_TOKEN"
+    "svce"<blob>="com.aieo.aikeychain.managed"
 keychain: "/Users/x/Library/Keychains/login.keychain-db"
 version: 512
 class: "inet"
@@ -44,16 +30,9 @@ attributes:
 
 test('parseDump extracts genp service/account pairs only', () => {
   const records = parseDump(SAMPLE_DUMP);
-  assert.equal(records.length, 3); // inet record excluded
-  assert.deepEqual(records[0], { service: GUI_SERVICE, account: 'GITHUB_TOKEN' });
-  assert.deepEqual(records[1], { service: 'QIITA_TOKEN', account: 'takehiro' });
-});
-
-test('MANUAL_NAME_PATTERN accepts env-var names and rejects bundle ids', () => {
-  assert.ok(MANUAL_NAME_PATTERN.test('GITHUB_TOKEN'));
-  assert.ok(MANUAL_NAME_PATTERN.test('X_POCOLOCO_CONSUMER_KEY'));
-  assert.ok(!MANUAL_NAME_PATTERN.test('com.apple.something'));
-  assert.ok(!MANUAL_NAME_PATTERN.test('lowercase_token'));
+  assert.equal(records.length, 2); // inet record excluded
+  assert.deepEqual(records[0], { service: MANAGED_SERVICE, account: 'GITHUB_TOKEN' });
+  assert.deepEqual(records[1], { service: 'com.apple.something', account: 'user@example.com' });
 });
 
 test('maskValue never includes the value nor its length', () => {
@@ -64,89 +43,6 @@ test('maskValue never includes the value nor its length', () => {
   // 桁数が出力に含まれないこと
   assert.doesNotMatch(maskValue('super-secret'), /\d/);
   assert.doesNotMatch(maskValue('super-secret'), /chars/);
-});
-
-test('findUnmigratedKeys reports legacy-only keys and skips migrated ones (#171)', () => {
-  const records = [
-    // managed 済み → 対象外（GUI store に古いコピーが残っていても）
-    { service: 'com.aieo.aikeychain.managed', account: 'MIGRATED_KEY' },
-    { service: 'com.aieo.aikeychain', account: 'MIGRATED_KEY' },
-    // GUI store のみ → 未移行
-    { service: 'com.aieo.aikeychain', account: 'GUI_ONLY_KEY' },
-    // manual スキームのみ → 未移行
-    { service: 'MANUAL_ONLY_KEY', account: 'takehiro' },
-    // 両レガシーに存在 → 1 件にまとめて両 store を列挙
-    { service: 'com.aieo.aikeychain', account: 'BOTH_LEGACY_KEY' },
-    { service: 'BOTH_LEGACY_KEY', account: null },
-    // env 変数形でない service は manual と見なさない（他アプリのアイテム）
-    { service: 'com.vendor.other', account: 'x' },
-    { service: 'lowercase_svc', account: 'x' },
-  ];
-  const { keys, unparseable } = findUnmigratedKeys(records);
-  assert.deepEqual(keys, [
-    { name: 'BOTH_LEGACY_KEY', stores: ['gui', 'manual'] },
-    { name: 'GUI_ONLY_KEY', stores: ['gui'] },
-    { name: 'MANUAL_ONLY_KEY', stores: ['manual'] },
-  ]);
-  assert.equal(unparseable, 0);
-});
-
-test('findUnmigratedKeys returns empty when everything is migrated', () => {
-  const records = [
-    { service: 'com.aieo.aikeychain.managed', account: 'A_KEY' },
-    { service: 'com.aieo.aikeychain.managed', account: 'B_KEY' },
-  ];
-  assert.deepEqual(findUnmigratedKeys(records), { keys: [], unparseable: 0 });
-});
-
-test('findUnmigratedKeys never reports the app-reserved service names (#185 S10)', () => {
-  // KeyShareService の予約 service（共有秘密鍵/署名鍵）はドット+小文字を含み、
-  // MANUAL_NAME_PATTERN（大文字スネーク限定）が除外する。パターンが緩む回帰が
-  // 入ると「akc set com.aieo.aikeychain.sharekey しろ」と誤案内する事故になる。
-  const records = [
-    { service: 'com.aieo.aikeychain.sharekey', account: 'private_key' },
-    { service: 'com.aieo.aikeychain.signkey', account: 'signing_key' },
-  ];
-  assert.deepEqual(findUnmigratedKeys(records), { keys: [], unparseable: 0 });
-});
-
-test('findUnmigratedKeys counts unparseable store records instead of dropping them (#185 S8)', () => {
-  // GUI/managed store のレコードで acct が解析できない場合、そのキーが未移行か
-  // どうか判定できない。黙って捨てると「未移行なし」の false negative になる。
-  const records = [
-    { service: 'com.aieo.aikeychain', account: null },
-    { service: 'com.aieo.aikeychain.managed', account: null },
-    { service: 'com.aieo.aikeychain', account: 'GUI_ONLY_KEY' },
-  ];
-  const { keys, unparseable } = findUnmigratedKeys(records);
-  assert.equal(unparseable, 2);
-  assert.deepEqual(keys, [{ name: 'GUI_ONLY_KEY', stores: ['gui'] }]);
-});
-
-test('findAmbiguousDuplicates flags same-service multi-acct entries (issue #91)', () => {
-  // The exact #91 scenario: CLOUDFLARE_API_TOKEN exists twice with different accts.
-  const records = [
-    { service: 'CLOUDFLARE_API_TOKEN', account: 'takehiro' },
-    { service: 'CLOUDFLARE_API_TOKEN', account: 'CLOUDFLARE_API_TOKEN' },
-    { service: 'GITHUB_TOKEN', account: 'GITHUB_TOKEN' }, // single → fine
-    { service: GUI_SERVICE, account: 'ANTHROPIC_API_KEY' }, // GUI store → ignored
-    { service: GUI_SERVICE, account: 'OPENAI_API_KEY' },
-    { service: 'com.apple.foo', account: 'a' }, // non-env-var service → ignored
-    { service: 'com.apple.foo', account: 'b' },
-  ];
-  const dups = findAmbiguousDuplicates(records);
-  assert.equal(dups.length, 1);
-  assert.equal(dups[0].service, 'CLOUDFLARE_API_TOKEN');
-  assert.deepEqual(dups[0].accounts, ['CLOUDFLARE_API_TOKEN', 'takehiro']);
-});
-
-test('findAmbiguousDuplicates returns empty when every service is unique', () => {
-  const records = [
-    { service: 'GITHUB_TOKEN', account: 'GITHUB_TOKEN' },
-    { service: 'QIITA_TOKEN', account: 'takehiro' },
-    { service: GUI_SERVICE, account: 'GITHUB_TOKEN' }, // app+manual for same key is not a same-service dup
-  ];
-  assert.deepEqual(findAmbiguousDuplicates(records), []);
 });
 
 test('collectRefs picks only keychain:// values', () => {
@@ -162,29 +58,27 @@ test('collectRefs picks only keychain:// values', () => {
   ]);
 });
 
-test('scanShellConfig finds refs, security lookups, and the -a $USER pitfall', () => {
-  const { keys, warnings } = scanShellConfig(`
+test('scanShellConfig finds keychain:// refs and managed export lines (v2.0 #188)', () => {
+  const { keys } = scanShellConfig(`
 export GITHUB_TOKEN=keychain://GITHUB_TOKEN
-export QIITA_TOKEN=$(security find-generic-password -s "QIITA_TOKEN" -w)
-export BAD_TOKEN=$(security find-generic-password -s "BAD_TOKEN" -a "$USER" -w)
-# export COMMENTED=$(security find-generic-password -s "COMMENTED" -w)
+export ANTHROPIC_API_KEY=$(security find-generic-password -s "com.aieo.aikeychain.managed" -a "ANTHROPIC_API_KEY" -w)
+# export COMMENTED=$(security find-generic-password -s "com.aieo.aikeychain.managed" -a "COMMENTED" -w)
 `);
-  assert.deepEqual(keys, ['BAD_TOKEN', 'GITHUB_TOKEN', 'QIITA_TOKEN']);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /BAD_TOKEN/);
+  // managed export line: real key name is on -a, not the shared service name.
+  assert.deepEqual(keys, ['ANTHROPIC_API_KEY', 'GITHUB_TOKEN']);
+  assert.ok(!keys.includes('com.aieo.aikeychain.managed'));
 });
 
-test('scanShellConfig extracts the key from -a for GUI-pinned lines', () => {
-  // AI KeyChain GUI が生成する新形式: -s は共通サービス名なので、実キー名は -a 側。
-  const { keys, warnings } = scanShellConfig(`
-export ANTHROPIC_API_KEY=$(security find-generic-password -s "com.aieo.aikeychain" -a "ANTHROPIC_API_KEY" -w)
-export OPENAI_API_KEY=$(security find-generic-password -s "com.aieo.aikeychain" -a "OPENAI_API_KEY" -w)
+test('scanShellConfig ignores non-managed security lookups (#187: managed only)', () => {
+  // v2.0: legacy GUI store / manual scheme lines are not scanned. Crucially the
+  // managed service name must NOT be registered as a key (the #187 misparse).
+  const { keys } = scanShellConfig(`
+export A=$(security find-generic-password -s "com.aieo.aikeychain.managed" -a "A" -w)
+export B=$(security find-generic-password -s "com.aieo.aikeychain" -a "B" -w)
+export C=$(security find-generic-password -s "C" -w)
 `);
-  // 共通サービス名 "com.aieo.aikeychain" ではなく、各キー名が採取される
-  assert.deepEqual(keys, ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
-  assert.ok(!keys.includes('com.aieo.aikeychain'));
-  // 新形式は -a "$USER" を使わないので警告なし
-  assert.equal(warnings.length, 0);
+  assert.deepEqual(keys, ['A']);
+  assert.ok(!keys.includes('com.aieo.aikeychain.managed'));
 });
 
 // --- issue #131: doctor MCP registration path-independence checks (hermetic) ---

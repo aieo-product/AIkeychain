@@ -16,11 +16,11 @@ const AKC = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'akc.js')
 
 let stubDir;
 
-// The stub knows one GUI-store key (GOOD_KEY) and one manual key (MANUAL_KEY).
-// Interactive (-i) add-generic-password is accepted only with -X hex via stdin
-// (never argv): NEW_KEY round-trips through a state file so read-back
-// verification sees the value actually written; ECHO_KEY simulates a failure
-// whose stderr leaks the full command line including the hex value.
+// v2.0 (#188): the managed namespace is the ONLY store. The stub knows one
+// managed key (GOOD_KEY). Interactive (-i) add-generic-password is accepted only
+// with -X hex via stdin (never argv): NEW_KEY round-trips through a state file so
+// read-back verification sees the value actually written; ECHO_KEY simulates a
+// failure whose stderr leaks the full command line including the hex value.
 const STUB = `#!/bin/bash
 state_dir="$(cd "$(dirname "$0")" && pwd)"
 cmd="$1"; shift
@@ -54,14 +54,12 @@ while [ $# -gt 0 ]; do
 done
 case "$cmd" in
   find-generic-password)
-    if [ "$svc" = "com.aieo.aikeychain" ] && [ "$acct" = "GOOD_KEY" ]; then
+    # v2.0: only the managed service resolves; every other service exits 44.
+    if [ "$svc" = "com.aieo.aikeychain.managed" ] && [ "$acct" = "GOOD_KEY" ]; then
       $want_value && echo "stub-good-value"; exit 0
     fi
     if [ "$svc" = "com.aieo.aikeychain.managed" ] && [ "$acct" = "NEW_KEY" ] && [ -f "$state_dir/state-NEW_KEY" ]; then
       $want_value && { cat "$state_dir/state-NEW_KEY"; echo; }; exit 0
-    fi
-    if [ "$svc" = "MANUAL_KEY" ]; then
-      $want_value && echo "stub-manual-value"; exit 0
     fi
     exit 44 ;;
   add-generic-password)
@@ -144,13 +142,13 @@ test('a `security` stub on PATH is ignored when the override is unset (issue #11
   assert.equal(stubWasInvoked, false, 'PATH `security` stub was executed — absolute path not enforced');
 });
 
-test('run resolves GUI-store and manual refs into the child env only', async () => {
+test('run resolves managed refs into the child env only', async () => {
   const r = await runAkc(
-    ['run', '--', process.execPath, '-e', 'console.log(process.env.MY_TOKEN, process.env.OTHER)'],
-    { MY_TOKEN: 'keychain://GOOD_KEY', OTHER: 'keychain://MANUAL_KEY' }
+    ['run', '--', process.execPath, '-e', 'console.log(process.env.MY_TOKEN)'],
+    { MY_TOKEN: 'keychain://GOOD_KEY' }
   );
   assert.equal(r.code, 0);
-  assert.match(r.stdout, /stub-good-value stub-manual-value/);
+  assert.match(r.stdout, /stub-good-value/);
 });
 
 test('run fails with exit 1 when a ref cannot be resolved', async () => {
@@ -187,33 +185,23 @@ test('run maps a signal-terminated child to 128+signum', async () => {
   assert.equal(r.code, 143); // 128 + SIGTERM(15)
 });
 
-test('check reports store and missing keys', async () => {
+test('check reports the managed store and missing keys', async () => {
   const good = await runAkc(['check', 'GOOD_KEY']);
   assert.equal(good.code, 0);
-  assert.match(good.stdout, /AI KeyChain store/);
+  assert.match(good.stdout, /managed store/);
 
   const missing = await runAkc(['check', 'NOPE_KEY']);
   assert.equal(missing.code, 1);
 });
 
-test('check on a store-only key hints the correct `security` form (issue #137)', async () => {
-  // GOOD_KEY exists only under service="com.aieo.aikeychain" account="GOOD_KEY"
-  // (the stub reports it found ONLY for that query, not for the bare -s
-  // GOOD_KEY form). That mismatch is exactly the #137 false-negative: an agent
-  // running `security find-generic-password -s "GOOD_KEY" -w` gets exit 44 and
-  // wrongly concludes the key is unregistered. `akc check` must append a hint
-  // so the correct two-attribute form (or `akc get`) is discoverable.
+test('check hints the correct managed `security` form (issue #137)', async () => {
+  // The bare `security find-generic-password -s "GOOD_KEY" -w` form returns exit
+  // 44 for a managed item — a #137 false-negative. `akc check` appends a hint so
+  // the correct two-attribute managed form (or `akc get`) is discoverable.
   const good = await runAkc(['check', 'GOOD_KEY']);
   assert.equal(good.code, 0);
-  assert.match(good.stdout, /-s "com\.aieo\.aikeychain" -a "GOOD_KEY" -w/);
+  assert.match(good.stdout, /-s "com\.aieo\.aikeychain\.managed" -a "GOOD_KEY" -w/);
   assert.match(good.stdout, /akc get GOOD_KEY/);
-
-  // A manual-only key must NOT get the hint — the bare `-s <KEY>` form already
-  // works for it, so the extra line would be noise.
-  const manual = await runAkc(['check', 'MANUAL_KEY']);
-  assert.equal(manual.code, 0);
-  assert.match(manual.stdout, /manual entry/);
-  assert.doesNotMatch(manual.stdout, /security CLI: use/);
 });
 
 test('get prints a reference by default, raw value only with --reveal', async () => {
