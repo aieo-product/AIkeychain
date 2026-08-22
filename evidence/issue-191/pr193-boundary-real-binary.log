@@ -1,0 +1,14 @@
+# real /usr/bin/security boundary check (4094-char line) — 2026-08-22 10:02:05
+# limit = floor((4094 - 66 - name.length) / 2); dummy 'a' x N; sha256-prefix verification
+name_len=1 limit=2013 value_len=2013 line_len=4093 rc=0 stored+readback-match leak=no :: ✅ Saved A (********) to service "com.aieo.aikeychain.managed" 
+name_len=1 limit=2013 value_len=2014 line_len=4095 rc=1 not-stored leak=no :: akc: value exceeds the 2013-character limit for "A" (security -i line budget: (4094 - 66 -
+name_len=16 limit=2006 value_len=2006 line_len=4094 rc=0 stored+readback-match leak=no :: ✅ Saved TEST_AKC_INT_LEN (********) to service "com.aieo.aikeychain.managed" 
+name_len=16 limit=2006 value_len=2007 line_len=4096 rc=1 not-stored leak=no :: akc: value exceeds the 2006-character limit for "TEST_AKC_INT_LEN" (security -i line budge
+name_len=17 limit=2005 value_len=2005 line_len=4093 rc=0 stored+readback-match leak=no :: ✅ Saved TEST_AKC_INT_LEAK (********) to service "com.aieo.aikeychain.managed" 
+name_len=17 limit=2005 value_len=2006 line_len=4095 rc=1 not-stored leak=no :: akc: value exceeds the 2005-character limit for "TEST_AKC_INT_LEAK" (security -i line budg
+name_len=63 limit=1982 value_len=1982 line_len=4093 rc=0 stored+readback-match leak=no :: ✅ Saved TEST_AKC_INT_LEN_WITH_A_MUCH_LONGER_KEY_NAME_XXXXXXXXXXXXXXXXXX (********) to se
+name_len=63 limit=1982 value_len=1983 line_len=4095 rc=1 not-stored leak=no :: akc: value exceeds the 1982-character limit for "TEST_AKC_INT_LEN_WITH_A_MUCH_LONGER_KEY_N
+# exit-status masking probe (read-only find of a nonexistent key; expect 44):
+line_len=4094 exit=44
+line_len=4095 exit=0
+# residual TEST_AKC_INT_* items: 0

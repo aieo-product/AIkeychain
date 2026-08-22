@@ -1,0 +1,16 @@
+✖ set rejects a value over the security -i line budget before touching security (#191) (1.802292ms)
+✖ set accepts a value exactly at the line budget and round-trips it (#191) (0.09025ms)
+SyntaxError: The requested module '../src/keychain.js' does not provide an export named 'SECURITY_I_LINE_MAX'
+✖ test/unit.test.js (26.075417ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 20
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1245.188041
+✖ failing tests:
+✖ set rejects a value over the security -i line budget before touching security (#191) (1.802292ms)
+✖ set accepts a value exactly at the line budget and round-trips it (#191) (0.09025ms)
+✖ test/unit.test.js (26.075417ms)
