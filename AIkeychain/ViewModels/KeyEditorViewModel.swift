@@ -134,6 +134,17 @@ final class KeyEditorViewModel {
             : envVarName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedValue.isEmpty, !trimmedEnvVar.isEmpty else { return }
 
+        // 値長の事前検証（#191）: サービス層は上限超過を `invalidData`（"Failed to encode/decode"）
+        // で返し長さに触れないため、エディタでは上限を明示して案内する。上限は
+        // `security -i` の 1 行バッファ由来でキー名長に依存する（≒ 2,000 文字）。
+        let maxLength = SecurityCLIKeychainService.maxValueLength(forAccount: trimmedEnvVar)
+        guard trimmedValue.count <= maxLength else {
+            errorMessage = L10n.s(
+                ja: "値が長すぎます（最大 \(maxLength) 文字。`security` の 1 行上限に由来し、キー名が長いほど短くなります）",
+                en: "Value is too long (max \(maxLength) characters — derived from the `security` line limit; longer key names reduce it)")
+            throw KeychainError.invalidData
+        }
+
         isSaving = true
         errorMessage = nil
 

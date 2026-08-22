@@ -171,19 +171,21 @@ function securityInteractive(commandLine) {
   });
 }
 
-// `security -i` reads one command per line through a 4096-byte line buffer
-// (4095 usable characters + terminator); anything longer is split and the tail
-// is parsed as further commands (#191 — measured on the real binary: a line of
-// 4094 chars writes, 4096 chars fails with `unknown command "<tail>"`). The
-// write command is
+// `security -i` reads one command per line through a 4096-byte fgets buffer.
+// A line of 4095 chars fills it exactly, leaving the newline to be read as an
+// empty follow-up command whose exit 0 masks the real command's status; 4096+
+// chars are split and the tail is parsed as further commands (#191 — measured
+// on the real binary: 4094 -> real status, 4095/4096 -> exit 0 masked, 4097 ->
+// `unknown command "<tail>"`). So the usable line is 4094 chars incl. nothing
+// but the command; the newline is reserved. The write command is
 //   add-generic-password -U -s "<managed>" -a "<KEY>" -X <hex>
 // whose prefix is 66 chars + the key name, and the hex value takes 2 chars per
-// byte, so the usable value length is (4095 - 66 - name.length) / 2 ≈ 2000 for
+// byte, so the usable value length is (4094 - 66 - name.length) / 2 ≈ 2000 for
 // typical key names. Matches the Swift service (SecurityCLIKeychainService
 // .maxValueLength(forAccount:)). Hex stays on purpose: it is the structural
 // guard against `security -i` tokenizer injection, not an encoding detail —
 // longer values are out of scope rather than switching to quoted -w.
-export const SECURITY_I_LINE_MAX = 4095;
+export const SECURITY_I_LINE_MAX = 4094;
 
 function writeCommandPrefix(name) {
   return `add-generic-password -U -s "${MANAGED_SERVICE}" -a "${name}" -X `;

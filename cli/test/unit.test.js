@@ -137,11 +137,11 @@ test('classifyMcpCommand returns null when there is nothing to check', () => {
   assert.equal(classifyMcpCommand(''), null);
 });
 
-// #191: `security -i` reads one command per line with a 4096-byte line buffer (4095 usable chars).
+// #191: `security -i` reads one command per line with a 4096-byte line buffer (4094 usable chars + newline).
 // The value is hex-encoded (2 chars per byte), so the usable value length is
-// (4095 - prefix) / 2 where prefix = `add-generic-password -U -s "<managed>" -a "<KEY>" -X `.
-test('maxValueLength follows the security -i 4095-char line budget (#191)', () => {
-  assert.equal(SECURITY_I_LINE_MAX, 4095); // 4096-byte buffer incl. terminator
+// (4094 - prefix) / 2 where prefix = `add-generic-password -U -s "<managed>" -a "<KEY>" -X `.
+test('maxValueLength follows the security -i 4094-char line budget (#191)', () => {
+  assert.equal(SECURITY_I_LINE_MAX, 4094); // 4096-byte fgets buffer: 4095 fills it and masks the exit status, so reserve the newline
   const name = 'TEST_AKC_INT_LEN';
   const prefix = `add-generic-password -U -s "${MANAGED_SERVICE}" -a "${name}" -X `;
   assert.equal(prefix.length, 66 + name.length);

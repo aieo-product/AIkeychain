@@ -31,7 +31,7 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
    leaks the secret into argv/shell history, and writing to any other service
    name creates entries outside the managed namespace.
    Value constraints: printable ASCII, single line, at most
-   (4095 - 66 - key name length) / 2 ≈ 2,000 characters (the \`security -i\`
+   floor((4094 - 66 - key name length) / 2) ≈ 2,000 characters (the \`security -i\`
    line budget; hex is kept as the injection guard). Longer, multi-line or
    non-ASCII values are not supported.
 

@@ -134,7 +134,7 @@ struct SecurityCLIKeychainServiceTests {
         #expect(throws: KeychainError.self) {
             try service.save(value: "v", for: "9INVALID")
         }
-        // 長さ上限（`security -i` の 1 行 4095 文字 / #191）
+        // 長さ上限（`security -i` の 1 行 4094 文字 / #191）
         #expect(throws: KeychainError.self) {
             try service.save(value: String(repeating: "a", count: SecurityCLIKeychainService.maxValueLength(forAccount: "TOO_LONG") + 1),
                              for: "TOO_LONG")
@@ -212,14 +212,14 @@ struct SecurityCLIKeychainServiceTests {
         #expect(try service.retrieve(for: "HEXLIKE_KEY") == "4142434445464748")
     }
 
-    @Test("Value length budget follows the security -i 4095-char line (#191)")
+    @Test("Value length budget follows the security -i 4094-char line (#191)")
     func valueLengthBudget() throws {
-        // 1 行 = prefix + hex(値) が 4095 文字以内（4096 バイトバッファ − 終端）。prefix は 66 + キー名長。
+        // 1 行 = prefix + hex(値) が 4094 文字以内（4096 バイト fgets バッファ − 改行 − 終端）。prefix は 66 + キー名長。
         let prefix = "add-generic-password -U -s \"\(SecurityCLIKeychainService.managedService)\" -a \"TOO_LONG\" -X "
         #expect(prefix.count == 66 + "TOO_LONG".count)
         let max = SecurityCLIKeychainService.maxValueLength(forAccount: "TOO_LONG")
         #expect(max == (SecurityCLIKeychainService.securityLineMax - prefix.count) / 2)
-        #expect(max == 2010) // (4095 - 74) / 2
+        #expect(max == 2010) // (4094 - 74) / 2
         #expect(SecurityCLIKeychainService.maxValueLength(forAccount: String(repeating: "X", count: 200)) < max)
         // 上限ちょうどは security まで届いて往復する
         let (service, _) = try makeStub()

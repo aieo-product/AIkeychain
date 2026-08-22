@@ -150,7 +150,7 @@ akc run -- claude            # real value injected into the child process only
 akc list                     # key names (never prints values)
 akc set GITHUB_TOKEN         # hidden prompt, overwrites in place
 #   values: printable ASCII, single line, up to ~2,000 chars
-#   (exactly (4095 - 66 - key name length) / 2 — the `security -i` line budget)
+#   (exactly floor((4094 - 66 - key name length) / 2) — the `security -i` line budget)
 akc doctor                   # diagnose env + ~/.zshrc references
 ```
 
@@ -326,7 +326,7 @@ akc run -- claude            # 実際の値は子プロセスにのみ注入
 akc list                     # キー名一覧（値は表示しない）
 akc set GITHUB_TOKEN         # 隠し入力で登録（重複エントリを作らず上書き）
 #   値の制約: 印字可能 ASCII・1 行・約 2,000 文字まで
-#   （正確には (4095 − 66 − キー名長) / 2。`security -i` の 1 行上限に由来）
+#   （正確には floor((4094 − 66 − キー名長) / 2)。`security -i` の 1 行上限に由来）
 akc doctor                   # env / ~/.zshrc の参照を診断
 ```
 

@@ -59,7 +59,7 @@ akc set GITHUB_TOKEN      # hidden prompt (or pipe via stdin); the value never
                           # appears in any process's argv — fed to `security -i`
                           # via stdin as hex. Overwrites in place, no duplicates.
                           # Values: printable ASCII, single line, up to ~2,000
-                          # chars = (4095 - 66 - key name length) / 2 (#191)
+                          # chars = floor((4094 - 66 - key name length) / 2) (#191)
 akc delete GITHUB_TOKEN
 
 # Diagnose your setup: keychain access + keychain:// references in env and ~/.zshrc
