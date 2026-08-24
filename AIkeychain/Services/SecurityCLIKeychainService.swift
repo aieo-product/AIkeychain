@@ -28,8 +28,25 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     /// 復元/同期/旧アプリ由来の GUI 所有アイテムが混入しても不変条件が壊れない。
     static let managedService = "com.aieo.aikeychain.managed"
 
-    /// 値の最大長。stdin 一括書き込みのパイプバッファ束縛（save() 参照）。
-    static let maxValueLength = 8192
+    /// `security -i` の 1 行に使える文字数。fgets バッファは 4096 バイトで、4095 文字の行は
+    /// バッファを使い切って改行が次の「空コマンド」として読まれ、直前コマンドの終了コードが 0 に
+    /// 上書きされる（失敗がマスクされる）。4096 文字以上は分割され末尾が別コマンドになる。
+    /// 実バイナリで実測: 4094 → 正しい status / 4095・4096 → exit 0 / 4097 → `unknown command`。
+    /// よって改行分を確保した 4094 を上限にする（#191）。
+    static let securityLineMax = 4094
+
+    /// 書き込みコマンドの prefix（66 文字 + キー名）。maxValueLength と save() で共有し、ずれを防ぐ。
+    static func writeCommandPrefix(forAccount account: String) -> String {
+        "add-generic-password -U -s \"\(managedService)\" -a \"\(account)\" -X "
+    }
+
+    /// 保存できる値の最大長（文字数）= (4094 − 66 − キー名長) / 2 ≒ 2000。
+    /// hex（1 バイト = 2 文字）は `security -i` トークナイザへの注入を構造的に防ぐ手段なので
+    /// 維持し、これより長い値は対象外とする（クォート付き -w への切替はしない / #191）。
+    /// CLI (cli/src/keychain.js maxValueLength) と同じ式。
+    static func maxValueLength(forAccount account: String) -> Int {
+        Swift.max(0, (securityLineMax - writeCommandPrefix(forAccount: account).count) / 2)
+    }
 
     private let securityBin = "/usr/bin/security"
     /// subprocess 読み取りの上限。プロンプト待ち等でブロックした子はこれで kill する。
@@ -79,11 +96,10 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         guard value.range(of: "^[\\x20-\\x7e]+$", options: .regularExpression) != nil else {
             throw KeychainError.invalidData
         }
-        // 長さ上限: hex 展開後も `security -i` への stdin 一括書き込みがパイプ
-        // バッファ (64KB) 内に収まることを保証する（超えると「親は write で、子は
-        // 出力でブロック」のデッドロックが timeout の外で起き得る — #179 二段レビュー）。
-        // CLI (cli/src/keychain.js) と同じ値。
-        guard value.count <= Self.maxValueLength else {
+        // 長さ上限: `security -i` の 1 行 4094 文字（改行分を確保）に prefix + hex(値) が収まること
+        // （#191）。これは同時に stdin 一括書き込みがパイプバッファ (64KB) 内に収まることも
+        // 保証する（#179 二段レビュー）。CLI (cli/src/keychain.js) と同じ式。
+        guard value.count <= Self.maxValueLength(forAccount: account) else {
             throw KeychainError.invalidData
         }
         try ensureKeychainUnlocked()
@@ -91,7 +107,7 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         let hex = value.data(using: .utf8)!.map { String(format: "%02x", $0) }.joined()
         // -U: 既存アイテムの更新。security 所有アイテムへの -U は所有権・headless
         // 読み取りを保つことを実測済み（#168 S7'）。
-        let command = "add-generic-password -U -s \"\(Self.managedService)\" -a \"\(account)\" -X \(hex)\n"
+        let command = Self.writeCommandPrefix(forAccount: account) + hex + "\n"
         let result = runSecurity(arguments: ["-i"], stdin: command, timeout: writeTimeout)
         guard case .exited(let status, _, let stderr) = result, status == 0 else {
             throw KeychainError.unexpectedStatus(errSecIO).annotated(redact(resultDescription(result, stderr: true)))
@@ -357,11 +373,16 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
         }
     }
 
-    /// stderr に混入し得る hex 値（= シークレット）を redact する（#94 系）
-    private func redact(_ message: String) -> String {
-        message.replacingOccurrences(of: "-X [0-9a-fA-F]+", with: "-X <redacted>",
-                                     options: .regularExpression)
+    /// stderr に混入し得る hex 値（= シークレット）を redact する（#94 系）。
+    /// `-X <hex>` だけでなく、行あふれ時に `security -i` が `unknown command "<hex>"` として
+    /// エコーする素の hex 断片も潰す（#191）。
+    static func redactSecrets(_ message: String) -> String {
+        message
+            .replacingOccurrences(of: "-X [0-9a-fA-F]+", with: "-X <redacted>", options: .regularExpression)
+            .replacingOccurrences(of: "[0-9a-fA-F]{8,}", with: "<redacted>", options: .regularExpression)
     }
+
+    private func redact(_ message: String) -> String { Self.redactSecrets(message) }
 }
 
 private extension KeychainError {

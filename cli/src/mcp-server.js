@@ -82,6 +82,7 @@ export function buildServer() {
     {
       description:
         'Store or update a key in the managed namespace (com.aieo.aikeychain.managed; overwrites in place, no duplicates). ' +
+        'Value limits: printable ASCII, single line, at most floor((4094 - 66 - name length) / 2) ≈ 2,000 characters. ' +
         'CAUTION: the secret value passes through the model context when you call this tool — ' +
         'prefer asking the user to run `akc set <KEY>` themselves unless they explicitly pasted ' +
         'the value into the conversation already.',

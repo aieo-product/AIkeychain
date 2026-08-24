@@ -110,6 +110,20 @@ struct KeyEditorViewModelTests {
         #expect(vm.selectedIcon == "flame") // sticks
     }
 
+    @Test("Over-limit values are rejected with a length message before touching the keychain (#191)")
+    func valueTooLongMessage() {
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock)
+        vm.envVarName = "TEST_EDITOR_LONG"
+        let max = SecurityCLIKeychainService.maxValueLength(forAccount: "TEST_EDITOR_LONG")
+        vm.tokenValue = String(repeating: "a", count: max + 1)
+        #expect(throws: KeychainError.self) { try vm.save() }
+        // 汎用の "Failed to encode/decode" ではなく、上限値を含む案内が出る
+        #expect(vm.errorMessage?.contains("\(max)") == true)
+        #expect(vm.isSaving == false)
+        #expect(mock.exists(for: "TEST_EDITOR_LONG") == false)
+    }
+
     @Test("Prefix warning shows for wrong prefix")
     func prefixWarning() {
         let vm = KeyEditorViewModel(keychainService: MockKeychainService())
