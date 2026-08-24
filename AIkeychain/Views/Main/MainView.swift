@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// アップグレードツアーの提示 payload (#194)。`.sheet(item:)` で使うため Identifiable。
+/// 1 起動につき高々 1 回の提示なので id は固定でよい。
+private struct UpgradeTourPayload: Identifiable {
+    var id: Int { 0 }
+    let keyNames: [String]
+}
+
 struct MainView: View {
     @State private var viewModel = KeyListViewModel()
     @State private var showingShare = false
@@ -8,9 +15,11 @@ struct MainView: View {
     // 先に再登録ツアーを出す。新規インストール（旧キー無し）は従来どおり onboarding。
     // スキャンは onAppear で 1 回だけ（@State のデフォルト式は struct 再構築のたびに
     // 評価され、全 keychain 列挙をメインスレッドで反復してしまうため空で初期化する）。
-    @State private var legacyKeys: [String] = []
+    // 提示は `.sheet(item:)` を使う: `.sheet(isPresented:)` + 別 @State だと、提示時に
+    // コンテンツクロージャが更新前の値（空配列）で評価され「再登録が必要なキー（0 件）」
+    // になる stale-sheet 挙動を実機で確認した (#194)。payload に検出結果を持たせる。
+    @State private var upgradeTour: UpgradeTourPayload?
     @State private var didScanLegacy = false
-    @State private var showingUpgradeTour = false
     @State private var showingOnboarding = false
     @State private var showingCleanup = false
     @State private var showingModeSelect = false
@@ -153,8 +162,8 @@ struct MainView: View {
         .sheet(isPresented: $showingOnboarding) {
             OnboardingView()
         }
-        .sheet(isPresented: $showingUpgradeTour) {
-            UpgradeTourView(legacyKeyNames: legacyKeys)
+        .sheet(item: $upgradeTour) { payload in
+            UpgradeTourView(legacyKeyNames: payload.keyNames)
         }
         .sheet(isPresented: $showingCleanup) {
             CleanupView()
@@ -174,9 +183,8 @@ struct MainView: View {
             Task.detached(priority: .utility) {
                 let found = LegacyKeyScanner.unmigratedKeyNames()
                 await MainActor.run {
-                    legacyKeys = found
                     if UpgradeTourView.shouldShow(legacyKeyNames: found) {
-                        showingUpgradeTour = true
+                        upgradeTour = UpgradeTourPayload(keyNames: found)
                     } else if !OnboardingViewModel.hasCompleted {
                         showingOnboarding = true
                     }
