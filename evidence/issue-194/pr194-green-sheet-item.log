@@ -1,0 +1,5 @@
+# 修正後 (.sheet(item:) / feature/issue-194-tour-stale-sheet) — 実機 Debug ビルド起動ログ
+2026-08-24 17:33:57.703 AIkeychain[35527:12330510] [AKC-DEBUG-191] LegacyKeyScanner: items=395
+2026-08-24 17:33:57.703 AIkeychain[35527:12330510] [AKC-DEBUG-191] LegacyKeyScanner: unmigrated=40 [ANTHROPIC_API_KEY,BROWSERUSE_API_TOKEN,CLOUDFLARE_ACCOUNT_ID,CLOUDFLARE_API_TOKEN,DISCORD_CALENDAR_WEBHOOK_URL]
+2026-08-24 17:33:57.703 AIkeychain[35527:12330510] [AKC-DEBUG-191] MainView scan: found=40
+2026-08-24 17:33:57.972 AIkeychain[35527:12330409] [AKC-DEBUG-191] UpgradeTourView.body renders with 40 keys
