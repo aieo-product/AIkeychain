@@ -1,0 +1,21 @@
+✖ migrate --dry-run prints the plan and writes nothing (#196) (28.35975ms)
+✖ migrate --yes migrates gui+manual, gui wins duplicates, hang -> needs-approval (#196) (24.418292ms)
+✖ migrate is idempotent: second run skips everything migrated (#196) (24.303667ms)
+✖ migrate --only filters targets (#196) (25.391958ms)
+✖ migrate without --yes on a non-TTY refuses to write (#196) (27.444042ms)
+✖ planMigration classifies gui/manual, gui wins duplicates, noise excluded (#196) (0.306291ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 15
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 167.137083
+✖ failing tests:
+✖ migrate --dry-run prints the plan and writes nothing (#196) (28.35975ms)
+✖ migrate --yes migrates gui+manual, gui wins duplicates, hang -> needs-approval (#196) (24.418292ms)
+✖ migrate is idempotent: second run skips everything migrated (#196) (24.303667ms)
+✖ migrate --only filters targets (#196) (25.391958ms)
+✖ migrate without --yes on a non-TTY refuses to write (#196) (27.444042ms)
+✖ planMigration classifies gui/manual, gui wins duplicates, noise excluded (#196) (0.306291ms)
