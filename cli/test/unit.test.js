@@ -171,21 +171,35 @@ test('planMigration classifies gui/manual, gui wins duplicates, noise excluded (
   assert.ok(MANUAL_NAME_PATTERN.test('GITHUB_TOKEN'));
   assert.ok(!MANUAL_NAME_PATTERN.test('iCloud'));
   assert.ok(!MANUAL_NAME_PATTERN.test('com.apple.NetworkExtension'));
-  const plan = planMigration([
-    { service: 'com.aieo.aikeychain.managed', account: 'DONE' },
-    { service: 'com.aieo.aikeychain', account: 'DONE' },
-    { service: 'com.aieo.aikeychain', account: 'A_KEY' },
-    { service: 'com.aieo.aikeychain', account: '' },
-    { service: 'com.aieo.aikeychain', account: 'bad name!' },
-    { service: 'M_KEY', account: 'user' },
-    { service: 'A_KEY', account: 'user' },      // gui と重複 → gui 優先
-    { service: 'iCloud', account: 'user' },
-    { service: null, account: 'x' },
-  ]);
+  const plan = planMigration(
+    [
+      { service: 'com.aieo.aikeychain.managed', account: 'DONE' },
+      { service: 'com.aieo.aikeychain', account: 'DONE' },
+      { service: 'com.aieo.aikeychain', account: 'A_KEY' },
+      { service: 'com.aieo.aikeychain', account: '' },
+      { service: 'com.aieo.aikeychain', account: 'bad name!' },
+      { service: 'M_KEY', account: 'user' },
+      { service: 'A_KEY', account: 'user' },      // gui と重複 → gui 優先
+      { service: 'AMBIG', account: 'user' },      // #91: 同一 service に複数 account
+      { service: 'AMBIG', account: 'AMBIG' },
+      { service: 'SSH', account: '/Users/x/.ssh/id_ed25519' }, // 他アプリ: account がパス
+      { service: 'iCloud', account: 'user' },
+      { service: null, account: 'x' },
+    ],
+    { user: 'user' }
+  );
   const byName = Object.fromEntries(plan.map((e) => [`${e.name}:${e.source}`, e.action]));
   assert.equal(byName['A_KEY:gui'], 'migrate');
   assert.equal(byName['DONE:gui'], 'skip-managed');
   assert.equal(byName['A_KEY:manual'], 'skip-duplicate');
   assert.equal(byName['M_KEY:manual'], 'migrate');
-  assert.ok(!plan.some((e) => e.name === 'iCloud' || e.name === 'bad name!' || e.name === ''));
+  // gui と manual 両方にあるキーは manualCopy フラグでフォールバック可能に
+  assert.equal(plan.find((e) => e.name === 'A_KEY' && e.source === 'gui').manualCopy, true);
+  assert.equal(plan.find((e) => e.name === 'M_KEY').manualCopy, undefined);
+  // 名前文法外の旧 GUI account は黙って落とさない（unsupported-name として可視化）
+  assert.equal(byName['bad name!:gui'], 'unsupported-name');
+  // #91 の acct 重複 → ambiguous（読まない・書かない）
+  assert.equal(byName['AMBIG:manual'], 'ambiguous');
+  // 他アプリ由来（account がパス等）は列挙しない
+  assert.ok(!plan.some((e) => e.name === 'SSH' || e.name === 'iCloud' || e.name === ''));
 });

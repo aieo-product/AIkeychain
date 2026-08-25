@@ -98,7 +98,7 @@ struct UpgradeTourView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(L10n.s(ja: "登録方法", en: "How to re-register"))
                     .font(.system(size: 13, weight: .medium))
-                Label(L10n.s(ja: "一括で引き継ぐ: ターミナルで  akc migrate", en: "Migrate them all at once — in a terminal:  akc migrate"), systemImage: "square.stack.3d.up")
+                Label(L10n.s(ja: "一括で引き継ぐ: ターミナルで  akc migrate（akc 未導入なら npx -y aikeychain migrate）", en: "Migrate them all at once — in a terminal:  akc migrate  (no CLI yet? npx -y aikeychain migrate)"), systemImage: "square.stack.3d.up")
                     .font(.system(size: 12, weight: .medium))
                 Label(L10n.s(ja: "このアプリの「+」から 1 件ずつ追加する", en: "Or add one by one from the “+” in this app"), systemImage: "plus.circle")
                     .font(.system(size: 12))

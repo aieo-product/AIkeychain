@@ -34,7 +34,7 @@ bash 版 `scripts/akc` と互換（issue #91/#167 対応済み）。各段は ex
 
 1. `service="com.aieo.aikeychain.managed"` + `account=<KEY>`（managed namespace = 唯一の保管場所 / v2.0）
 
-旧 v1.x の GUI ストア / manual スキームは読まない（旧ユーザーはキーを再登録する）。
+旧 v1.x の GUI ストア / manual スキームは読まない。旧ユーザーは **`akc migrate`** で一括引き継ぎできる（値は表示されず、旧アイテムは削除されない）。個別には `akc set <KEY>`。
 
 ## MCP サーバー
 

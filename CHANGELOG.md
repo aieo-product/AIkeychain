@@ -26,7 +26,7 @@ All notable changes to AI KeyChain are documented in this file.
 - これに伴い legacy 由来の既知バグ（#186 manual 重複削除・#187 doctor の managed 行誤解析）は経路ごと解消
 
 ### 注記
-- 移行アシスタント（旧 #172 C5）は、旧バージョンの利用実績がほぼ無いこと（DL 実測）を踏まえ**作らない判断**とした。互換の複雑さ（secret oracle・移行の crash-safe 化など）を丸ごと回避している。
+- 移行アシスタント **UI**（旧 #172 C5）は、旧バージョンの利用実績がほぼ無いこと（DL 実測）を踏まえ作らない判断とした（互換の複雑さを丸ごと回避）。一括引き継ぎは CLI の `akc migrate`（#196）が担う。
 
 ## [1.8.1] - 2026-08-13
 
