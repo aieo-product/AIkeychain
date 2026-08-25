@@ -1,6 +1,25 @@
 import Foundation
 import Observation
 
+/// キーエディタの提示先 (#198)。`.sheet(item:)` 用の Identifiable payload。
+enum KeyEditorRoute: Identifiable {
+    case add
+    case edit(APIKey)
+
+    var id: String {
+        switch self {
+        case .add: "add"
+        case .edit(let key): "edit-\(key.envVarName)"
+        }
+    }
+
+    /// KeyEditorView に渡す編集対象（add は nil）。
+    var key: APIKey? {
+        if case .edit(let key) = self { return key }
+        return nil
+    }
+}
+
 /// サイドバーで選択可能なカテゴリ（プリセット + カスタム統合）
 enum CategorySelection: Hashable {
     case all
@@ -15,8 +34,9 @@ final class KeyListViewModel {
     var selectedCategory: CategorySelection? = .all
     var searchText: String = ""
     var selectedKey: APIKey?
-    var showingEditor = false
-    var editingKey: APIKey?
+    /// エディタ提示は `.sheet(item:)` で行う (#198)。`.sheet(isPresented:)` + 別 state は
+    /// 提示時に更新前の値でコンテンツが評価される stale-sheet（#194 で実機再現）を踏むため。
+    var editorRoute: KeyEditorRoute?
 
     private let keychainService: KeychainServiceProtocol
     private let customStore: CustomKeyStore
@@ -128,12 +148,10 @@ final class KeyListViewModel {
     }
 
     func addNewKey() {
-        editingKey = nil
-        showingEditor = true
+        editorRoute = .add
     }
 
     func editKey(_ key: APIKey) {
-        editingKey = key
-        showingEditor = true
+        editorRoute = .edit(key)
     }
 }
