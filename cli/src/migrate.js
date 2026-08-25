@@ -205,13 +205,16 @@ function parseArgs(argv) {
 
 const PLAN_LABELS = {
   'skip-managed': 'skip — already managed',
-  'skip-duplicate': 'skip — duplicate (the GUI store copy is used)',
+  'skip-duplicate': 'skip — duplicate (the GUI store copy is preferred)',
   'unsupported-name': 'cannot migrate — name not supported by v2 (re-register: akc set)',
   ambiguous: 'cannot migrate — multiple keychain items share this service (#91); re-register: akc set',
 };
+// unsupported-name の行だけは keychain 由来の未検証文字列が載るため、制御文字や
+// ANSI エスケープが端末に流れないよう印字可能 ASCII 以外を '?' に置換する (N4)。
+const printable = (name) => name.replace(/[^\x20-\x7e]/g, '?');
 const planLine = (e) => {
   const label = e.action === 'migrate' ? `migrate (${e.source})` : PLAN_LABELS[e.action];
-  return `  ${e.name.padEnd(36)} ${label}`;
+  return `  ${printable(e.name).padEnd(36)} ${label}`;
 };
 
 const FAILURE_TEXT = {
@@ -333,7 +336,9 @@ export async function cmdMigrate(argv) {
             };
     }
     if (migrated) continue; // 成功: 途中ソースの失敗は出力しない（矛盾行の防止）
-    if (sawNeedsApproval && !lastFailure) {
+    if (sawNeedsApproval) {
+      // fallback 側が失敗していても、許可ダイアログへの応答が実効的な回復手段
+      // なので needs-approval を優先して案内する（両レビュー一致指摘 N2）。
       needsApproval.push(name);
       out(`  !!  ${name.padEnd(36)} needs-approval — reading it requires a Keychain permission dialog\n`);
     } else if (lastFailure) {

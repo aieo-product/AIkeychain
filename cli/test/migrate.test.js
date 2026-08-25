@@ -64,6 +64,8 @@ case "$cmd" in
     emit DUPAMB_I com.aieo.aikeychain
     emit "$USER" DUPAMB_I
     emit DUPAMB_I DUPAMB_I
+    emit FBFAIL_J com.aieo.aikeychain
+    emit "$USER" FBFAIL_J
     emit "/Users/x/.ssh/id_ed25519" SSH
     emit account com.apple.NetworkExtension
     emit account iCloud
@@ -95,6 +97,7 @@ case "$cmd" in
         HANG_B) sleep 60 ;;
         FALLBACK_H) sleep 60 ;;
         DUPAMB_I) sleep 60 ;;
+        FBFAIL_J) sleep 60 ;;
         *) echo "could not be found" >&2; exit 44 ;;
       esac
     fi
@@ -104,6 +107,7 @@ case "$cmd" in
       AMBIG_M) $w && echo "arbitrary-of-AMBIG_M"; exit 0 ;;
       FALLBACK_H) $w && echo "manual-copy-of-FALLBACK_H"; exit 0 ;;
       DUPAMB_I) $w && echo "arbitrary-of-DUPAMB_I"; exit 0 ;;
+      FBFAIL_J) echo "boom secret-sentinel-J" >&2; exit 3 ;;
       SSH) echo "must never be read" >&2; exit 97 ;;
     esac
     echo "could not be found" >&2; exit 44 ;;
@@ -185,7 +189,12 @@ test('migrate --yes: gui+manual, gui wins dups, hex/binary handling, no value le
   // manual 側が #91 の複数 account ならフォールバックに使わない（不定値の混入防止）
   assert.equal(await state('DUPAMB_I'), null);
   assert.match(r.stdout, /DUPAMB_I.*needs-approval/);
+  // GUI タイムアウト + fallback 失敗でも needs-approval を失わない（両レビュー N2）
+  assert.equal(await state('FBFAIL_J'), null);
+  assert.match(r.stdout, /FBFAIL_J.*needs-approval/);
   assert.match(r.stdout, /--interactive --only .*HANG_B/);
+  assert.match(r.stdout, /--interactive --only .*FBFAIL_J/);
+  assert.doesNotMatch(r.stdout + r.stderr, /secret-sentinel-J/);
   // 生値・エンコード値はどこにも出ない
   assert.doesNotMatch(r.stdout + r.stderr, /value-of-|gui-value|manual-value|arbitrary-of|6361660a|caf\\né/i);
   // 旧アイテムを削除しない
