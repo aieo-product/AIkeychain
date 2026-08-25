@@ -59,6 +59,11 @@ case "$cmd" in
     emit "$USER" DUP_K
     emit "$USER" AMBIG_M
     emit AMBIG_M AMBIG_M
+    emit FALLBACK_H com.aieo.aikeychain
+    emit "$USER" FALLBACK_H
+    emit DUPAMB_I com.aieo.aikeychain
+    emit "$USER" DUPAMB_I
+    emit DUPAMB_I DUPAMB_I
     emit "/Users/x/.ssh/id_ed25519" SSH
     emit account com.apple.NetworkExtension
     emit account iCloud
@@ -88,6 +93,8 @@ case "$cmd" in
         READFAIL_G)
           echo "diagnostic leaking secret-sentinel-XYZ" >&2; exit 3 ;;
         HANG_B) sleep 60 ;;
+        FALLBACK_H) sleep 60 ;;
+        DUPAMB_I) sleep 60 ;;
         *) echo "could not be found" >&2; exit 44 ;;
       esac
     fi
@@ -95,6 +102,8 @@ case "$cmd" in
       MIG_C) $w && echo "value-of-MIG_C"; exit 0 ;;
       DUP_K) $w && echo "manual-value-of-DUP_K"; exit 0 ;;
       AMBIG_M) $w && echo "arbitrary-of-AMBIG_M"; exit 0 ;;
+      FALLBACK_H) $w && echo "manual-copy-of-FALLBACK_H"; exit 0 ;;
+      DUPAMB_I) $w && echo "arbitrary-of-DUPAMB_I"; exit 0 ;;
       SSH) echo "must never be read" >&2; exit 97 ;;
     esac
     echo "could not be found" >&2; exit 44 ;;
@@ -169,7 +178,14 @@ test('migrate --yes: gui+manual, gui wins dups, hex/binary handling, no value le
   assert.equal(await state('SSH'), null);
   assert.match(r.stdout, /HANG_B/);
   assert.match(r.stdout, /needs-approval/);
-  assert.match(r.stdout, /--interactive --only HANG_B/);
+  // GUI 側が読めない場合、一意な manual コピーがあればフォールバックで移行する
+  assert.equal(await state('FALLBACK_H'), 'manual-copy-of-FALLBACK_H');
+  assert.match(r.stdout, /FALLBACK_H.*manual fallback/);
+  assert.doesNotMatch(r.stdout, /FALLBACK_H.*(needs-approval|NG)/); // 成功時に矛盾する失敗行を出さない
+  // manual 側が #91 の複数 account ならフォールバックに使わない（不定値の混入防止）
+  assert.equal(await state('DUPAMB_I'), null);
+  assert.match(r.stdout, /DUPAMB_I.*needs-approval/);
+  assert.match(r.stdout, /--interactive --only .*HANG_B/);
   // 生値・エンコード値はどこにも出ない
   assert.doesNotMatch(r.stdout + r.stderr, /value-of-|gui-value|manual-value|arbitrary-of|6361660a|caf\\né/i);
   // 旧アイテムを削除しない
@@ -177,11 +193,12 @@ test('migrate --yes: gui+manual, gui wins dups, hex/binary handling, no value le
 });
 
 test('migrate is idempotent: a second full run migrates nothing new (#196)', async () => {
+  await rm(join(stubDir, 'state-MIG_A'), { force: true }); // 前テストの状態に依存しない
   const first = await runMigrate(['--yes']);
+  assert.notEqual((first.stdout.match(/migrated=(\d+)/) ?? [])[1], '0', first.stdout);
   const second = await runMigrate(['--yes']);
   assert.match(second.stdout, /MIG_A.*(skip|managed)/i);
   assert.match(second.stdout, /MIG_C.*(skip|managed)/i);
-  assert.ok(/migrated=\d+/.test(first.stdout), first.stdout);
   assert.equal((second.stdout.match(/migrated=(\d+)/) ?? [])[1], '0', 'second run must migrate 0 keys');
 });
 

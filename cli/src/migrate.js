@@ -80,13 +80,19 @@ export function planMigration(records, { user } = {}) {
     }
   }
   const manual = new Set([...manualAccounts.keys()].filter((s) => !manualForeign.has(s)));
+  // フォールバックに使える manual コピー = account が一意なもののみ。複数 account
+  // (#91) は service-only read がどれを返すか不定なので、フォールバックでも使わない
+  // （Codex 再レビュー High: gui 重複側で曖昧さが skip-duplicate に隠れていた）。
+  const manualUnambiguous = new Set(
+    [...manual].filter((name) => manualAccounts.get(name).size === 1)
+  );
   const entries = [];
   for (const name of [...gui].sort()) {
     entries.push({
       name,
       source: 'gui',
       action: managed.has(name) ? 'skip-managed' : 'migrate',
-      manualCopy: manual.has(name),
+      manualCopy: manualUnambiguous.has(name),
     });
   }
   for (const name of [...guiBadName].sort()) {
@@ -158,9 +164,9 @@ async function readLegacyValue(name, source, timeoutMs) {
   }
 }
 
-function confirm(question) {
+export function confirm(question, { input = process.stdin, output = process.stderr } = {}) {
   return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stderr });
+    const rl = createInterface({ input, output });
     let settled = false;
     const settle = (v) => {
       if (!settled) {
@@ -171,8 +177,10 @@ function confirm(question) {
     // EOF (Ctrl-D) では question のコールバックが呼ばれない — close をキャンセル扱いに。
     rl.on('close', () => settle(false));
     rl.question(question, (answer) => {
-      rl.close();
+      // rl.close() は同期的に 'close' を emit するため、先に settle しないと
+      // 肯定回答でも false が確定してしまう（Codex 再レビューで実証）。
       settle(/^y(es)?$/i.test(answer.trim()));
+      rl.close();
     });
   });
 }
@@ -281,9 +289,9 @@ export async function cmdMigrate(argv) {
     // （#196 レビュー M4: 計画時に GUI 優先で固定すると、読めない GUI 項目の裏に
     // ある読める manual 値へ到達する手段が無くなる）。
     const sources = [target.source, ...(target.manualCopy ? ['manual'] : [])];
-    let done = false;
+    let migrated = false;
     let sawNeedsApproval = false;
-    let lastFailureLine = null;
+    let lastFailure = null; // { line, kind: 'failed' | 'unsupported' }
     for (const source of sources) {
       if (opts.interactive) {
         process.stderr.write(
@@ -297,42 +305,40 @@ export async function cmdMigrate(argv) {
           const via = source === target.source ? source : `${source} fallback`;
           out(`  ok  ${name.padEnd(36)} migrated (${via})\n`);
           tally.ok += 1;
-          done = true;
+          migrated = true;
+          break;
         } catch (err) {
           if (!(err instanceof KeychainError)) throw err;
           const msg = err.message.split('\n')[0];
-          if (/printable ASCII|character limit/.test(msg)) {
-            lastFailureLine = `  --  ${name.padEnd(36)} unsupported value: ${msg}\n`;
-            tally.unsupported += 1;
-            done = true; // 値そのものが対象外 — 別ソースを試しても同じ扱いにしない
-          } else {
-            lastFailureLine = `  NG  ${name.padEnd(36)} save failed: ${msg}\n`;
-            tally.failed += 1;
-            done = true;
-          }
+          lastFailure = /printable ASCII|character limit/.test(msg)
+            ? { line: `  --  ${name.padEnd(36)} unsupported value: ${msg}\n`, kind: 'unsupported' }
+            : { line: `  NG  ${name.padEnd(36)} save failed: ${msg}\n`, kind: 'failed' };
+          continue; // 別ソースの値は異なり得るので試す
         }
-        break;
       }
       if (r.status === 'needs-approval') {
         sawNeedsApproval = true;
-        continue; // 別ソースがあれば試す
+        continue;
       }
-      lastFailureLine = `  NG  ${name.padEnd(36)} ${
-        r.status === 'read-failed'
-          ? `read failed (security exit ${r.code ?? 'unknown'})`
-          : FAILURE_TEXT[r.status]
-      }\n`;
+      lastFailure =
+        r.status === 'unsupported-encoding'
+          ? { line: `  --  ${name.padEnd(36)} ${FAILURE_TEXT[r.status]}\n`, kind: 'unsupported' }
+          : {
+              line: `  NG  ${name.padEnd(36)} ${
+                r.status === 'read-failed'
+                  ? `read failed (security exit ${r.code ?? 'unknown'})`
+                  : FAILURE_TEXT[r.status]
+              }\n`,
+              kind: 'failed',
+            };
     }
-    if (done) {
-      if (lastFailureLine) out(lastFailureLine);
-      continue;
-    }
-    if (sawNeedsApproval) {
+    if (migrated) continue; // 成功: 途中ソースの失敗は出力しない（矛盾行の防止）
+    if (sawNeedsApproval && !lastFailure) {
       needsApproval.push(name);
       out(`  !!  ${name.padEnd(36)} needs-approval — reading it requires a Keychain permission dialog\n`);
-    } else if (lastFailureLine) {
-      tally.failed += 1;
-      out(lastFailureLine);
+    } else if (lastFailure) {
+      tally[lastFailure.kind] += 1;
+      out(lastFailure.line);
     }
   }
 

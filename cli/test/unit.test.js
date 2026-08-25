@@ -202,4 +202,33 @@ test('planMigration classifies gui/manual, gui wins duplicates, noise excluded (
   assert.equal(byName['AMBIG:manual'], 'ambiguous');
   // 他アプリ由来（account がパス等）は列挙しない
   assert.ok(!plan.some((e) => e.name === 'SSH' || e.name === 'iCloud' || e.name === ''));
+  // gui 重複の manual 側が #91 の複数 account ならフォールバックにも使わない
+  const plan2 = planMigration(
+    [
+      { service: 'com.aieo.aikeychain', account: 'D_KEY' },
+      { service: 'D_KEY', account: 'user' },
+      { service: 'D_KEY', account: 'D_KEY' },
+    ],
+    { user: 'user' }
+  );
+  assert.equal(plan2.find((e) => e.name === 'D_KEY' && e.source === 'gui').manualCopy, false);
+});
+
+// #196 再レビュー: confirm() は肯定回答で true・EOF で false（close の同期 emit に負けない）
+test('confirm settles from the answer, not the synchronous close event (#196)', async () => {
+  const { PassThrough } = await import('node:stream');
+  const { confirm } = await import('../src/migrate.js');
+  const ask = (chunks) => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    output.resume();
+    const p = confirm('go? ', { input, output });
+    for (const c of chunks) input.write(c);
+    input.end();
+    return p;
+  };
+  assert.equal(await ask(['y\n']), true);
+  assert.equal(await ask(['YES\n']), true);
+  assert.equal(await ask(['n\n']), false);
+  assert.equal(await ask([]), false); // EOF (Ctrl-D)
 });
