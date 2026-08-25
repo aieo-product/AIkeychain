@@ -1,0 +1,65 @@
+# real-machine dry-run after review fixes (2026-08-25)
+Migration plan (v1 → managed namespace "com.aieo.aikeychain.managed"):
+  ANTHROPIC_API_KEY                    skip — already managed
+  BROWSERUSE_API_TOKEN                 migrate (gui)
+  CLOUDFLARE_ACCOUNT_ID                skip — already managed
+  CLOUDFLARE_API_TOKEN                 skip — already managed
+  DISCORD_CALENDAR_WEBHOOK_URL         skip — already managed
+  DISCORD_TOKEN                        skip — already managed
+  EVAN_LT_BEARER_TOKEN                 skip — already managed
+  EVAN_LT_WORKER_TOKEN                 skip — already managed
+  FREEE_AI_PROXY_TOKEN                 skip — already managed
+  FREEE_CLIENT_ID                      skip — already managed
+  FREEE_CLIENT_SECRET                  skip — already managed
+  FUGU_API_KEY                         skip — already managed
+  GITHUB_TOKEN                         skip — already managed
+  GITLAB_TOKEN                         skip — already managed
+  GOOGLE_CLIENT_ID                     skip — already managed
+  GOOGLE_CLIENT_SECRET                 skip — already managed
+  HIGGSFIELD_API_ID                    skip — already managed
+  HIGGSFIELD_API_KEY                   skip — already managed
+  JCARVIS_LOCATION_TOKEN               skip — already managed
+  KAGGLE_KEY                           skip — already managed
+  KASHAM_ASSET_API_TOKEN               skip — already managed
+  KASHAM_DEVICE_TOKEN                  skip — already managed
+  KASHAM_REVENUECAT_IOS_KEY            skip — already managed
+  KASHAM_REVENUECAT_V2_KEY             skip — already managed
+  MESHY_API_KEY                        skip — already managed
+  NPM_TOKEN                            skip — already managed
+  OKAMI_DB_PASSWORD                    skip — already managed
+  OKAMI_DB_USER                        skip — already managed
+  OPENAI_API_KEY                       skip — already managed
+  OPENAI_FREE_API_KEY                  skip — already managed
+  QIITA_TOKEN                          skip — already managed
+  SLACK_APP_TOKEN                      skip — already managed
+  SLACK_BOT_TOKEN                      skip — already managed
+  STACKCHAN_ADMIN_TOKEN                skip — already managed
+  TAILSCALE_AUTH_KEY                   skip — already managed
+  TEIAN_ADMIN_PASSWORD                 skip — already managed
+  TOICAMERA_DEVICE_TOKEN               skip — already managed
+  TOKEN_ENCRYPTION_KEY_PROD            skip — already managed
+  XAI_API_KEY                          skip — already managed
+  X_AUTH_TOKEN                         skip — already managed
+  AWS_ACCESS_KEY_ID                    skip — already managed
+  AWS_SECRET_ACCESS_KEY                skip — already managed
+  CLOUDFLARE_ACCOUNT_ID                skip — duplicate (the GUI store copy is used)
+  CLOUDFLARE_API_TOKEN                 skip — duplicate (the GUI store copy is used)
+  CLOUDFLARE_TUNNEL_TOKEN_SALESMAT     skip — already managed
+  DISCORD_LOG_WEBHOOK_URL              skip — already managed
+  DONACK_BACKEND_TOKEN                 skip — already managed
+  EVANGLASS_API_TOKEN                  skip — already managed
+  GITLAB_ROOT_PASSWORD                 skip — already managed
+  KAGGLE_API_TOKEN                     skip — already managed
+  KAGGLE_KEY                           skip — duplicate (the GUI store copy is used)
+  KAGGLE_USERNAME                      skip — already managed
+  NPM_TOKEN                            skip — duplicate (the GUI store copy is used)
+  RECEIPT_INTEGRATION_API_KEY          skip — already managed
+  SESSION_SECRET                       skip — already managed
+  STITCH_API_KEY                       skip — already managed
+  TOKEN_ENCRYPTION_KEY                 skip — already managed
+  YAHOO_IMAP_PASSWORD                  skip — already managed
+  YAHOO_IMAP_USER                      skip — already managed
+Plan: 1 to migrate, 58 skipped.
+Old items are never deleted — they stay in the Keychain untouched.
+(dry-run) Nothing written.
+exit=0
