@@ -1,0 +1,190 @@
+✔ Test "resolveSigningIdentity: existing key short-circuits, never creates" passed after 0.001 seconds.
+✔ Test "resolveSigningIdentity: first create (no existing, add succeeds) uses fresh key" passed after 0.001 seconds.
+✔ Test "resolveSigningIdentity: race (errSecDuplicateItem) adopts existing, never rotates" passed after 0.001 seconds.
+✔ Test "resolveSigningIdentity: two sequential calls yield a stable fingerprint" passed after 0.001 seconds.
+✔ Test "decodeSigningBlob: 32B blob decodes as software (raw first), regardless of SE availability" passed after 0.001 seconds.
+✔ Test "decodeSigningBlob: >32B blob is never mis-decoded as software; SE only tried when available" passed after 0.001 seconds.
+✔ Test "decodeSigningBlob: round-trips a freshly created SE identity when available" passed after 0.005 seconds.
+✔ Test "makeNewSigningIdentity produces a usable signer (SE or software)" passed after 0.009 seconds.
+✔ Test "SigningIdentity.software goes through the same encrypt/verify path as a raw key" passed after 0.002 seconds.
+✔ Test "TOFU: unknown fingerprint classifies as first-seen" passed after 0.001 seconds.
+✔ Test "TOFU: confirm records fingerprint, then classifies as known" passed after 0.001 seconds.
+✔ Test "TOFU: re-confirm preserves the original firstSeen date" passed after 0.001 seconds.
+✔ Test "TOFU: a new fingerprint is still first-seen even when the store is non-empty" passed after 0.001 seconds.
+✔ Test "Freshness: recent createdAt is fresh, old is stale" passed after 0.001 seconds.
+✔ Test "Freshness: threshold boundary — exactly at threshold is fresh, just over is stale" passed after 0.001 seconds.
+✔ Test "Freshness: a future createdAt is treated as fresh (non-stale)" passed after 0.001 seconds.
+✔ Test "v2 round trip: encrypt (sender) → decrypt (recipient) authenticates and matches" passed after 0.001 seconds.
+✔ Test "Tampering with encryptedData throws signatureInvalid" passed after 0.001 seconds.
+✔ Test "Tampering with keyCount throws signatureInvalid" passed after 0.001 seconds.
+✔ Test "Swapping senderSigningPublicKey (with unchanged signature) throws signatureInvalid" passed after 0.001 seconds.
+✔ Test "Tampering with createdAt throws signatureInvalid" passed after 0.001 seconds.
+✔ Test "Signature-stripping (drop sig fields from a v2 file) throws signatureInvalid" passed after 0.001 seconds.
+✔ Test "Version downgrade 2→1 while keeping signature throws signatureInvalid" passed after 0.001 seconds.
+✔ Test "Structural inconsistency: only one of signature/senderSigningPublicKey present throws signatureInvalid" passed after 0.001 seconds.
+✔ Test "Unknown version is rejected (invalidFile)" passed after 0.001 seconds.
+✔ Test "Attribution swap: re-sign with attacker key over another's ciphertext fails GCM decryption" passed after 0.001 seconds.
+✔ Test "Empty key list round trip" passed after 0.001 seconds.
+✔ Test "Forgery with a different signing key verifies but yields a DIFFERENT fingerprint" passed after 0.001 seconds.
+✔ Test "Hand-constructed v1 file (no signature fields) decodes, decrypts, unauthenticated" passed after 0.001 seconds.
+✔ Test "Fingerprint is full-length (256-bit) and stable for the same key" passed after 0.001 seconds.
+✔ Test "canonicalMessage is deterministic and field-order sensitive" passed after 0.001 seconds.
+✔ Test "sign / verify round trip over canonical message" passed after 0.001 seconds.
+✔ Test "Save and retrieve a key" passed after 0.001 seconds.
+✔ Test "Retrieve non-existent key returns nil" passed after 0.001 seconds.
+✔ Test "Exists returns true for saved key" passed after 0.001 seconds.
+✔ Test "Exists returns false for missing key" passed after 0.001 seconds.
+✔ Test "Delete removes key" passed after 0.001 seconds.
+✔ Test "Save overwrites existing value" passed after 0.001 seconds.
+✔ Test "Reports legacy GUI-store keys not yet in managed, sorted" passed after 0.001 seconds.
+✔ Test "Does NOT report manual-scheme / other-app services (avoids false positives)" passed after 0.001 seconds.
+✔ Test "Returns empty when everything is already managed" passed after 0.001 seconds.
+✔ Test "Never reports the app-reserved share/sign keys" passed after 0.001 seconds.
+✔ Test "Skips records with nil/empty account and nil service (no blank tour rows)" passed after 0.001 seconds.
+✔ Test "shouldShow is false with no legacy keys" passed after 0.001 seconds.
+✔ Test "All services have display names" passed after 0.001 seconds.
+✔ Test "All services have env var names" passed after 0.005 seconds.
+✔ Test "All services have categories" passed after 0.001 seconds.
+✔ Test "All services have system images" passed after 0.001 seconds.
+✔ Test "Token prefix format is correct" passed after 0.001 seconds.
+✔ Test "Setup URLs are valid" passed after 0.001 seconds.
+✔ Test "All categories have unique colors" passed after 0.001 seconds.
+✔ Test "Category count is 7" passed after 0.001 seconds.
+✔ Test "New editor starts with no selection" passed after 0.001 seconds.
+✔ Test "Icon follows the category default until the user picks one" passed after 0.001 seconds.
+✔ Test "Once the user picks an icon, category changes no longer override it" passed after 0.001 seconds.
+✔ Test "Over-limit values are rejected with a length message before touching the keychain (#191)" passed after 0.001 seconds.
+✔ Test "Prefix warning shows for wrong prefix" passed after 0.001 seconds.
+✔ Test "No prefix warning for correct prefix" passed after 0.007 seconds.
+✔ Test "No prefix warning when service not selected" passed after 0.001 seconds.
+✔ Test "Can save WITHOUT a service when category + env var + value are set (issue #102)" passed after 0.001 seconds.
+✔ Test "Cannot save with an invalid env var name even with a category" passed after 0.001 seconds.
+✔ Test "Cannot save without category selection" passed after 0.001 seconds.
+✔ Test "Cannot save with empty token" passed after 0.001 seconds.
+✔ Test "Can save with valid selection and token" passed after 0.001 seconds.
+✔ Test "Save stores value in keychain" passed after 0.001 seconds.
+✔ Test "Editing key loads existing value" passed after 0.001 seconds.
+✔ Test "Save with NO service + custom env var creates a CustomKey with the chosen category (#102)" passed after 0.001 seconds.
+✔ Test "Save stores a user-picked icon on a custom key (#110)" passed after 0.001 seconds.
+✔ Test "Custom key icon equal to category default is not persisted (follows category)" passed after 0.001 seconds.
+✔ Test "Save stores an icon override for a preset-named key (#110)" passed after 0.001 seconds.
+✔ Test "APIKey.systemImage prefers a custom key's explicit icon (#110)" passed after 0.001 seconds.
+✔ Test "Old CustomKey JSON without an icon field decodes safely (migration, #110)" passed after 0.001 seconds.
+✔ Test "Save with NO service but a preset-named env var preserves the chosen category via override (#102)" passed after 0.001 seconds.
+✔ Test "Save with NO service + preset env var + matching default category writes no override" passed after 0.001 seconds.
+✔ Test "Short values are fully masked with no original characters and a fixed width (hides length)" passed after 0.001 seconds.
+✔ Test "Long values reveal only a short prefix and never the suffix" passed after 0.001 seconds.
+✔ Test "Boundary: value exactly at threshold-1 is fully masked, at threshold reveals prefix" passed after 0.006 seconds.
+✔ Test "Valid env var names are accepted" passed after 0.001 seconds.
+✔ Test "Invalid env var names are rejected" passed after 0.001 seconds.
+✔ Test "Names with embedded newlines are rejected (anchors match whole string, not line)" passed after 0.001 seconds.
+✔ Test "isValid does not trim: surrounding whitespace makes a name invalid" passed after 0.001 seconds.
+✔ Test "save rejects an invalid account name before touching the Keychain" passed after 0.001 seconds.
+✔ Test "A line with an invalid key name is skipped during parsing" passed after 0.001 seconds.
+✔ Test "A line with a valid key name parses normally" passed after 0.001 seconds.
+✔ Test "A mixed block only imports the entry with a valid key name" passed after 0.001 seconds.
+✔ Test "Anthropic route found" passed after 0.001 seconds.
+✔ Test "OpenAI route found" passed after 0.004 seconds.
+✔ Test "xAI route found" passed after 0.001 seconds.
+✔ Test "Unknown host returns nil" passed after 0.001 seconds.
+✔ Test "Host with port still matches (port stripped)" passed after 0.001 seconds.
+✔ Test "Look-alike host does NOT match (exact match, not contains)" passed after 0.001 seconds.
+✔ Test "Parse simple GET request" passed after 0.001 seconds.
+✔ Test "Parse POST request with body" passed after 0.001 seconds.
+✔ Test "Parse extracts all headers" passed after 0.001 seconds.
+✔ Test "Invalid request returns nil" passed after 0.001 seconds.
+✔ Test "Server initializes with default port" passed after 0.001 seconds.
+✔ Test "Server can start and stop" passed after 0.615 seconds.
+✔ Test "Starting twice does not crash" passed after 0.304 seconds.
+✔ Test "A blocked keychain read does NOT wedge other requests" passed after 0.712 seconds.
+✔ Test "A blocked keychain read returns a timeout error, never hangs forever" passed after 1.407 seconds.
+✔ Test "Keychain consent-required read returns 503 quickly, no hang" passed after 0.412 seconds.
+✔ Test "Circuit breaker: after a timeout, subsequent reads fail fast without re-blocking" passed after 1.425 seconds.
+✔ Test "Admission cap: concurrent burst during the first timeout window is bounded (fast 503)" passed after 0.716 seconds.
+✔ Test "Idle client connection is dropped after the inbound timeout" passed after 1.421 seconds.
+✔ Test "Unknown host is rejected instantly without touching the keychain" passed after 0.412 seconds.
+✔ Test "Upstream response is streamed to the client, not buffered until completion" passed after 8.440 seconds.
+✔ Test "Full request body is framed before forwarding (split header/body sends)" passed after 0.720 seconds.
+✔ Test "parseContentLength reads the header case-insensitively" passed after 0.001 seconds.
+✔ Test "contentLengthField validates: absent/present/invalid (non-numeric, negative, conflicting)" passed after 0.001 seconds.
+✔ Test "Oversized request is rejected with 413" passed after 0.411 seconds.
+✔ Test "Invalid (conflicting) Content-Length is rejected with 400" passed after 0.410 seconds.
+✔ Test "Transfer-Encoding request is rejected with 400 (smuggling defense)" passed after 0.410 seconds.
+✔ Test "Route header value is correctly formatted for Anthropic" passed after 0.001 seconds.
+✔ Test "Route header value is correctly formatted for OpenAI" passed after 0.001 seconds.
+✔ Test "Log entry formats time correctly" passed after 0.001 seconds.
+✔ Test "Log entry detects errors" passed after 0.001 seconds.
+✔ Test "Log entry formats latency over 1 second" passed after 0.001 seconds.
+✔ Test "ProxyLogStore appends and limits entries" passed after 0.001 seconds.
+✔ Test "ProxyLogStore counts errors" passed after 0.001 seconds.
+✔ Test "ProxyLogStore clear removes all logs" passed after 0.001 seconds.
+✔ Test "Log does not contain API key or request body" passed after 0.001 seconds.
+✔ Test "Secret Reference format outputs keychain:// prefix" passed after 0.001 seconds.
+✔ Test "Secret Reference format includes service name comments" passed after 0.001 seconds.
+✔ Test "Standard format emits the managed lookup (v2.0 #188)" passed after 0.001 seconds.
+✔ Test "Standard format uses absolute security path" passed after 0.001 seconds.
+✔ Test "Env format includes service name comments" passed after 0.001 seconds.
+✔ Test "Unconfigured keys are excluded from all formats" passed after 0.001 seconds.
+✔ Test "Multiple keys are grouped by category" passed after 0.001 seconds.
+✔ Test "ExportFormat has three cases" passed after 0.001 seconds.
+✔ Test "Secret Reference mode exists" passed after 0.001 seconds.
+✔ Test "All three modes are distinct" passed after 0.001 seconds.
+✔ Test "Save then retrieve round-trips via subprocess (stdin+hex, no argv value)" passed after 0.766 seconds.
+✔ Test "Retrieve of a missing key returns nil (rc=44)" passed after 0.361 seconds.
+✔ Test "Delete is idempotent (missing key is success)" passed after 0.707 seconds.
+✔ Test "Control characters and empty values are rejected before touching security" passed after 0.001 seconds.
+✔ Test "A prompt-blocked read times out, is killed, and quarantines the key" passed after 0.329 seconds.
+✔ Test "Successful save clears the quarantine for that key" passed after 0.684 seconds.
+✔ Test "Concurrent reads of the same key are coalesced into one subprocess" passed after 1.580 seconds.
+✔ Test "An all-hex ASCII secret round-trips verbatim (no hex-decode guessing, #179 review)" passed after 0.607 seconds.
+✔ Test "Value length budget follows the security -i 4094-char line (#191)" passed after 0.598 seconds.
+✔ Test "Bare hex runs in security stderr are redacted, not only -X <hex> (#191)" passed after 0.001 seconds.
+✔ Test "Non-ASCII values are rejected until the C7 encoding convention lands" passed after 0.001 seconds.
+✔ Test "Reads query only the managed namespace (issued commands, not constants)" passed after 0.284 seconds.
+✔ Test "Delete only ever touches the managed namespace (v2.0 #188)" passed after 0.552 seconds.
+✔ Test "A locked keychain fails fast without spawning and without quarantining (#170)" passed after 0.553 seconds.
+✔ Test "Delete of a missing key is idempotent (rc=44)" passed after 0.306 seconds.
+✔ Test "unconfigure removes a well-formed block and preserves user lines" passed after 0.004 seconds.
+✔ Test "unconfigure fails safely for a dangling BEGIN around the current hook" passed after 0.015 seconds.
+✔ Test "unconfigure leaves a simple dangling BEGIN byte-identical" passed after 0.003 seconds.
+✔ Test "unconfigure fails safely for a lone END marker" passed after 0.002 seconds.
+✔ Test "unconfigure backup has 0600 permissions" passed after 0.001 seconds.
+✔ Test "unconfigure recognizes and removes a well-formed CRLF block" passed after 0.001 seconds.
+✔ Test "configure migrates a stale managed block" passed after 0.001 seconds.
+✔ Test "configure is idempotent when managed block is current" passed after 0.001 seconds.
+✔ Test "configure adds current managed block to a fresh zshrc" passed after 0.001 seconds.
+✔ Test "configure normalizes duplicate managed blocks to a single block" passed after 0.007 seconds.
+✔ Test "configure preserves user lines mentioning the proxy path when normalizing duplicates" passed after 0.006 seconds.
+✔ Test "configure is a byte-identical no-op for an already-correct CRLF block" passed after 0.001 seconds.
+✔ Test "configure preserves user's intentional blank lines (no whitespace collapse)" passed after 0.001 seconds.
+✔ Test "configure rewrites a block whose body differs only by an embedded mid-line CR" passed after 0.005 seconds.
+✔ Test "configure fails safely when a stray marker accompanies the current block" passed after 0.001 seconds.
+✔ Test "Config block contains BASE_URL for all supported services" passed after 0.001 seconds.
+✔ Test "ProxyRoute covers all configured BASE_URLs" passed after 0.001 seconds.
+✔ Test "Default port is 18121" passed after 0.001 seconds.
+✔ Test "activateProxy creates env file, deactivateProxy removes it" passed after 0.001 seconds.
+✔ Test "writeProxyEnvFile creates file with 0600 permissions (token not world-readable)" passed after 0.044 seconds.
+✔ Test "writeProxyEnvFile yields 0600 even under umask 022 (TOCTOU: no 0644 window)" passed after 0.001 seconds.
+✔ Test "activateProxy writes proxy env file with 0600 permissions" passed after 0.001 seconds.
+✔ Test "isProxyActive reflects file existence" passed after 0.001 seconds.
+✔ Test "zsh proxy hook keeps live config and sources it" passed after 0.013 seconds.
+✔ Test "zsh proxy hook deletes config for closed port" passed after 0.009 seconds.
+✔ Test "Loads all service types as keys" passed after 0.001 seconds.
+✔ Test "All keys start as unconfigured" passed after 0.001 seconds.
+✔ Test "Configured count updates after save" passed after 0.001 seconds.
+✘ Test "Filter by category" recorded an issue at ViewModelTests.swift:47:9: Expectation failed: (vm.filteredKeys.count → 6) == (aiServices.count → 4)
+✘ Test "Filter by category" failed after 0.001 seconds with 1 issue.
+✔ Test "Search filters by display name" passed after 0.001 seconds.
+✔ Test "Search filters by env var name" passed after 0.001 seconds.
+✘ Test "Category count returns correct number" recorded an issue at ViewModelTests.swift:71:9: Expectation failed: (vm.builtinCategoryCount(for: .ai) → 6) == (aiCount → 4)
+✘ Test "Category count returns correct number" failed after 0.001 seconds with 1 issue.
+✔ Test "CLI-added keychain keys are discovered under the CLI Added category" passed after 0.001 seconds.
+✔ Test "A discovered key shows the CLI Added category color, not gray" passed after 0.001 seconds.
+✔ Test "Editing a discovered key's category is persisted as an override" passed after 0.001 seconds.
+✔ Test "A preset key stored via CLI is not duplicated as a discovered key" passed after 0.001 seconds.
+✔ Test "Non-env-var-shaped keychain accounts are not surfaced" passed after 0.001 seconds.
+✔ Test "Editing an existing key does not rename it (no orphaned duplicate)" passed after 0.001 seconds.
+✔ Test "Editing a discovered key into a custom category persists the override" passed after 0.001 seconds.
+✔ Test "Duplicate accounts from enumeration are surfaced only once" passed after 0.001 seconds.
+✔ Test "Delete key makes it unconfigured" passed after 0.001 seconds.
+✘ Test run with 187 tests in 23 suites failed after 25.417 seconds with 2 issues.
