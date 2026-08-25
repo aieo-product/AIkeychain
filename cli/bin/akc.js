@@ -26,6 +26,7 @@ const USAGE = `akc — AI KeyChain CLI (secret references, key management, MCP s
 Usage:
   akc init [--print] [--no-register] [--local]
   akc run [--dry-run] -- <command> [args...]
+  akc migrate [--dry-run] [--yes] [--interactive] [--only KEY,...]
   akc list
   akc check <KEY>
   akc get <KEY> [--reveal]
@@ -43,6 +44,8 @@ Commands:
            scope + ~/.codex/config.toml). --local scopes it to the current project,
            --print previews, --no-register skips MCP registration.
   run      Resolve keychain:// env references and execute a command
+  migrate  Bulk-migrate v1.x keys (old GUI store / manual scheme) into the
+           managed namespace. Values stay in memory/pipes; old items are kept.
   list     List known key names (never prints values)
   check    Check whether a key exists in the managed namespace
   get      Print the keychain:// reference for a key (--reveal prints the raw value)
@@ -216,6 +219,10 @@ async function main() {
   switch (command) {
     case 'run':
       return cmdRun(rest);
+    case 'migrate': {
+      const { cmdMigrate } = await import('../src/migrate.js');
+      return cmdMigrate(rest);
+    }
     case 'list':
       return cmdList();
     case 'check': {

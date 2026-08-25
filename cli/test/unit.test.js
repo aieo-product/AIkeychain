@@ -162,3 +162,30 @@ test('redactSecrets redacts bare hex runs, not only "-X <hex>" (#191)', () => {
   // short numeric diagnostics survive
   assert.equal(redactSecrets('exit 44: item not found'), 'exit 44: item not found');
 });
+
+// #196: planMigration — dump 属性からの検出分類（値は読まない・純関数）
+test('planMigration classifies gui/manual, gui wins duplicates, noise excluded (#196)', async () => {
+  const { planMigration, MANUAL_NAME_PATTERN, LEGACY_GUI_SERVICE } = await import('../src/migrate.js');
+  assert.equal(LEGACY_GUI_SERVICE, 'com.aieo.aikeychain');
+  // v1 と同一の厳格 manual 判定 (#160/#163): 大文字スネークケース限定
+  assert.ok(MANUAL_NAME_PATTERN.test('GITHUB_TOKEN'));
+  assert.ok(!MANUAL_NAME_PATTERN.test('iCloud'));
+  assert.ok(!MANUAL_NAME_PATTERN.test('com.apple.NetworkExtension'));
+  const plan = planMigration([
+    { service: 'com.aieo.aikeychain.managed', account: 'DONE' },
+    { service: 'com.aieo.aikeychain', account: 'DONE' },
+    { service: 'com.aieo.aikeychain', account: 'A_KEY' },
+    { service: 'com.aieo.aikeychain', account: '' },
+    { service: 'com.aieo.aikeychain', account: 'bad name!' },
+    { service: 'M_KEY', account: 'user' },
+    { service: 'A_KEY', account: 'user' },      // gui と重複 → gui 優先
+    { service: 'iCloud', account: 'user' },
+    { service: null, account: 'x' },
+  ]);
+  const byName = Object.fromEntries(plan.map((e) => [`${e.name}:${e.source}`, e.action]));
+  assert.equal(byName['A_KEY:gui'], 'migrate');
+  assert.equal(byName['DONE:gui'], 'skip-managed');
+  assert.equal(byName['A_KEY:manual'], 'skip-duplicate');
+  assert.equal(byName['M_KEY:manual'], 'migrate');
+  assert.ok(!plan.some((e) => e.name === 'iCloud' || e.name === 'bad name!' || e.name === ''));
+});

@@ -11,6 +11,7 @@ All notable changes to AI KeyChain are documented in this file.
 - `akc set --manual` / MCP の `manual` フィールドを廃止（すべて managed namespace に書き込む）。
 
 ### Added
+- **`akc migrate`** — v1.x のキー（旧 GUI store / manual スキーム）を managed namespace へ一括移行。値は端末・argv・ファイルに出さず、旧アイテムは削除しない。managed 済み/重複（GUI 優先）は skip、ACL 許可ダイアログが必要なキーは `--interactive --only` で個別続行、`--dry-run` で計画のみ表示。アップグレードツアーからも案内 (#196)
 - **アップグレード・ツアー** — v1.x から更新したユーザーの初回起動時、旧方式（旧 GUI store / manual スキーム）にしか無いキーを**読み取り専用・無音で検出**し、「再登録が必要なキー一覧」と v2.0 の使い方を案内するツアーを表示。新規インストール（旧キー無し）は従来の onboarding のまま。検出は `dump-keychain` 相当の属性照会のみで値は読まない（プロンプトゼロ）(#188)
 
 ### Changed

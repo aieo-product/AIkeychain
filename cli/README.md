@@ -51,6 +51,11 @@ akc run -- claude
 # Preview what would resolve (values masked)
 akc run --dry-run
 
+# Bulk-migrate keys registered by v1.x (old GUI store / manual scheme)
+akc migrate --dry-run     # show the plan only
+akc migrate               # migrate; values stay in memory/pipes, old items kept
+akc migrate --interactive --only KEY1,KEY2   # keys that need a Keychain approval dialog
+
 # Manage keys
 akc list                  # key names only — never prints values
 akc check GITHUB_TOKEN    # exists? in which store?
@@ -74,7 +79,10 @@ akc guide
 Every key lives at `service="com.aieo.aikeychain.managed"`, `account=<KEY>` — the
 single managed namespace, created by `/usr/bin/security` so headless reads never
 prompt. The old v1.x GUI store / manual scheme are no longer read; upgrading users
-re-register their keys with `akc set <KEY>`.
+re-register their keys — run **`akc migrate`** to bulk-migrate everything the
+old versions stored (old GUI store + manual scheme) into the managed namespace,
+or `akc set <KEY>` one by one. `akc migrate` never prints secret values and
+never deletes the old items.
 
 ## MCP server
 

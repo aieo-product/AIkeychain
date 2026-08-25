@@ -40,7 +40,8 @@ Secrets must NEVER be written to .env files, shell scripts, code, or commits.
 Every key lives in the **managed namespace** (\`com.aieo.aikeychain.managed\`,
 created by \`akc set\` or the AI KeyChain app). These resolve **silently** — no
 prompts, no hangs, ever. (v2.0 dropped the old v1.x GUI store / manual scheme;
-if you upgraded from v1.x, re-register your keys with \`akc set <KEY>\`.)
+if you upgraded from v1.x, bulk-migrate with \`akc migrate\` or re-register
+with \`akc set <KEY>\`.)
 
 ## Where keys live
 
@@ -55,6 +56,7 @@ if you upgraded from v1.x, re-register your keys with \`akc set <KEY>\`.)
   akc list                    list known key names (never prints values)
   akc check <KEY>             check whether a key exists and where
   akc set <KEY>               store/update a key (value via hidden prompt or stdin)
+  akc migrate                 bulk-migrate v1.x keys into the managed namespace
   akc delete <KEY>            delete a key
   akc doctor                  diagnose env + ~/.zshrc keychain references
   akc mcp                     start the MCP server (stdio)

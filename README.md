@@ -56,7 +56,7 @@ Download the latest release from [Releases](https://github.com/aieo-product/AIke
 
 > **Note:** Since v1.8.0, releases are signed with a Developer ID certificate (Team `34J49FY7U7`), notarized by Apple, and stapled, so Gatekeeper accepts the app without any manual `xattr` workaround. If macOS warns that the app is damaged or from an unidentified developer, do **not** bypass Gatekeeper — verify the asset with `spctl --assess --type open --context context:primary-signature -vv AIKeyChain-vX.Y.Z.dmg` (expect `accepted / Notarized Developer ID`) and re-download the latest release.
 >
-> **Upgrading from v1.x:** v2.0 stores keys in a new single namespace and no longer reads keys registered by older versions (they are not deleted). On first launch the app shows an upgrade tour listing the keys to re-register — re-add each with the app's **+** or `akc set <KEY>`.
+> **Upgrading from v1.x:** v2.0 stores keys in a new single namespace and no longer reads keys registered by older versions (they are not deleted). On first launch the app shows an upgrade tour listing the keys to re-register — run **`akc migrate`** in a terminal to bulk-migrate them all (values never printed, old items kept), or re-add each with the app's **+** / `akc set <KEY>`.
 
 ### Verify your download
 
@@ -145,7 +145,8 @@ export OPENAI_API_KEY=keychain://OPENAI_API_KEY
 akc run -- claude            # real value injected into the child process only
 # Headless contract: every key is in the managed namespace and resolves silently
 # — no prompts, no hangs. (v2.0 dropped the v1.x GUI store / manual scheme; if you
-# upgraded, re-register your keys with `akc set <KEY>`.)
+# upgraded, bulk-migrate your keys with `akc migrate` — or one by one
+# with `akc set <KEY>`.)
 
 akc list                     # key names (never prints values)
 akc set GITHUB_TOKEN         # hidden prompt, overwrites in place
