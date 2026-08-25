@@ -112,6 +112,13 @@ struct UpgradeTourView: View {
     // MARK: - Page 2: 新しい使い方
     private var howItWorks: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // ツアーは旧キー検出時にのみ表示されるため、最終ページでも一括引き継ぎを再掲する (#196)
+            tourRow(icon: "square.stack.3d.up", color: .orange,
+                    title: L10n.s(ja: "以前の \(legacyKeyNames.count) 件は akc migrate で一括引き継ぎ",
+                                  en: "Bulk-migrate your \(legacyKeyNames.count) earlier key(s) with akc migrate"),
+                    body: L10n.s(
+                        ja: "ターミナルで `akc migrate` を実行すると、検出されたキーをまとめて 2.0 に引き継げます（akc 未導入なら `npx -y aikeychain migrate`）。値は画面に表示されず、以前のデータも削除されません。",
+                        en: "Run `akc migrate` in a terminal to migrate the detected keys at once (no CLI yet? `npx -y aikeychain migrate`). Values are never displayed and the old items are kept."))
             tourRow(icon: "link", color: AppColors.cloudBlue,
                     title: L10n.s(ja: "keychain:// 参照 + akc run", en: "keychain:// references + akc run"),
                     body: L10n.s(
