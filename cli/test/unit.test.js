@@ -162,3 +162,73 @@ test('redactSecrets redacts bare hex runs, not only "-X <hex>" (#191)', () => {
   // short numeric diagnostics survive
   assert.equal(redactSecrets('exit 44: item not found'), 'exit 44: item not found');
 });
+
+// #196: planMigration — dump 属性からの検出分類（値は読まない・純関数）
+test('planMigration classifies gui/manual, gui wins duplicates, noise excluded (#196)', async () => {
+  const { planMigration, MANUAL_NAME_PATTERN, LEGACY_GUI_SERVICE } = await import('../src/migrate.js');
+  assert.equal(LEGACY_GUI_SERVICE, 'com.aieo.aikeychain');
+  // v1 と同一の厳格 manual 判定 (#160/#163): 大文字スネークケース限定
+  assert.ok(MANUAL_NAME_PATTERN.test('GITHUB_TOKEN'));
+  assert.ok(!MANUAL_NAME_PATTERN.test('iCloud'));
+  assert.ok(!MANUAL_NAME_PATTERN.test('com.apple.NetworkExtension'));
+  const plan = planMigration(
+    [
+      { service: 'com.aieo.aikeychain.managed', account: 'DONE' },
+      { service: 'com.aieo.aikeychain', account: 'DONE' },
+      { service: 'com.aieo.aikeychain', account: 'A_KEY' },
+      { service: 'com.aieo.aikeychain', account: '' },
+      { service: 'com.aieo.aikeychain', account: 'bad name!' },
+      { service: 'M_KEY', account: 'user' },
+      { service: 'A_KEY', account: 'user' },      // gui と重複 → gui 優先
+      { service: 'AMBIG', account: 'user' },      // #91: 同一 service に複数 account
+      { service: 'AMBIG', account: 'AMBIG' },
+      { service: 'SSH', account: '/Users/x/.ssh/id_ed25519' }, // 他アプリ: account がパス
+      { service: 'iCloud', account: 'user' },
+      { service: null, account: 'x' },
+    ],
+    { user: 'user' }
+  );
+  const byName = Object.fromEntries(plan.map((e) => [`${e.name}:${e.source}`, e.action]));
+  assert.equal(byName['A_KEY:gui'], 'migrate');
+  assert.equal(byName['DONE:gui'], 'skip-managed');
+  assert.equal(byName['A_KEY:manual'], 'skip-duplicate');
+  assert.equal(byName['M_KEY:manual'], 'migrate');
+  // gui と manual 両方にあるキーは manualCopy フラグでフォールバック可能に
+  assert.equal(plan.find((e) => e.name === 'A_KEY' && e.source === 'gui').manualCopy, true);
+  assert.equal(plan.find((e) => e.name === 'M_KEY').manualCopy, undefined);
+  // 名前文法外の旧 GUI account は黙って落とさない（unsupported-name として可視化）
+  assert.equal(byName['bad name!:gui'], 'unsupported-name');
+  // #91 の acct 重複 → ambiguous（読まない・書かない）
+  assert.equal(byName['AMBIG:manual'], 'ambiguous');
+  // 他アプリ由来（account がパス等）は列挙しない
+  assert.ok(!plan.some((e) => e.name === 'SSH' || e.name === 'iCloud' || e.name === ''));
+  // gui 重複の manual 側が #91 の複数 account ならフォールバックにも使わない
+  const plan2 = planMigration(
+    [
+      { service: 'com.aieo.aikeychain', account: 'D_KEY' },
+      { service: 'D_KEY', account: 'user' },
+      { service: 'D_KEY', account: 'D_KEY' },
+    ],
+    { user: 'user' }
+  );
+  assert.equal(plan2.find((e) => e.name === 'D_KEY' && e.source === 'gui').manualCopy, false);
+});
+
+// #196 再レビュー: confirm() は肯定回答で true・EOF で false（close の同期 emit に負けない）
+test('confirm settles from the answer, not the synchronous close event (#196)', async () => {
+  const { PassThrough } = await import('node:stream');
+  const { confirm } = await import('../src/migrate.js');
+  const ask = (chunks) => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    output.resume();
+    const p = confirm('go? ', { input, output });
+    for (const c of chunks) input.write(c);
+    input.end();
+    return p;
+  };
+  assert.equal(await ask(['y\n']), true);
+  assert.equal(await ask(['YES\n']), true);
+  assert.equal(await ask(['n\n']), false);
+  assert.equal(await ask([]), false); // EOF (Ctrl-D)
+});

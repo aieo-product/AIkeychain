@@ -123,7 +123,7 @@ sequenceDiagram
     Child->>API: curl -H "x-api-key: $ANTHROPIC_API_KEY"
 ```
 
-> **単一 namespace ルックアップ（`resolveKey` / v2.0 #188）**: `-s "com.aieo.aikeychain.managed" -a "<KEY>"` のみ。security 所有なのでヘッドレス読取はプロンプト/ハングしない。exit 44 (not found) は `null`、それ以外の失敗は権威的として fail-closed（#147/#150）。npm CLI（`cli/src/keychain.js`）と `scripts/akc` は同一手順。旧 v1.x の GUI ストア / manual スキームは読まない（旧ユーザーはキーを再登録する）。
+> **単一 namespace ルックアップ（`resolveKey` / v2.0 #188）**: `-s "com.aieo.aikeychain.managed" -a "<KEY>"` のみ。security 所有なのでヘッドレス読取はプロンプト/ハングしない。exit 44 (not found) は `null`、それ以外の失敗は権威的として fail-closed（#147/#150）。npm CLI（`cli/src/keychain.js`）と `scripts/akc` は同一手順。旧 v1.x の GUI ストア / manual スキームは読まない（旧ユーザーは `akc migrate` で一括引き継ぎ（または `akc set` で再登録）する）。
 
 ### AI エージェント経由 (MCP + akc run)
 
