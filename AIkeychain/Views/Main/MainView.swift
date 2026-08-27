@@ -143,11 +143,11 @@ struct MainView: View {
                 }
             }
         }
-        .sheet(isPresented: $viewModel.showingEditor) {
+        .sheet(item: $viewModel.editorRoute) {
             viewModel.loadKeys()
-        } content: {
+        } content: { route in
             KeyEditorView(
-                editingKey: viewModel.editingKey,
+                editingKey: route.key,
                 onSave: { viewModel.loadKeys() }
             )
         }

@@ -57,6 +57,9 @@ struct KeyListView: View {
             } else {
                 List(viewModel.filteredKeys, selection: $viewModel.selectedKey) { key in
                     KeyRowView(key: key)
+                        // 行全体（Spacer の余白含む）をヒット領域に (#198)。これが無いと
+                        // アイコン/文字の上でしかダブルクリックが反応せず「無反応」に見える。
+                        .contentShape(Rectangle())
                         .tag(key)
                         .contextMenu {
                             Button(L10n.s(ja: "編集", en: "Edit")) { viewModel.editKey(key) }
