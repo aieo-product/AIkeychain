@@ -28,12 +28,24 @@ protocol KeychainServiceProtocol {
     /// would otherwise show a SecurityAgent prompt — required for an unattended
     /// background proxy that must never hang on a keychain read.
     func retrieveNoninteractive(for account: String) throws -> String?
+    /// 新規作成専用の書き込み（#209）。既に同名アイテムがあれば上書きせず
+    /// `KeychainError.duplicateItem` を throw する。`save` は既存を上書きする（-U）。
+    func create(value: String, for account: String) throws
     func delete(for account: String) throws
     func exists(for account: String) -> Bool
     /// 主ストア（managed namespace, com.aieo.aikeychain.managed / #167/#188）に存在する
     /// 全アカウント名を列挙する。CLI (`akc set`) で追加され GUI 索引に無いキーを
     /// 発見するために使う (#153)。秘密値は読まない（アカウント名のみ）。
     func allAccounts() -> [String]
+}
+
+extension KeychainServiceProtocol {
+    /// 既定実装（テストダブル向け）: exists で判定してから save する。判定と書き込みが
+    /// 非原子的なため、本番 `SecurityCLIKeychainService` は `-U` なしの作成で原子的に拒否する。
+    func create(value: String, for account: String) throws {
+        if exists(for: account) { throw KeychainError.duplicateItem }
+        try save(value: value, for: account)
+    }
 }
 
 // NOTE: 旧 in-process 実装 (`final class KeychainService`) は C3 #170 で削除した。
@@ -58,6 +70,11 @@ final class MockKeychainService: KeychainServiceProtocol {
 
     func retrieveNoninteractive(for account: String) throws -> String? {
         store[account]
+    }
+
+    func create(value: String, for account: String) throws {
+        guard store[account] == nil else { throw KeychainError.duplicateItem }
+        store[account] = value
     }
 
     func delete(for account: String) throws {

@@ -569,6 +569,32 @@ struct KeyEditorViewModelTests {
         #expect(vm.errorMessage != nil)
     }
 
+    @Test("New-key save is rejected atomically even when exists() misses the item (fail-open pre-check, #209)")
+    func addDuplicateRejectedWhenExistsFailsOpen() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // SecItemCopyMatching の失敗等で exists() が false を返しても、作成専用の書き込みで拒否する
+        let blind = BlindExistsKeychainService()
+        let name = "DUP_BLIND_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        blind.store[name] = "original"
+
+        let vm = KeyEditorViewModel(keychainService: blind, customStore: store)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = name
+        vm.tokenValue = "overwritten"
+        #expect { try vm.save() } throws: { error in
+            if case KeychainError.duplicateItem = error { return true } else { return false }
+        }
+
+        #expect(blind.store[name] == "original")
+        #expect(!store.keys.contains { $0.envVarName == name })
+        #expect(vm.errorMessage?.contains(name) == true) // 汎用文言ではなく既存行からの編集を案内
+        #expect(vm.errorMessage != KeychainError.duplicateItem.localizedDescription)
+        #expect(vm.isSaving == false)
+        #expect(vm.showSaveSuccess == false)
+    }
+
     @Test("Adding an unconfigured preset name as a new key still saves (#209)")
     func addUnconfiguredPresetAllowed() throws {
         let (store, defaults, suite) = isolatedStore()
@@ -607,6 +633,21 @@ struct KeyEditorViewModelTests {
         #expect(store.keys.filter { $0.envVarName == name }.count == 1)
         #expect(vm.errorMessage == nil)
     }
+}
+
+/// `exists()` が常に false（fail-open）だが、作成専用書き込みは既存を拒否するテストダブル（#209）。
+final class BlindExistsKeychainService: KeychainServiceProtocol {
+    var store: [String: String] = [:]
+    func save(value: String, for account: String) throws { store[account] = value }
+    func create(value: String, for account: String) throws {
+        guard store[account] == nil else { throw KeychainError.duplicateItem }
+        store[account] = value
+    }
+    func retrieve(for account: String) throws -> String? { store[account] }
+    func retrieveNoninteractive(for account: String) throws -> String? { store[account] }
+    func delete(for account: String) throws { store.removeValue(forKey: account) }
+    func exists(for account: String) -> Bool { false }
+    func allAccounts() -> [String] { Array(store.keys) }
 }
 
 /// `delete` だけ失敗させるテストダブル（Keychain 削除失敗時の定義保持を検証 / #202）。
