@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 @testable import AIkeychain
 
@@ -51,6 +52,47 @@ struct ServiceTypeTests {
                 #expect(url.scheme == "https")
             }
         }
+    }
+}
+
+/// onChange（@Sendable）から書き込むためのフラグ箱
+private final class ObservationFlag: @unchecked Sendable {
+    var fired = false
+}
+
+@Suite("AppState keyManagementMode Observation Tests (#200)", .serialized)
+struct AppStateKeyManagementModeObservationTests {
+
+    @Test("Changing keyManagementMode notifies Observation and persists to UserDefaults")
+    func keyManagementModeIsObservable() {
+        let state = AppState.shared
+        let defaults = UserDefaults.standard
+        let key = "key_management_mode"
+        // テスト後に元のモードと UserDefaults の生値（未設定なら削除）を復元する
+        let originalMode = state.keyManagementMode
+        let originalRaw = defaults.string(forKey: key)
+        defer {
+            state.keyManagementMode = originalMode
+            if let originalRaw {
+                defaults.set(originalRaw, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let target: KeyManagementMode = originalMode == .proxy ? .standard : .proxy
+        let flag = ObservationFlag()
+        withObservationTracking {
+            _ = state.keyManagementMode
+        } onChange: {
+            flag.fired = true
+        }
+
+        state.keyManagementMode = target
+
+        #expect(flag.fired, "keyManagementMode の変更が Observation に通知されない（SwiftUI が再描画されない）")
+        #expect(state.keyManagementMode == target)
+        #expect(defaults.string(forKey: key) == target.rawValue)
     }
 }
 

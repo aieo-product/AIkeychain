@@ -35,14 +35,14 @@ final class AppState {
     let proxyServer = ProxyServer()
     let proxyLogStore = ProxyLogStore()
 
-    /// ユーザーが選択したキー管理モード（UserDefaults で永続化）
-    var keyManagementMode: KeyManagementMode {
-        get {
-            let raw = UserDefaults.standard.string(forKey: Self.modeKey) ?? ""
-            return KeyManagementMode(rawValue: raw) ?? .standard
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: Self.modeKey)
+    /// ユーザーが選択したキー管理モード（stored property — @Observable で変更を追跡し
+    /// ツールバー/メニューバーのモード表示を即時更新する。UserDefaults にも永続化 #200）
+    var keyManagementMode: KeyManagementMode = {
+        let raw = UserDefaults.standard.string(forKey: AppState.modeKey) ?? ""
+        return KeyManagementMode(rawValue: raw) ?? .standard
+    }() {
+        didSet {
+            UserDefaults.standard.set(keyManagementMode.rawValue, forKey: Self.modeKey)
         }
     }
 
