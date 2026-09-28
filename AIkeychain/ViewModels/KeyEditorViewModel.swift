@@ -145,11 +145,31 @@ final class KeyEditorViewModel {
             throw KeychainError.invalidData
         }
 
+        // 新規追加で既存と同名なら保存しない（#209）: Keychain 保存は `-U` で無確認上書きになり、
+        // カスタム定義も同名で重複登録されるため。exists は属性照会のみで値を読まない（承認 UI なし）。
+        // 未設定のプリセット名（値も定義も無い）は従来どおり許可。編集（isEditing）は対象外。
+        // 事前照会は UX 用（exists は照会失敗時に false = fail-open）。上書きの防止そのものは
+        // 下の作成専用書き込み（create = -U なし）が原子的に担う（#209 レビュー）。
+        let duplicateMessage = L10n.s(
+            ja: "「\(trimmedEnvVar)」は既に登録されています。上書きする場合は一覧の既存の行から編集してください",
+            en: "\"\(trimmedEnvVar)\" already exists. To change it, edit the existing row in the list")
+        if !isEditing,
+           keychainService.exists(for: trimmedEnvVar)
+            || customStore.keys.contains(where: { $0.envVarName == trimmedEnvVar }) {
+            errorMessage = duplicateMessage
+            throw KeychainError.duplicateItem
+        }
+
         isSaving = true
         errorMessage = nil
 
         do {
-            try keychainService.save(value: trimmedValue, for: trimmedEnvVar)
+            if isEditing {
+                try keychainService.save(value: trimmedValue, for: trimmedEnvVar)
+            } else {
+                // 新規は作成専用（既存があれば duplicateItem・上書きしない）
+                try keychainService.create(value: trimmedValue, for: trimmedEnvVar)
+            }
 
             let iconToStore = iconToPersist()
 
@@ -199,7 +219,11 @@ final class KeyEditorViewModel {
 
             showSaveSuccess = true
         } catch {
-            errorMessage = error.localizedDescription
+            if !isEditing, case KeychainError.duplicateItem = error {
+                errorMessage = duplicateMessage
+            } else {
+                errorMessage = error.localizedDescription
+            }
             isSaving = false
             throw error
         }
