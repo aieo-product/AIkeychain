@@ -993,8 +993,7 @@ struct EnvParserUnquotedPemHeaderTests {
         let text = "PK=\"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----\"\nNEXT=ok"
         let entries = EnvParser.parse(text)
         #expect(entries.map(\.key) == ["PK", "NEXT"])
-        #expect(entries.first?.value.hasPrefix("-----BEGIN PRIVATE KEY-----\n") == true)
-        #expect(entries.first?.value.hasSuffix("-----END PRIVATE KEY-----") == true)
+        #expect(entries.first?.value == "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----")
     }
 
     @Test("Values that merely contain '-----BEGIN' or are not header-only are kept")
@@ -1002,5 +1001,28 @@ struct EnvParserUnquotedPemHeaderTests {
         let entries = EnvParser.parse("NOTE=see -----BEGIN marker\nCERT=-----BEGIN CERTIFICATE-----abc")
         #expect(entries.map(\.key) == ["NOTE", "CERT"])
         #expect(entries.map(\.value) == ["see -----BEGIN marker", "-----BEGIN CERTIFICATE-----abc"])
+    }
+
+    @Test("Header-only values with arbitrary labels (symbols / empty) are excluded (#216 review)")
+    func arbitraryLabelHeadersExcluded() {
+        #expect(EnvParser.parse("PK=-----BEGIN X9.42 DH PARAMETERS-----").isEmpty)
+        #expect(EnvParser.parse("PK=-----BEGIN PKCS #7 SIGNED DATA-----").isEmpty)
+        #expect(EnvParser.parse("PK=-----BEGIN PGP MESSAGE, PART 1/3-----").isEmpty)
+        #expect(EnvParser.parse("PK=-----BEGIN -----").isEmpty)
+        let mixed = "PK=-----BEGIN X9.42 DH PARAMETERS-----\nYWJj\n-----END X9.42 DH PARAMETERS-----\nNEXT=ok"
+        #expect(EnvParser.parse(mixed).map(\.key) == ["NEXT"])
+    }
+
+    @Test("The guard judges the raw value: quoted single-line headers and headers without closing dashes are kept")
+    func rawValuePinning() {
+        let dq = EnvParser.parse("PK=\"-----BEGIN PRIVATE KEY-----\"")
+        #expect(dq.map(\.key) == ["PK"])
+        #expect(dq.first?.value == "-----BEGIN PRIVATE KEY-----")
+        let sq = EnvParser.parse("PK='-----BEGIN PRIVATE KEY-----'")
+        #expect(sq.map(\.key) == ["PK"])
+        #expect(sq.first?.value == "-----BEGIN PRIVATE KEY-----")
+        let open = EnvParser.parse("PK=-----BEGIN PRIVATE KEY")
+        #expect(open.map(\.key) == ["PK"])
+        #expect(open.first?.value == "-----BEGIN PRIVATE KEY")
     }
 }
