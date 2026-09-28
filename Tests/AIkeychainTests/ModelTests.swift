@@ -964,3 +964,43 @@ struct EnvParserBase64PaddingLineTests {
         #expect(EnvParser.parse("KEY=\"=abc\"").first?.value == "=abc")
     }
 }
+
+@Suite("EnvParser unquoted PEM header Tests (#214)")
+struct EnvParserUnquotedPemHeaderTests {
+
+    @Test("Unquoted multi-line PEM: the truncated header-only value is not a candidate")
+    func unquotedPemYieldsOnlyNext() {
+        let text = """
+        PK=-----BEGIN PRIVATE KEY-----
+        MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7
+        c2VjcmV0UGF5bG9hZA==
+        -----END PRIVATE KEY-----
+        NEXT=ok
+        """
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["NEXT"])
+        #expect(entries.first?.value == "ok")
+    }
+
+    @Test("export-prefixed / spaced unquoted PEM headers are excluded too")
+    func exportedPemHeaderExcluded() {
+        #expect(EnvParser.parse("export PK=-----BEGIN OPENSSH PRIVATE KEY-----").isEmpty)
+        #expect(EnvParser.parse("PK = -----BEGIN RSA PRIVATE KEY-----  ").isEmpty)
+    }
+
+    @Test("A quoted multi-line PEM still joins into one entry")
+    func quotedPemStillJoins() {
+        let text = "PK=\"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----\"\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["PK", "NEXT"])
+        #expect(entries.first?.value.hasPrefix("-----BEGIN PRIVATE KEY-----\n") == true)
+        #expect(entries.first?.value.hasSuffix("-----END PRIVATE KEY-----") == true)
+    }
+
+    @Test("Values that merely contain '-----BEGIN' or are not header-only are kept")
+    func nonHeaderValuesKept() {
+        let entries = EnvParser.parse("NOTE=see -----BEGIN marker\nCERT=-----BEGIN CERTIFICATE-----abc")
+        #expect(entries.map(\.key) == ["NOTE", "CERT"])
+        #expect(entries.map(\.value) == ["see -----BEGIN marker", "-----BEGIN CERTIFICATE-----abc"])
+    }
+}
