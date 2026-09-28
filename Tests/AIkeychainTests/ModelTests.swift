@@ -912,3 +912,31 @@ struct EnvParserJoinGuardTests {
         #expect(elapsed < .milliseconds(500), "parse took \(elapsed)")
     }
 }
+
+@Suite("EnvParser base64 padding line Tests (#208)")
+struct EnvParserBase64PaddingLineTests {
+
+    @Test("A line whose value is only '=' characters is not a candidate")
+    func valueOnlyEqualsIsExcluded() {
+        #expect(EnvParser.parse("c2VjcmV0UGF5bG9hZA==").isEmpty)
+        #expect(EnvParser.parse("c2VjcmV0UGF5bG9hZA=").isEmpty)
+        #expect(EnvParser.parse("KEY==").isEmpty)
+        #expect(EnvParser.parse("KEY===").isEmpty)
+        #expect(EnvParser.parse("KEY=\"=\"").isEmpty)
+    }
+
+    @Test("Unterminated PEM: base64 body lines are not exposed as key names")
+    func unterminatedPemYieldsOnlyNext() {
+        let text = "PK=\"-----BEGIN\nc2VjcmV0UGF5bG9hZA==\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["NEXT"])
+        #expect(entries.first?.value == "ok")
+    }
+
+    @Test("Values containing '=' among other characters are still imported")
+    func valuesWithEqualsStillParsed() {
+        let entries = EnvParser.parse("A=b=c\nTOKEN=abc==")
+        #expect(entries.map(\.key) == ["A", "TOKEN"])
+        #expect(entries.map(\.value) == ["b=c", "abc=="])
+    }
+}

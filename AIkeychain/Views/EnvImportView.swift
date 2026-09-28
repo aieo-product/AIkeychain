@@ -773,6 +773,10 @@ enum EnvParser {
 
         guard !key.isEmpty, !value.isEmpty else { return nil }
 
+        // 値が `=` のみの行は base64 本文のパディング（例: 未終端 PEM の `c2VjcmV0UGF5bG9hZA==`）。
+        // 候補にするとシークレット断片がキー名として平文表示されるため除外する (#208)。
+        if value.allSatisfy({ $0 == "=" }) { return nil }
+
         // 安全なシェル変数名パターンに一致しないキーはインポート対象から除外する
         // （不正な文字列が Keychain に書き込まれる/後続処理でシェル展開されるのを防ぐ）。
         guard EnvVarName.isValid(key) else { return nil }
