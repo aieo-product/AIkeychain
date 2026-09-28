@@ -5,7 +5,12 @@ import Foundation
 /// SecurityCLIKeychainService のテスト。実 Keychain のアイテムには触れず、`security`
 /// を模すスタブスクリプト（npm CLI の cli/test と同じ発想）と、ロック状態の
 /// テストプローブ（makeStub が { false } を注入）に差し替えて検証する。
-@Suite("SecurityCLIKeychainService Tests (stub security)")
+///
+/// `.serialized`（#209）: 各 stub 呼び出しは runSecurity 内で出力吸い上げのブロッキング read を
+/// GCD グローバルキューに 2 本載せる。stub テストを 1 本でも増やすと並列実行でスレッドが枯渇し、
+/// 無関係なテストが writeTimeout(10s) で `.timedOut` になる環境依存を実測したため直列化する
+/// （既存 15 件 + 1 件で再現、既存 API だけを使う追加テストでも再現）。
+@Suite("SecurityCLIKeychainService Tests (stub security)", .serialized)
 struct SecurityCLIKeychainServiceTests {
 
     /// テストごとに独立した state ディレクトリを持つ stub security を作る。
@@ -26,6 +31,13 @@ struct SecurityCLIKeychainServiceTests {
           acct=$(printf '%s' "$line" | sed -n 's/.*-a "\\([^"]*\\)".*/\\1/p')
           hex=$(printf '%s' "$line" | sed -n 's/.*-X \\([0-9a-fA-F]*\\).*/\\1/p')
           [ -n "$svc" ] && [ -n "$acct" ] && [ -n "$hex" ] || exit 1
+          # 実 security と同じく、-U なし（作成専用）で既存アイテムがあれば
+          # errSecDuplicateItem (-25299) / exit 45 で失敗し上書きしない（#209 実測）
+          case "$line" in *" -U "*) ;; *)
+            if [ -f "$dir/$svc/$acct" ]; then
+              echo "add-generic-password: returned -25299" >&2; exit 45
+            fi ;;
+          esac
           echo "add $svc|$acct" >> "$dir/calls.log"
           mkdir -p "$dir/$svc"
           printf '%s' "$hex" | xxd -r -p > "$dir/$svc/$acct"
@@ -105,6 +117,32 @@ struct SecurityCLIKeychainServiceTests {
         // 旧 namespace には何も書かれていない
         #expect(!FileManager.default.fileExists(
             atPath: statePath(stateDir, service: "com.aieo.aikeychain", name: "OPENAI_API_KEY").path))
+    }
+
+    @Test("create() writes new keys, rejects existing ones with duplicateItem, and save (-U) still overwrites (#209)")
+    func createIsCreateOnly() throws {
+        let (service, _) = try makeStub()
+        // 実 Keychain の状態に依存しないよう一意名を使う
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let fresh = "CREATE_NEW_" + suffix
+        let dup = "CREATE_DUP_" + suffix
+
+        // 新規 → 作成される
+        try service.create(value: "v1", for: fresh)
+        #expect(try service.retrieve(for: fresh) == "v1")
+
+        // 既存 → duplicateItem・値は不変（-U なしで security が exit 45 を返す）
+        try service.save(value: "original", for: dup)
+        #expect {
+            try service.create(value: "overwritten", for: dup)
+        } throws: { error in
+            if case KeychainError.duplicateItem = error { return true } else { return false }
+        }
+        #expect(try service.retrieve(for: dup) == "original")
+
+        // save（-U）は従来どおり上書きする
+        try service.save(value: "v2", for: dup)
+        #expect(try service.retrieve(for: dup) == "v2")
     }
 
     @Test("Retrieve of a missing key returns nil (rc=44)")
