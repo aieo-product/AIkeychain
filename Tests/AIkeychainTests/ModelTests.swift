@@ -564,3 +564,126 @@ struct EnvParserMultilineQuoteTests {
         #expect(entries[4].value == "value")
     }
 }
+
+@Suite("EnvParser quote boundary Tests (#201 review)")
+struct EnvParserQuoteBoundaryTests {
+
+    @Test("An escaped double quote does not close a multi-line value")
+    func escapedQuoteDoesNotClose() {
+        let text = "KEY=\"first \\\"quoted\\\"\nsecond\""
+        let entries = EnvParser.parse(text)
+        #expect(entries.count == 1)
+        #expect(entries.first?.key == "KEY")
+        // エスケープは境界判定にのみ使い、デコードはしない（#174 スコープ）
+        #expect(entries.first?.value == "first \\\"quoted\\\"\nsecond")
+    }
+
+    @Test("A PEM body with an escaped quote never turns base64 lines into key names")
+    func pemWithEscapedQuoteHasNoBase64Keys() {
+        let text = """
+        PK="-----BEGIN PRIVATE KEY-----
+        abc\\"def
+        c2VjcmV0UGF5bG9hZA==
+        MIIBVQIBADANBgkqhkiG9w0BAQEFAASC==
+        -----END PRIVATE KEY-----"
+        AFTER=x
+        """
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["PK", "AFTER"])
+        #expect(entries.first?.value.hasSuffix("-----END PRIVATE KEY-----") == true)
+    }
+
+    @Test("An unterminated quote does not swallow a later quoted assignment")
+    func unterminatedDoesNotSwallowQuotedLine() {
+        let text = "BROKEN=\"never closed\nGOOD=\"ok\"\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["GOOD", "NEXT"])
+        #expect(entries.first?.value == "ok")
+    }
+
+    @Test("An unterminated quote does not swallow lines up to a distant quote")
+    func unterminatedDoesNotSwallowDistantQuote() {
+        let text = "BROKEN=\"x\nA=1\nB=2\nC=say \"hi\"\nD=4"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["A", "B", "C", "D"])
+    }
+
+    @Test("An unterminated quote keeps later quoted single-line values intact")
+    func unterminatedKeepsQuotedSingleLines() {
+        let text = "BROKEN=\"x\nA='1'\nB=\"2\""
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["A", "B"])
+        #expect(entries.map(\.value) == ["1", "2"])
+    }
+
+    @Test("A trailing comment after a multi-line closing quote is allowed and dropped")
+    func multilineTrailingComment() {
+        let text = "K=\"l1\nl2\" # c"
+        let entries = EnvParser.parse(text)
+        #expect(entries.count == 1)
+        #expect(entries.first?.value == "l1\nl2")
+    }
+
+    @Test("Junk after a multi-line closing quote discards only the opening line")
+    func multilineInvalidTrailer() {
+        let text = "K=\"l1\nl2\" junk\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["NEXT"])
+    }
+
+    @Test("Single-line quoted values keep the main-branch behavior")
+    func singleLineUnchanged() {
+        #expect(EnvParser.parse("K=\"abc\" junk").first?.value == "\"abc\" junk")
+        #expect(EnvParser.parse("K=\"abc\" # c").first?.value == "\"abc\" # c")
+        #expect(EnvParser.parse("K=\"a \\\"b\\\" c\"").first?.value == "a \\\"b\\\" c")
+    }
+
+    @Test("Single quotes have no escapes")
+    func singleQuoteNoEscape() {
+        #expect(EnvParser.parse("K='a\\'").first?.value == "a\\")
+        let joined = EnvParser.parse("K='l1\\\nl2'")
+        #expect(joined.count == 1)
+        #expect(joined.first?.value == "l1\\\nl2")
+    }
+
+    @Test("An assignment-looking line inside a multi-line body stays in the value")
+    func assignmentInsideBody() {
+        let text = "K=\"l1\nOTHER=x\nl3\""
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["K"])
+        #expect(entries.first?.value == "l1\nOTHER=x\nl3")
+    }
+
+    @Test("Joined values still go through system-var and shell-expansion filters")
+    func joinedValuesAreFiltered() {
+        #expect(EnvParser.parse("PATH=\"a\nb\"").isEmpty)
+        #expect(EnvParser.parse("K=\"a\n$(evil)\"").isEmpty)
+    }
+
+    @Test("A single-line value ending with an escaped quote is treated as unterminated")
+    func trailingEscapedQuoteIsUnterminated() {
+        // 仕様: `\"` で終わる単一行値は閉じていないとみなし破棄する（切り詰め値を出さない方を優先）
+        let text = "P=\"C:\\Users\\\"\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["NEXT"])
+    }
+
+    @Test("A joined multi-line value is rejected as invalidData before invoking security")
+    func joinedValueRejectedBySaveLayer() {
+        guard let entry = EnvParser.parse("MULTI_KEY=\"line1\nline2\"").first else {
+            Issue.record("expected a joined entry"); return
+        }
+        // security バイナリを存在しないパスに差し替え、ガードを素通りしたら
+        // invalidData 以外で落ちるようにする（実 keychain には触れない）。
+        let service = SecurityCLIKeychainService()
+        service.securityBinOverrideForTesting = "/nonexistent/security-test-stub"
+        service.keychainLockedProbeForTesting = { false }
+        do {
+            try service.save(value: entry.value, for: entry.key)
+            Issue.record("expected invalidData")
+        } catch KeychainError.invalidData {
+        } catch {
+            Issue.record("expected invalidData, got \(error)")
+        }
+    }
+}
