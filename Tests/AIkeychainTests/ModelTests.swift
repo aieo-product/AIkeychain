@@ -939,4 +939,28 @@ struct EnvParserBase64PaddingLineTests {
         #expect(entries.map(\.key) == ["A", "TOKEN"])
         #expect(entries.map(\.value) == ["b=c", "abc=="])
     }
+
+    @Test("Decorated/corrupted padding lines in an unterminated PEM are not exposed as key names")
+    func decoratedPaddingLinesExcluded() {
+        #expect(EnvParser.parse("PK=\"-----BEGIN\nc2VjcmV0UGF5bG9hZA==\" junk\nNEXT=ok").map(\.key) == ["NEXT"])
+        #expect(EnvParser.parse("PK=\"-----BEGIN\nc2VjcmV0UGF5bG9hZA== # copied\nNEXT=ok").map(\.key) == ["NEXT"])
+        #expect(EnvParser.parse("PK=\"-----BEGIN\nc2VjcmV0UGF5bG9hZA==YWJj\nNEXT=ok").map(\.key) == ["NEXT"])
+    }
+
+    @Test("A realistic PEM body: invalid trailer / unterminated drop it, a closed PEM still joins")
+    func realisticPem() {
+        let pem = "PK=\"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\nc2VjcmV0UGF5bG9hZA==\n-----END PRIVATE KEY-----"
+        #expect(EnvParser.parse(pem + "\" junk\nNEXT=ok").map(\.key) == ["NEXT"])
+        #expect(EnvParser.parse(pem + "\nNEXT=ok").map(\.key) == ["NEXT"])
+        let closed = EnvParser.parse(pem + "\"")
+        #expect(closed.map(\.key) == ["PK"])
+        #expect(closed.first?.value.hasSuffix("-----END PRIVATE KEY-----") == true)
+    }
+
+    @Test("Boundary: '=' only values with spacing/quotes are excluded, quoted '=abc' is kept")
+    func equalsBoundaries() {
+        #expect(EnvParser.parse("export KEY = ==").isEmpty)
+        #expect(EnvParser.parse("KEY='='").isEmpty)
+        #expect(EnvParser.parse("KEY=\"=abc\"").first?.value == "=abc")
+    }
 }

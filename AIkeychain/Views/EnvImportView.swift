@@ -748,6 +748,7 @@ enum EnvParser {
         guard let eqIndex = working.firstIndex(of: "=") else { return nil }
         let key = String(working[working.startIndex..<eqIndex]).trimmingCharacters(in: .whitespaces)
         var value = String(working[working.index(after: eqIndex)...]).trimmingCharacters(in: .whitespaces)
+        let rawValue = value  // クォート除去前の値（#208 の padding 判定用）
 
         if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
            (value.hasPrefix("'") && value.hasSuffix("'")) {
@@ -773,9 +774,11 @@ enum EnvParser {
 
         guard !key.isEmpty, !value.isEmpty else { return nil }
 
-        // 値が `=` のみの行は base64 本文のパディング（例: 未終端 PEM の `c2VjcmV0UGF5bG9hZA==`）。
-        // 候補にするとシークレット断片がキー名として平文表示されるため除外する (#208)。
-        if value.allSatisfy({ $0 == "=" }) { return nil }
+        // 値が `=` で始まる行は base64 本文のパディング（+装飾/破損。例: 未終端 PEM の
+        // `c2VjcmV0UGF5bG9hZA==`, `...==" junk`, `...== # copied`, `...==YWJj`）。
+        // 候補にするとシークレット断片がキー名として平文表示されるため除外する。
+        // `KEY="="` はクォートで始まるので allSatisfy 側で扱う (#208)。
+        if rawValue.hasPrefix("=") || value.allSatisfy({ $0 == "=" }) { return nil }
 
         // 安全なシェル変数名パターンに一致しないキーはインポート対象から除外する
         // （不正な文字列が Keychain に書き込まれる/後続処理でシェル展開されるのを防ぐ）。
