@@ -141,9 +141,8 @@ final class KeyListViewModel {
 
     func delete(key: APIKey) throws {
         try keychainService.delete(for: key.envVarName)
-        if let customKey = key.customKey {
-            customStore.deleteKey(customKey.id)
-        }
+        // 削除後状態は KeyEditorViewModel.deleteKey() と同一（#210）
+        customStore.removeMetadata(for: key)
         loadKeys()
     }
 

@@ -208,16 +208,9 @@ final class KeyEditorViewModel {
     func deleteKey() throws {
         guard let key = editingKey else { return }
         try keychainService.delete(for: key.envVarName)
-        // カテゴリ/アイコン上書きも削除
-        customStore.setCategoryOverride(envVarName: key.envVarName, value: nil)
-        customStore.setIconOverride(envVarName: key.envVarName, icon: nil)
-        // ユーザー定義のカスタムキーは定義も削除し、一覧から行を消す（#202）。
-        // Keychain 削除が失敗した場合は上で throw 済みのため定義は保持される。
-        // プリセット（customKey なし）と CLI 発見キー（store に無い合成キー）は対象外。
-        if let customKey = key.customKey,
-           customStore.keys.contains(where: { $0.id == customKey.id }) {
-            customStore.deleteKey(customKey.id)
-        }
+        // 上書き削除・store に存在するカスタム定義の削除（#202）。Keychain 削除失敗時は
+        // 上で throw 済みのため保持される。KeyListViewModel.delete(key:) と共通（#210）。
+        customStore.removeMetadata(for: key)
     }
 
     // MARK: - Private

@@ -216,7 +216,11 @@ struct KeyListViewModelTests {
 
     @Test("Delete key makes it unconfigured")
     func deleteKey() throws {
-        let (vm, mock) = makeSUT()
+        // delete(key:) は上書きを消すため、.shared を書き換えないよう isolated store を使う（#210）
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let mock = MockKeychainService()
+        let vm = KeyListViewModel(keychainService: mock, customStore: store)
         try mock.save(value: "test", for: "GITHUB_TOKEN")
         vm.loadKeys()
         #expect(vm.configuredCount == 1)
@@ -224,6 +228,140 @@ struct KeyListViewModelTests {
         let githubKey = vm.keys.first { $0.service == .some(.github) }!
         try vm.delete(key: githubKey)
         #expect(vm.configuredCount == 0)
+    }
+
+    // MARK: - 削除後状態の統一 (#210)
+
+    @Test("delete(key:) clears category/icon overrides and the stored custom definition (#210)")
+    func listDeleteClearsOverridesAndDefinition() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let mock = MockKeychainService()
+        let name = uniqueEnvName()
+        let custom = CustomKey(envVarName: name, displayName: name,
+                               categoryId: KeyCategory.devTools.stableId)
+        store.addKey(custom)
+        store.setCategoryOverride(envVarName: name, value: "builtin:\(KeyCategory.ai.rawValue)")
+        store.setIconOverride(envVarName: name, icon: "flame")
+        store.setCategoryOverride(envVarName: "GITHUB_TOKEN", value: "builtin:\(KeyCategory.ai.rawValue)")
+        store.setIconOverride(envVarName: "GITHUB_TOKEN", icon: "star.fill")
+        try mock.save(value: "secret", for: name)
+        try mock.save(value: "ghp_x", for: "GITHUB_TOKEN")
+
+        let vm = KeyListViewModel(keychainService: mock, customStore: store)
+        try vm.delete(key: try #require(vm.keys.first { $0.envVarName == name }))
+        try vm.delete(key: try #require(vm.keys.first { $0.service == .some(.github) }))
+
+        #expect(mock.store[name] == nil)
+        #expect(!store.keys.contains { $0.id == custom.id })
+        #expect(store.overriddenCategory(for: name) == nil)
+        #expect(store.overriddenIcon(for: name) == nil)
+        #expect(store.overriddenCategory(for: "GITHUB_TOKEN") == nil)
+        #expect(store.overriddenIcon(for: "GITHUB_TOKEN") == nil)
+        // 永続化にも残らない（同名再登録で古い上書きが復活しない）
+        let reloaded = CustomKeyStore(defaults: defaults)
+        #expect(reloaded.categoryOverrides.isEmpty)
+        #expect(reloaded.iconOverrides.isEmpty)
+        #expect(!reloaded.keys.contains { $0.id == custom.id })
+    }
+
+    @Test("delete(key:) on a discovered (synthetic) or preset key leaves stored definitions untouched (#210)")
+    func listDeleteSyntheticAndPresetKeepDefinitions() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let mock = MockKeychainService()
+        let other = CustomKey(envVarName: uniqueEnvName(), displayName: "Other",
+                              categoryId: KeyCategory.ai.stableId)
+        store.addKey(other)
+        let cliName = uniqueEnvName()
+        try mock.save(value: "secret", for: cliName)
+        try mock.save(value: "ghp_x", for: "GITHUB_TOKEN")
+
+        let vm = KeyListViewModel(keychainService: mock, customStore: store)
+        let discovered = try #require(vm.keys.first { $0.envVarName == cliName })
+        #expect(discovered.builtinCategory == .cliAdded)
+        try vm.delete(key: discovered)
+        try vm.delete(key: try #require(vm.keys.first { $0.service == .some(.github) }))
+
+        #expect(mock.store[cliName] == nil)
+        #expect(mock.store["GITHUB_TOKEN"] == nil)
+        #expect(store.keys == [other])
+        #expect(CustomKeyStore(defaults: defaults).keys == [other])
+    }
+
+    @Test("If the keychain delete fails, delete(key:) keeps overrides and the definition (#210)")
+    func listDeleteFailureKeepsMetadata() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let failing = FailingDeleteKeychainService()
+        let name = uniqueEnvName()
+        let custom = CustomKey(envVarName: name, displayName: name,
+                               categoryId: KeyCategory.devTools.stableId)
+        store.addKey(custom)
+        store.setCategoryOverride(envVarName: name, value: "builtin:\(KeyCategory.ai.rawValue)")
+        store.setIconOverride(envVarName: name, icon: "flame")
+        try failing.save(value: "secret", for: name)
+
+        let vm = KeyListViewModel(keychainService: failing, customStore: store)
+        let key = try #require(vm.keys.first { $0.envVarName == name })
+        #expect(throws: KeychainError.self) { try vm.delete(key: key) }
+
+        #expect(failing.store[name] == "secret")
+        #expect(store.keys.contains { $0.id == custom.id })
+        #expect(store.overriddenCategory(for: name) == .builtin(.ai))
+        #expect(store.overriddenIcon(for: name) == "flame")
+    }
+
+    @Test("KeyListViewModel.delete(key:) and KeyEditorViewModel.deleteKey() leave identical state (#210)")
+    func bothDeletePathsLeaveSameState() throws {
+        let custom = CustomKey(envVarName: uniqueEnvName(), displayName: "Custom",
+                               categoryId: KeyCategory.devTools.stableId)
+        let other = CustomKey(envVarName: uniqueEnvName(), displayName: "Other",
+                              categoryId: KeyCategory.ai.stableId)
+        let cliName = uniqueEnvName()
+
+        /// 同一の初期状態（カスタム・プリセット・CLI 発見キー、それぞれ上書き付き）を作る
+        func seed() throws -> (CustomKeyStore, UserDefaults, String, MockKeychainService) {
+            let (store, defaults, suite) = isolatedStore()
+            store.addKey(custom)
+            store.addKey(other)
+            for name in [custom.envVarName, "GITHUB_TOKEN", cliName, other.envVarName] {
+                store.setCategoryOverride(envVarName: name, value: "builtin:\(KeyCategory.ai.rawValue)")
+                store.setIconOverride(envVarName: name, icon: "flame")
+            }
+            let mock = MockKeychainService()
+            for name in [custom.envVarName, "GITHUB_TOKEN", cliName, other.envVarName] {
+                try mock.save(value: "v", for: name)
+            }
+            return (store, defaults, suite, mock)
+        }
+        let targets = [custom.envVarName, "GITHUB_TOKEN", cliName]
+
+        // 経路 A: 一覧 ViewModel
+        let (storeA, defaultsA, suiteA, mockA) = try seed()
+        defer { defaultsA.removePersistentDomain(forName: suiteA) }
+        let listVM = KeyListViewModel(keychainService: mockA, customStore: storeA)
+        for name in targets {
+            try listVM.delete(key: try #require(listVM.keys.first { $0.envVarName == name }))
+        }
+
+        // 経路 B: エディタ ViewModel（#202 で修正済み = 正）
+        let (storeB, defaultsB, suiteB, mockB) = try seed()
+        defer { defaultsB.removePersistentDomain(forName: suiteB) }
+        let listForB = KeyListViewModel(keychainService: mockB, customStore: storeB)
+        for name in targets {
+            let key = try #require(listForB.keys.first { $0.envVarName == name })
+            try KeyEditorViewModel(editingKey: key, keychainService: mockB, customStore: storeB).deleteKey()
+        }
+
+        #expect(mockA.store == mockB.store)
+        #expect(storeA.keys == storeB.keys)
+        #expect(storeA.categoryOverrides == storeB.categoryOverrides)
+        #expect(storeA.iconOverrides == storeB.iconOverrides)
+        // 削除対象外（other）の上書き・定義だけが残る
+        #expect(storeA.keys == [other])
+        #expect(Set(storeA.categoryOverrides.keys) == [other.envVarName])
+        #expect(Set(storeA.iconOverrides.keys) == [other.envVarName])
     }
 }
 
