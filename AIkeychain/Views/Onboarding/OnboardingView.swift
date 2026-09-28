@@ -71,6 +71,14 @@ struct OnboardingView: View {
 
             // Navigation buttons
             HStack {
+                // 完了済みユーザーの再表示時のみ閉じられる（#203）。設定は一切変更しない。
+                if viewModel.canDismiss {
+                    Button(L10n.t("close")) {
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                }
+
                 if viewModel.canGoBack {
                     Button {
                         withAnimation(AppAnimations.transition) {

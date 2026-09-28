@@ -8,8 +8,21 @@ final class OnboardingViewModel {
 
     private static let completedKey = "onboarding_completed"
 
+    /// 完了フラグの保存先。本番は `.standard`、テストは分離スイートを注入する。
+    @ObservationIgnored private let defaults: UserDefaults
+
+    /// 「閉じる」ボタン / Esc で閉じられるか（#203）。
+    /// 表示開始時点で完了済み（= ヘルプからの再表示）なら true、初回は false（必須フロー）。
+    /// init でスナップショットし、フロー途中で complete() しても変化しない。
+    let canDismiss: Bool
+
     static var hasCompleted: Bool {
         UserDefaults.standard.bool(forKey: completedKey)
+    }
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.canDismiss = defaults.bool(forKey: Self.completedKey)
     }
 
     var progress: Double {
@@ -39,7 +52,7 @@ final class OnboardingViewModel {
     }
 
     func complete() {
-        UserDefaults.standard.set(true, forKey: Self.completedKey)
+        defaults.set(true, forKey: Self.completedKey)
         isComplete = true
     }
 
