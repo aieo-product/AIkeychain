@@ -1025,4 +1025,34 @@ struct EnvParserUnquotedPemHeaderTests {
         #expect(open.map(\.key) == ["PK"])
         #expect(open.first?.value == "-----BEGIN PRIVATE KEY")
     }
+
+    @Test("The label never spans past the first closing delimiter: one-line values with more after the header are kept (#216 re-review)")
+    func labelDoesNotSpanClosingDelimiter() {
+        // `\n` はリテラルの 2 文字（GCP/Firebase の private_key を .env に 1 行で書く形式）
+        let escaped = EnvParser.parse("PK=-----BEGIN PRIVATE KEY-----\\nYWJj\\n-----END PRIVATE KEY-----")
+        #expect(escaped.map(\.key) == ["PK"])
+        #expect(escaped.first?.value == "-----BEGIN PRIVATE KEY-----\\nYWJj\\n-----END PRIVATE KEY-----")
+        let cert = EnvParser.parse("CERT=-----BEGIN CERTIFICATE-----abc-----")
+        #expect(cert.map(\.key) == ["CERT"])
+        #expect(cert.first?.value == "-----BEGIN CERTIFICATE-----abc-----")
+    }
+
+    @Test("Header-only values with double-space / trailing-space labels are still excluded")
+    func irregularSpacingLabelsExcluded() {
+        #expect(EnvParser.parse("PK=-----BEGIN  PRIVATE KEY-----").isEmpty)
+        #expect(EnvParser.parse("PK=-----BEGIN PRIVATE KEY -----").isEmpty)
+    }
+
+    @Test("The header guard stays fast on long hyphen-heavy input")
+    func headerGuardIsFastOnLongInput() {
+        let hyphens = "PK=-----BEGIN " + String(repeating: "-", count: 100_000)
+        let mixed = "PK=-----BEGIN " + String(repeating: "a----", count: 20_000) + "x"
+        let clock = ContinuousClock()
+        var results: [[EnvEntry]] = []
+        let elapsed = clock.measure {
+            results = [EnvParser.parse(hyphens), EnvParser.parse(mixed)]
+        }
+        #expect(results.map { $0.map(\.key) } == [["PK"], ["PK"]])
+        #expect(elapsed < .milliseconds(500), "parse took \(elapsed)")
+    }
 }
