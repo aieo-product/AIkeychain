@@ -483,3 +483,84 @@ struct EnvParserKeyValidationTests {
         #expect(entries[0].key == "MY_CUSTOM_TOKEN")
     }
 }
+
+@Suite("EnvParser multi-line quoted value Tests (#201)")
+struct EnvParserMultilineQuoteTests {
+
+    @Test("A double-quoted value spanning lines is joined into one entry")
+    func doubleQuotedMultiline() {
+        let text = "KEY=\"line1\nline2\""
+        let entries = EnvParser.parse(text)
+        #expect(entries.count == 1)
+        #expect(entries.first?.key == "KEY")
+        #expect(entries.first?.value == "line1\nline2")
+        // 1 行目で切り詰めた値（先頭クォート付き）を生成しない
+        #expect(!entries.contains { $0.value.hasPrefix("\"") })
+    }
+
+    @Test("A single-quoted value spanning lines is joined into one entry")
+    func singleQuotedMultiline() {
+        let text = "export KEY='line1\nline2'"
+        let entries = EnvParser.parse(text)
+        #expect(entries.count == 1)
+        #expect(entries.first?.key == "KEY")
+        #expect(entries.first?.value == "line1\nline2")
+    }
+
+    @Test("A PEM-like multi-line value is joined and following lines still parse")
+    func pemLikeMultilineThenNormal() {
+        let text = """
+        BEFORE=one
+        PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
+        MIIBVQIBADANBgkqhkiG9w0BAQEFAASC==
+        -----END PRIVATE KEY-----"
+        AFTER=two
+        """
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["BEFORE", "PRIVATE_KEY", "AFTER"])
+        #expect(entries[1].value == "-----BEGIN PRIVATE KEY-----\nMIIBVQIBADANBgkqhkiG9w0BAQEFAASC==\n-----END PRIVATE KEY-----")
+        #expect(entries[2].value == "two")
+    }
+
+    @Test("CRLF line endings do not insert empty lines into a joined value")
+    func crlfMultiline() {
+        let text = "KEY=\"line1\r\nline2\"\r\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["KEY", "NEXT"])
+        #expect(entries.first?.value == "line1\nline2")
+    }
+
+    @Test("An unterminated quote drops only that key and later lines still parse")
+    func unterminatedQuoteDoesNotSwallow() {
+        let text = """
+        A=ok1
+        BROKEN="never closed
+        B=ok2
+        C=ok3
+        """
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["A", "B", "C"])
+        #expect(!entries.contains { $0.key == "BROKEN" })
+        #expect(!entries.contains { $0.value.contains("never closed") })
+    }
+
+    @Test("Existing single-line behaviors are unchanged")
+    func singleLineRegression() {
+        let text = """
+        # comment line
+        DQ="double quoted"
+        SQ='single quoted'
+        export EXPORTED=plain
+        TRAILING="abc" # inline comment
+        PLAIN=value
+        """
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["DQ", "SQ", "EXPORTED", "TRAILING", "PLAIN"])
+        #expect(entries[0].value == "double quoted")
+        #expect(entries[1].value == "single quoted")
+        #expect(entries[2].value == "plain")
+        // 同一行で閉じているクォート値は開き行とみなさない（従来どおり値はそのまま）
+        #expect(entries[3].value == "\"abc\" # inline comment")
+        #expect(entries[4].value == "value")
+    }
+}
