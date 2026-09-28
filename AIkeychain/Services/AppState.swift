@@ -24,7 +24,7 @@ enum KeyManagementMode: String {
 /// プロキシサーバーとメニューバーの状態を一元管理する
 @Observable
 final class AppState {
-    static let shared = AppState()
+    static let shared = AppState(defaults: .standard)
 
     static let defaultPort: UInt16 = 18121
     private static let portKey = "proxy_port"
@@ -35,24 +35,21 @@ final class AppState {
     let proxyServer = ProxyServer()
     let proxyLogStore = ProxyLogStore()
 
-    /// ユーザーが選択したキー管理モード（UserDefaults で永続化）
+    /// モード・表示言語の永続化先（テストでは隔離した suite を注入する #200）
+    private let defaults: UserDefaults
+
+    /// ユーザーが選択したキー管理モード（stored property — @Observable で変更を追跡し
+    /// ツールバー/メニューバーのモード表示を即時更新する。UserDefaults にも永続化 #200）
     var keyManagementMode: KeyManagementMode {
-        get {
-            let raw = UserDefaults.standard.string(forKey: Self.modeKey) ?? ""
-            return KeyManagementMode(rawValue: raw) ?? .standard
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: Self.modeKey)
+        didSet {
+            defaults.set(keyManagementMode.rawValue, forKey: Self.modeKey)
         }
     }
 
     /// アプリ内表示言語（stored property — @Observable で変更を追跡、UserDefaults にも永続化）
-    var appLanguage: AppLanguage = {
-        let raw = UserDefaults.standard.string(forKey: AppState.languageKey) ?? ""
-        return AppLanguage(rawValue: raw) ?? .ja
-    }() {
+    var appLanguage: AppLanguage {
         didSet {
-            UserDefaults.standard.set(appLanguage.rawValue, forKey: Self.languageKey)
+            defaults.set(appLanguage.rawValue, forKey: Self.languageKey)
         }
     }
 
@@ -99,7 +96,11 @@ final class AppState {
         }
     }
 
-    private init() {
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+        // 保存済みモード・表示言語を復元（未設定・不正値は既定値）
+        keyManagementMode = KeyManagementMode(rawValue: defaults.string(forKey: Self.modeKey) ?? "") ?? .standard
+        appLanguage = AppLanguage(rawValue: defaults.string(forKey: Self.languageKey) ?? "") ?? .ja
         // 保存済みポート番号を復元
         proxyServer.port = proxyPort
     }
