@@ -354,6 +354,92 @@ struct KeyEditorViewModelTests {
 
         #expect(store.overriddenCategory(for: "GITHUB_TOKEN") == nil)
     }
+
+    // MARK: - deleteKey (#202)
+
+    @Test("Deleting a user-defined custom key also removes its definition (#202)")
+    func deleteCustomKeyRemovesDefinition() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let name = "CUSTOM_DEL_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let custom = CustomKey(envVarName: name, displayName: name,
+                               categoryId: KeyCategory.devTools.stableId)
+        store.addKey(custom)
+        try mock.save(value: "secret", for: name)
+
+        let listVM = KeyListViewModel(keychainService: mock, customStore: store)
+        let key = try #require(listVM.keys.first { $0.envVarName == name })
+        let editor = KeyEditorViewModel(editingKey: key, keychainService: mock, customStore: store)
+        try editor.deleteKey()
+
+        // 値だけでなく定義も消える
+        #expect(mock.store[name] == nil)
+        #expect(!store.keys.contains { $0.id == custom.id })
+        // 永続化にも残らない（再起動相当: 同じ suite から読み直す）
+        #expect(!CustomKeyStore(defaults: defaults).keys.contains { $0.id == custom.id })
+        // 一覧再読込（MainView の onSave → loadKeys 相当）で行が消える
+        listVM.loadKeys()
+        #expect(!listVM.keys.contains { $0.envVarName == name })
+    }
+
+    @Test("Deleting a preset key leaves custom key definitions untouched (#202)")
+    func deletePresetKeyKeepsDefinitions() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let other = CustomKey(envVarName: "OTHER_CUSTOM_KEY", displayName: "Other",
+                              categoryId: KeyCategory.ai.stableId)
+        store.addKey(other)
+        try mock.save(value: "ghp_x", for: "GITHUB_TOKEN")
+
+        let listVM = KeyListViewModel(keychainService: mock, customStore: store)
+        let preset = try #require(listVM.keys.first { $0.service == .some(.github) })
+        let editor = KeyEditorViewModel(editingKey: preset, keychainService: mock, customStore: store)
+        try editor.deleteKey()
+
+        #expect(mock.store["GITHUB_TOKEN"] == nil)
+        #expect(store.keys == [other])
+        // プリセットは従来どおり未設定行として残る
+        listVM.loadKeys()
+        let row = listVM.keys.first { $0.service == .some(.github) }
+        #expect(row != nil)
+        #expect(row?.isConfigured == false)
+    }
+
+    @Test("If the keychain delete fails, the custom key definition is kept (#202)")
+    func deleteFailureKeepsDefinition() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let failing = FailingDeleteKeychainService()
+        let name = "CUSTOM_FAIL_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let custom = CustomKey(envVarName: name, displayName: name,
+                               categoryId: KeyCategory.devTools.stableId)
+        store.addKey(custom)
+        try failing.save(value: "secret", for: name)
+
+        let key = APIKey(customKey: custom, isConfigured: true)
+        let editor = KeyEditorViewModel(editingKey: key, keychainService: failing, customStore: store)
+        #expect(throws: KeychainError.self) { try editor.deleteKey() }
+
+        // 値が残っているので定義も残す（値だけ残って定義が消える不整合を作らない）
+        #expect(failing.store[name] == "secret")
+        #expect(store.keys.contains { $0.id == custom.id })
+    }
+}
+
+/// `delete` だけ失敗させるテストダブル（Keychain 削除失敗時の定義保持を検証 / #202）。
+final class FailingDeleteKeychainService: KeychainServiceProtocol {
+    var store: [String: String] = [:]
+    func save(value: String, for account: String) throws { store[account] = value }
+    func retrieve(for account: String) throws -> String? { store[account] }
+    func retrieveNoninteractive(for account: String) throws -> String? { store[account] }
+    func delete(for account: String) throws { throw KeychainError.invalidData }
+    func exists(for account: String) -> Bool { store[account] != nil }
+    func allAccounts() -> [String] { Array(store.keys) }
 }
 
 @Suite("SecretMask Tests")
