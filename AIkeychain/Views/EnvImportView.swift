@@ -648,6 +648,15 @@ enum EnvParser {
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
             .components(separatedBy: .newlines)
         var entries: [EnvEntry] = []
+        // キーごとに「最後の代入が取り込み不可だったか」を記録する（#215）。受理行だけで
+        // 後勝ちにすると、最後の代入が除外（空値・`$(...)` 展開など）でも古い値が残って保存され、
+        // .zshrc から実効行を含む export 行が消えるため、最後の代入が除外ならキーごと落とす。
+        var lastAssignmentExcluded: [String: Bool] = [:]
+        func consume(_ logical: String) {
+            let entry = parseLine(logical)
+            if let entry { entries.append(entry) }
+            if let key = assignmentKey(in: logical) { lastAssignmentExcluded[key] = (entry == nil) }
+        }
         var index = 0
         while index < lines.count {
             let line = lines[index]
@@ -680,19 +689,20 @@ enum EnvParser {
                         bodyLines.append(closing.last)
                         // 閉じクォート後の行末コメントは落とし、クォートで包んだ論理行にする
                         let logical = String(line[..<bodyStart]) + bodyLines.joined(separator: "\n") + String(quote)
-                        if let entry = parseLine(logical) { entries.append(entry) }
+                        consume(logical)
                         index = end + 1
                     } else {
                         // 閉じクォートが無い、または閉じクォート後に不正な文字列が続く:
                         // 壊れた値を作らないよう開き行だけを破棄し、後続行を巻き込まないよう
                         // 次の行から通常解析を再開する（結合候補だった行も改めて 1 行ずつ解析される）。
                         // 仕様: `P="C:\Users\"` のように `\"` で終わる単一行値もここで未終端として破棄する。
+                        if let key = assignmentKey(in: line) { lastAssignmentExcluded[key] = true }
                         index += 1
                     }
                     continue
                 }
             }
-            if let entry = parseLine(line) { entries.append(entry) }
+            consume(line)
             index += 1
         }
         // 同名キーは後勝ちで 1 件に畳む（シェル / dotenv と同じ実効値。表示位置は初出を保つ）。
@@ -700,7 +710,7 @@ enum EnvParser {
         // さらに実効値の export 行まで .zshrc から消えてしまう（PR #218 レビュー / #215）。
         var indexByKey: [String: Int] = [:]
         var deduped: [EnvEntry] = []
-        for entry in entries {
+        for entry in entries where lastAssignmentExcluded[entry.key] != true {
             if let i = indexByKey[entry.key] {
                 deduped[i] = entry
             } else {
@@ -756,6 +766,17 @@ enum EnvParser {
     /// parseLine の `trimmingCharacters(in: .whitespaces)` と同じ文字集合で判定する。
     private static func isHorizontalWhitespace(_ ch: Character) -> Bool {
         ch.unicodeScalars.allSatisfy { CharacterSet.whitespaces.contains($0) }
+    }
+
+    /// 代入行（`[export ]KEY=...`）のキー名を返す。値の採否は問わない（後勝ちの判定用 / #215）。
+    /// 前処理は parseLine と同じ。キー名が無効な行・コメント・空行は nil（取り込み候補外）。
+    private static func assignmentKey(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return nil }
+        let body = trimmed.hasPrefix("export ") ? String(trimmed.dropFirst(7)) : trimmed
+        guard let eqIndex = body.firstIndex(of: "=") else { return nil }
+        let key = String(body[..<eqIndex]).trimmingCharacters(in: .whitespaces)
+        return EnvVarName.isValid(key) ? key : nil
     }
 
     private static func parseLine(_ line: String) -> EnvEntry? {

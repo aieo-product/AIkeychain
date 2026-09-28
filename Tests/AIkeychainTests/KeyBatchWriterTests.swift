@@ -56,6 +56,40 @@ struct KeyBatchWriterTests {
         #expect(entries.first { $0.key == "K" }?.value == "second")
     }
 
+    @Test("EnvParser: last assignment excluded (empty value) drops the key entirely (#215)")
+    func parserLastAssignmentEmptyDropsKey() {
+        #expect(EnvParser.parse("export OPENAI_API_KEY=old\nexport OPENAI_API_KEY=\n").isEmpty)
+    }
+
+    @Test("EnvParser: last assignment excluded (shell expansion) drops the key entirely (#215)")
+    func parserLastAssignmentExpansionDropsKey() {
+        #expect(EnvParser.parse("K=old\nK=$(security find-generic-password -s x -w)\n").isEmpty)
+        #expect(EnvParser.parse("K=old\nK=$OTHER_VAR\n").isEmpty)
+        // 閉じない複数行クォート（破棄される代入）が最後でも同様
+        #expect(EnvParser.parse("K=old\nK=\"never closed\n").map(\.key) == [])
+    }
+
+    @Test("EnvParser: an excluded assignment followed by a valid one keeps the valid value (#215)")
+    func parserExcludedThenValid() {
+        let simple = EnvParser.parse("K=old\nK=new\n")
+        #expect(simple.map(\.key) == ["K"])
+        #expect(simple.first?.value == "new")
+
+        let expThenReal = EnvParser.parse("K=$(cmd)\nK=real\n")
+        #expect(expThenReal.map(\.key) == ["K"])
+        #expect(expThenReal.first?.value == "real")
+
+        // 除外された代入は位置を持たない: 最初に受理された位置に並ぶ
+        let ordered = EnvParser.parse("K=$(cmd)\nOTHER=x\nK=real\n")
+        #expect(ordered.map(\.key) == ["OTHER", "K"])
+        #expect(ordered.last?.value == "real")
+
+        // 複数行クォートの論理行も 1 代入として後勝ちに参加する（#201）
+        let multi = EnvParser.parse("K=old\nK=\"line1\nline2\"\n")
+        #expect(multi.map(\.key) == ["K"])
+        #expect(multi.first?.value == "line1\nline2")
+    }
+
     @Test("Import: a parsed .env never puts one account in both saved and skippedExisting (#215)")
     func importDuplicateKeyNotBothSavedAndSkipped() {
         let blind = BlindExistsKeychainService()
