@@ -23,6 +23,21 @@ enum KeyBatchWriter {
         var failed: [String] = []
     }
 
+    /// 共有受信などで外部から来たエントリのうち、AI KeyChain 自身が管理する値
+    /// （`keychain://` 参照・`<VALUE>` テンプレート・`AIKEYCHAIN_` 変数 / #219）を書込み対象から外す。
+    static func partitionAppManaged(_ entries: [Entry]) -> (writable: [Entry], appManaged: [String]) {
+        var writable: [Entry] = []
+        var appManaged: [String] = []
+        for entry in entries {
+            if EnvParser.isAppManaged(key: entry.account, value: entry.value) {
+                appManaged.append(entry.account)
+            } else {
+                writable.append(entry)
+            }
+        }
+        return (writable, appManaged)
+    }
+
     static func write(_ entries: [Entry],
                       overwriting: Set<String>,
                       keychain: KeychainServiceProtocol) -> Result {
