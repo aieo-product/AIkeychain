@@ -519,6 +519,94 @@ struct KeyEditorViewModelTests {
         listVM.loadKeys()
         #expect(!listVM.keys.contains { $0.envVarName == name })
     }
+
+    // MARK: - 新規追加時の同名拒否 (#209)
+
+    @Test("Adding a new key whose name already has a keychain value is rejected and the value is unchanged (#209)")
+    func addDuplicateExistingValueRejected() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let name = "DUP_VAL_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        try mock.save(value: "original", for: name) // 例: CLI「コマンド追加」済みのキー
+
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = name
+        vm.tokenValue = "overwritten"
+        #expect(throws: KeychainError.self) { try vm.save() }
+
+        // 無言上書きされない・定義も作られない・既存行からの編集を案内する
+        #expect(mock.store[name] == "original")
+        #expect(!store.keys.contains { $0.envVarName == name })
+        #expect(vm.errorMessage != nil)
+        #expect(vm.errorMessage != KeychainError.duplicateItem.localizedDescription)
+        #expect(vm.isSaving == false)
+        #expect(vm.showSaveSuccess == false)
+    }
+
+    @Test("Adding a new key with the same name as an existing custom definition does not duplicate it (#209)")
+    func addDuplicateCustomDefinitionRejected() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let name = "DUP_DEF_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let existing = CustomKey(envVarName: name, displayName: name,
+                                 categoryId: KeyCategory.ai.stableId)
+        store.addKey(existing) // 定義のみ（値なし = 未設定行）
+
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = name
+        vm.tokenValue = "secret"
+        #expect(throws: KeychainError.self) { try vm.save() }
+
+        #expect(store.keys.filter { $0.envVarName == name } == [existing])
+        #expect(CustomKeyStore(defaults: defaults).keys.filter { $0.envVarName == name }.count == 1)
+        #expect(mock.store[name] == nil) // Keychain にも書かない
+        #expect(vm.errorMessage != nil)
+    }
+
+    @Test("Adding an unconfigured preset name as a new key still saves (#209)")
+    func addUnconfiguredPresetAllowed() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.codeAndGit)
+        vm.envVarName = "GITHUB_TOKEN"
+        vm.tokenValue = "ghp_new"
+        try vm.save()
+
+        #expect(mock.store["GITHUB_TOKEN"] == "ghp_new")
+        #expect(vm.errorMessage == nil)
+        #expect(vm.showSaveSuccess == true)
+    }
+
+    @Test("Editing an existing key still overwrites its value (#209 does not affect editing)")
+    func editExistingKeyUnaffected() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let name = "EDIT_OK_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let custom = CustomKey(envVarName: name, displayName: name,
+                               categoryId: KeyCategory.devTools.stableId)
+        store.addKey(custom)
+        try mock.save(value: "v1", for: name)
+
+        let key = APIKey(customKey: custom, isConfigured: true)
+        let vm = KeyEditorViewModel(editingKey: key, keychainService: mock, customStore: store)
+        vm.tokenValue = "v2"
+        try vm.save()
+
+        #expect(mock.store[name] == "v2")
+        #expect(store.keys.filter { $0.envVarName == name }.count == 1)
+        #expect(vm.errorMessage == nil)
+    }
 }
 
 /// `delete` だけ失敗させるテストダブル（Keychain 削除失敗時の定義保持を検証 / #202）。

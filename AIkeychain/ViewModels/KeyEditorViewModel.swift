@@ -145,6 +145,18 @@ final class KeyEditorViewModel {
             throw KeychainError.invalidData
         }
 
+        // 新規追加で既存と同名なら保存しない（#209）: Keychain 保存は `-U` で無確認上書きになり、
+        // カスタム定義も同名で重複登録されるため。exists は属性照会のみで値を読まない（承認 UI なし）。
+        // 未設定のプリセット名（値も定義も無い）は従来どおり許可。編集（isEditing）は対象外。
+        if !isEditing,
+           keychainService.exists(for: trimmedEnvVar)
+            || customStore.keys.contains(where: { $0.envVarName == trimmedEnvVar }) {
+            errorMessage = L10n.s(
+                ja: "「\(trimmedEnvVar)」は既に登録されています。上書きする場合は一覧の既存の行から編集してください",
+                en: "\"\(trimmedEnvVar)\" already exists. To change it, edit the existing row in the list")
+            throw KeychainError.duplicateItem
+        }
+
         isSaving = true
         errorMessage = nil
 
