@@ -47,6 +47,29 @@ struct KeyBatchWriterTests {
         #expect(result.skippedExisting.isEmpty)
     }
 
+    // MARK: .env 内の同名キー（PR #218 レビュー Astra / Fable）
+
+    @Test("EnvParser: duplicate keys fold to one entry, last wins, first position kept (#215)")
+    func parserDuplicateKeysLastWins() {
+        let entries = EnvParser.parse("export K=first\nOTHER=x\nK=second\n")
+        #expect(entries.map(\.key) == ["K", "OTHER"])
+        #expect(entries.first { $0.key == "K" }?.value == "second")
+    }
+
+    @Test("Import: a parsed .env never puts one account in both saved and skippedExisting (#215)")
+    func importDuplicateKeyNotBothSavedAndSkipped() {
+        let blind = BlindExistsKeychainService()
+        let name = uniqueName("IMP_DUP")
+        let parsed = EnvParser.parse("export \(name)=first\nOTHER_\(name)=x\n\(name)=second\n")
+        let result = KeyBatchWriter.write(parsed.map { .init(account: $0.account, value: $0.value) },
+                                          overwriting: [], keychain: blind)
+
+        #expect(blind.store[name] == "second")
+        #expect(result.saved.contains(name))
+        #expect(Set(result.saved).isDisjoint(with: result.skippedExisting))
+        #expect(result.skippedExisting.isEmpty)
+    }
+
     // MARK: キー共有受信経路（ShareKeysView.ReceiveTab.importDecrypted）
 
     @Test("Share: mixed batch — only confirmed overwrite names are replaced (#215)")

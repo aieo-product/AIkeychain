@@ -695,7 +695,20 @@ enum EnvParser {
             if let entry = parseLine(line) { entries.append(entry) }
             index += 1
         }
-        return entries
+        // 同名キーは後勝ちで 1 件に畳む（シェル / dotenv と同じ実効値。表示位置は初出を保つ）。
+        // 重複のまま渡すと作成専用書込みで先勝ち保存 + 2 件目が「既存のためスキップ」になり、
+        // さらに実効値の export 行まで .zshrc から消えてしまう（PR #218 レビュー / #215）。
+        var indexByKey: [String: Int] = [:]
+        var deduped: [EnvEntry] = []
+        for entry in entries {
+            if let i = indexByKey[entry.key] {
+                deduped[i] = entry
+            } else {
+                indexByKey[entry.key] = deduped.count
+                deduped.append(entry)
+            }
+        }
+        return deduped
     }
 
     /// 値（`=` 以降、`export ` 除去後）が `"` / `'` で始まる場合、そのクォートと直後の
