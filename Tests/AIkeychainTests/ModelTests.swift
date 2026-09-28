@@ -419,15 +419,49 @@ struct KeyEditorViewModelTests {
         let custom = CustomKey(envVarName: name, displayName: name,
                                categoryId: KeyCategory.devTools.stableId)
         store.addKey(custom)
+        store.setCategoryOverride(envVarName: name, value: "builtin:\(KeyCategory.ai.rawValue)")
+        store.setIconOverride(envVarName: name, icon: "flame")
         try failing.save(value: "secret", for: name)
 
         let key = APIKey(customKey: custom, isConfigured: true)
         let editor = KeyEditorViewModel(editingKey: key, keychainService: failing, customStore: store)
         #expect(throws: KeychainError.self) { try editor.deleteKey() }
 
-        // 値が残っているので定義も残す（値だけ残って定義が消える不整合を作らない）
+        // 値が残っているので定義・上書きも残す（値だけ残って定義が消える不整合を作らない）
         #expect(failing.store[name] == "secret")
         #expect(store.keys.contains { $0.id == custom.id })
+        #expect(store.overriddenCategory(for: name) == .builtin(.ai))
+        #expect(store.overriddenIcon(for: name) == "flame")
+        // 永続化側も不変（再起動相当: 同じ suite から読み直す）
+        let reloaded = CustomKeyStore(defaults: defaults)
+        #expect(reloaded.keys.contains { $0.id == custom.id })
+        #expect(reloaded.overriddenCategory(for: name) == .builtin(.ai))
+        #expect(reloaded.overriddenIcon(for: name) == "flame")
+    }
+
+    @Test("Deleting a stale unconfigured custom row (no keychain value) removes its definition (#202)")
+    func deleteUnconfiguredCustomKeyRemovesDefinition() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // 実ユーザーの残存状態: 定義だけあり Keychain に値が無い「未設定」行。
+        // Mock の delete は存在しなくても throw しない（本番 SecurityCLIKeychainService も exit 44 を成功扱い）。
+        let mock = MockKeychainService()
+        let name = "CUSTOM_STALE_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let custom = CustomKey(envVarName: name, displayName: name,
+                               categoryId: KeyCategory.devTools.stableId)
+        store.addKey(custom)
+
+        let listVM = KeyListViewModel(keychainService: mock, customStore: store)
+        let key = try #require(listVM.keys.first { $0.envVarName == name })
+        #expect(key.isConfigured == false)
+        let editor = KeyEditorViewModel(editingKey: key, keychainService: mock, customStore: store)
+        try editor.deleteKey()
+
+        #expect(!store.keys.contains { $0.id == custom.id })
+        #expect(!CustomKeyStore(defaults: defaults).keys.contains { $0.id == custom.id })
+        listVM.loadKeys()
+        #expect(!listVM.keys.contains { $0.envVarName == name })
     }
 }
 
