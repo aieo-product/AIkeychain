@@ -645,29 +645,43 @@ enum EnvParser {
             // クォートで始まり同じ行で閉じない値（例: KEY="line1 / line2"）は、閉じクォートまで
             // \n で結合した論理行として parseLine に渡す（#201）。行単位のままだと `"line1` の
             // ような切り詰め値が成功扱いで保存されてしまう。同じ行で閉じる値は従来どおり。
-            if let (quote, bodyStart) = openingQuote(in: line),
-               findClosingQuote(in: line[bodyStart...], quote: quote) == nil {
-                var buffer = String(line[bodyStart...])
-                var end = index
-                var closed: (body: Substring, rest: Substring)?
-                while closed == nil, end + 1 < lines.count {
-                    end += 1
-                    buffer += "\n" + lines[end]
-                    closed = findClosingQuote(in: buffer[...], quote: quote)
+            if let (quote, bodyStart) = openingQuote(in: line) {
+                var escaped = false
+                let firstSegment = line[bodyStart...]
+                if scanClosingQuote(in: firstSegment, quote: quote, escaped: &escaped) == nil {
+                    // 走査は追加された行だけを対象にし、エスケープ状態を引き継ぐ（線形時間）。
+                    // 本文は閉じ位置確定後に一度だけ結合する。
+                    var bodyLines: [Substring] = [firstSegment]
+                    var end = index
+                    var closing: (last: Substring, rest: Substring)?
+                    while closing == nil, end + 1 < lines.count {
+                        end += 1
+                        // 行境界の改行は、直前の `\` があればそのエスケープ対象として消費される
+                        // （次行先頭の `"` はエスケープされない）。無ければクォートでもないので
+                        // いずれにせよ次行の走査はエスケープ無し状態から始まる。
+                        escaped = false
+                        let segment = lines[end][...]
+                        if let closeIndex = scanClosingQuote(in: segment, quote: quote, escaped: &escaped) {
+                            closing = (segment[..<closeIndex], segment[segment.index(after: closeIndex)...])
+                        } else {
+                            bodyLines.append(segment)
+                        }
+                    }
+                    if let closing, isValidTrailer(closing.rest) {
+                        bodyLines.append(closing.last)
+                        // 閉じクォート後の行末コメントは落とし、クォートで包んだ論理行にする
+                        let logical = String(line[..<bodyStart]) + bodyLines.joined(separator: "\n") + String(quote)
+                        if let entry = parseLine(logical) { entries.append(entry) }
+                        index = end + 1
+                    } else {
+                        // 閉じクォートが無い、または閉じクォート後に不正な文字列が続く:
+                        // 壊れた値を作らないよう開き行だけを破棄し、後続行を巻き込まないよう
+                        // 次の行から通常解析を再開する（結合候補だった行も改めて 1 行ずつ解析される）。
+                        // 仕様: `P="C:\Users\"` のように `\"` で終わる単一行値もここで未終端として破棄する。
+                        index += 1
+                    }
+                    continue
                 }
-                if let closed, isValidTrailer(closed.rest) {
-                    // 閉じクォート後の行末コメントは落とし、クォートで包んだ論理行にする
-                    let logical = String(line[..<bodyStart]) + closed.body + String(quote)
-                    if let entry = parseLine(logical) { entries.append(entry) }
-                    index = end + 1
-                } else {
-                    // 閉じクォートが無い、または閉じクォート後に不正な文字列が続く:
-                    // 壊れた値を作らないよう開き行だけを破棄し、後続行を巻き込まないよう
-                    // 次の行から通常解析を再開する（結合候補だった行も改めて 1 行ずつ解析される）。
-                    // 仕様: `P="C:\Users\"` のように `\"` で終わる単一行値もここで未終端として破棄する。
-                    index += 1
-                }
-                continue
             }
             if let entry = parseLine(line) { entries.append(entry) }
             index += 1
@@ -677,29 +691,35 @@ enum EnvParser {
 
     /// 値（`=` 以降、`export ` 除去後）が `"` / `'` で始まる場合、そのクォートと直後の
     /// 位置を返す。前処理は parseLine と同じ（前後空白除去・コメント行除外・`export `）。
+    /// キー名が無効な行は nil（結合の起点にしない）。
     private static func openingQuote(in line: String) -> (Character, String.Index)? {
         let working = line.drop(while: isHorizontalWhitespace)
         guard !working.isEmpty, !working.hasPrefix("#") else { return nil }
         let body = working.hasPrefix("export ") ? working.dropFirst(7) : working
         guard let eqIndex = body.firstIndex(of: "=") else { return nil }
+        // 無効なキー名の行は結合を始めない（parseLine が 1 行として拒否し、後続行は通常解析）
+        let key = String(body[..<eqIndex]).trimmingCharacters(in: .whitespaces)
+        guard EnvVarName.isValid(key) else { return nil }
         let value = body[body.index(after: eqIndex)...].drop(while: isHorizontalWhitespace)
         guard let quote = value.first, quote == "\"" || quote == "'" else { return nil }
         return (quote, value.index(after: value.startIndex))
     }
 
-    /// 最初の（エスケープされていない）閉じクォートを探し、本文と残りを返す。
+    /// 最初の（エスケープされていない）閉じクォートの位置を返す。`escaped` は前の区間から
+    /// 引き継いだエスケープ状態で、走査後の状態に更新される（区間ごとの逐次走査用）。
     /// `"` 内では `\` が次の 1 文字をエスケープする（境界判定のみ。デコードはしない —
     /// エスケープ解釈は #174 のスコープ）。`'` にはエスケープが無い。
-    private static func findClosingQuote(in text: Substring, quote: Character) -> (body: Substring, rest: Substring)? {
+    private static func scanClosingQuote(in text: Substring, quote: Character, escaped: inout Bool) -> String.Index? {
         var i = text.startIndex
         while i < text.endIndex {
             let ch = text[i]
-            if quote == "\"" && ch == "\\" {
-                i = text.index(after: i)
-                if i < text.endIndex { i = text.index(after: i) }
-                continue
+            if escaped {
+                escaped = false
+            } else if quote == "\"" && ch == "\\" {
+                escaped = true
+            } else if ch == quote {
+                return i
             }
-            if ch == quote { return (text[..<i], text[text.index(after: i)...]) }
             i = text.index(after: i)
         }
         return nil

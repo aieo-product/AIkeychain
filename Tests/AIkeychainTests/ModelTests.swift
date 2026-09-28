@@ -687,3 +687,52 @@ struct EnvParserQuoteBoundaryTests {
         }
     }
 }
+
+@Suite("EnvParser join guard & scan cost Tests (#201 re-review)")
+struct EnvParserJoinGuardTests {
+
+    @Test("An opening line with an invalid key does not start a join")
+    func invalidKeyOpenerDoesNotJoin() {
+        let text = "bad key=\"x\nGOOD=ok\nend\"\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        // main と同じ: 無効キーの開き行は 1 行として捨て、後続行は通常解析する
+        #expect(entries.map(\.key) == ["GOOD", "NEXT"])
+    }
+
+    @Test("An export-prefixed opening line with an invalid key does not start a join")
+    func invalidKeyOpenerWithExportDoesNotJoin() {
+        #expect(EnvParser.parse("export foo bar=\"x\nGOOD=ok\nend\"\nNEXT=ok").map(\.key) == ["GOOD", "NEXT"])
+        #expect(EnvParser.parse("  foo bar = 'x\nGOOD=ok\nend'\nNEXT=ok").map(\.key) == ["GOOD", "NEXT"])
+    }
+
+    @Test("A backslash at the end of a line escapes the newline, so a quote on the next line closes")
+    func backslashAtLineEndThenQuoteCloses() {
+        // dotenv と同じく `\` は次の 1 文字（結合後は改行）をエスケープする。
+        // 次行先頭の `"` はエスケープされず閉じクォートになる。
+        let text = "K=\"l1\\\n\"\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["K", "NEXT"])
+        #expect(entries.first?.value == "l1\\\n")
+    }
+
+    @Test("An escape state carries within a continuation line")
+    func escapeWithinContinuationLine() {
+        let text = "K=\"l1\nmid \\\" still\nend\""
+        let entries = EnvParser.parse(text)
+        #expect(entries.count == 1)
+        #expect(entries.first?.value == "l1\nmid \\\" still\nend")
+    }
+
+    @Test("A 2,000-line closed multi-line value parses in linear time")
+    func largeMultilineValueIsLinear() {
+        let body = (0..<2_000).map { _ in String(repeating: "A", count: 76) + "==" }
+        let text = "BIG=\"" + body.joined(separator: "\n") + "\"\nNEXT=ok"
+        let clock = ContinuousClock()
+        var entries: [EnvEntry] = []
+        let elapsed = clock.measure { entries = EnvParser.parse(text) }
+        #expect(entries.map(\.key) == ["BIG", "NEXT"])
+        #expect(entries.first?.value.count == body.joined(separator: "\n").count)
+        // 二次走査（行追加ごとに先頭から再走査）だと debug で数秒かかる。線形なら数十 ms。
+        #expect(elapsed < .milliseconds(500), "parse took \(elapsed)")
+    }
+}
