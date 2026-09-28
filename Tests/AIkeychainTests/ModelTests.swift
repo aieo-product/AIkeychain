@@ -1055,4 +1055,14 @@ struct EnvParserUnquotedPemHeaderTests {
         #expect(results.map { $0.map(\.key) } == [["PK"], ["PK"]])
         #expect(elapsed < .milliseconds(500), "parse took \(elapsed)")
     }
+
+    @Test("Boundary pins: extra closing dashes / glued END / escaped empty body are kept, non-ASCII labels are excluded")
+    func headerBoundaryPins() {
+        // 閉じダッシュ 7 本は正しいヘッダではない（意図的に保持）
+        #expect(EnvParser.parse("PK=-----BEGIN PRIVATE KEY-------").map(\.key) == ["PK"])
+        #expect(EnvParser.parse("PK=-----BEGIN PRIVATE KEY----------END PRIVATE KEY-----").map(\.key) == ["PK"])
+        // `\n` はリテラルの 2 文字（本文が空のエスケープ 1 行 PEM）
+        #expect(EnvParser.parse("PK=-----BEGIN PRIVATE KEY-----\\n-----END PRIVATE KEY-----").map(\.key) == ["PK"])
+        #expect(EnvParser.parse("PK=-----BEGIN 日本語 ラベル-----").isEmpty)
+    }
 }
