@@ -12,6 +12,10 @@ struct EnvImportView: View {
     @State private var parsedEntries: [EnvEntry] = []
     @State private var importResult: ImportResult?
     @State private var removeFromZshrc = true
+    /// Step 3 プレビューで「Overwrite」と提示したアカウント。Step 2→3 の遷移時に一度だけ
+    /// 確定し、表示と書込みで同じ集合を使う（#215）。ここに無いエントリは作成専用で書き、
+    /// 既存と同名なら上書きせず「既存のためスキップ」にする。
+    @State private var overwriteAccounts: Set<String> = []
 
     var onImport: () -> Void = {}
 
@@ -100,6 +104,8 @@ struct EnvImportView: View {
                     .buttonStyle(.borderedProminent)
                 case 1:
                     Button("Review \(parsedEntries.filter(\.enabled).count) Keys") {
+                        overwriteAccounts = Set(parsedEntries.filter(\.enabled).map(\.account)
+                            .filter { SecurityCLIKeychainService.shared.exists(for: $0) })
                         withAnimation { currentStep = 2 }
                     }
                     .buttonStyle(.borderedProminent)
@@ -328,7 +334,7 @@ struct EnvImportView: View {
 
                             Spacer()
 
-                            if SecurityCLIKeychainService.shared.exists(for: entry.matchedService?.envVarName ?? entry.key) {
+                            if overwriteAccounts.contains(entry.account) {
                                 Label("Overwrite", systemImage: "exclamationmark.triangle")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.orange)
@@ -393,7 +399,7 @@ struct EnvImportView: View {
             Spacer()
 
             if let result = importResult {
-                let clean = result.failed == 0 && result.unsupported.isEmpty
+                let clean = result.failed == 0 && result.unsupported.isEmpty && result.skippedExisting.isEmpty
                 Image(systemName: clean ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(clean ? AppColors.configured : .orange)
@@ -413,6 +419,12 @@ struct EnvImportView: View {
                     if result.skipped > 0 {
                         ResultRow(icon: "minus.circle", color: .secondary,
                                   text: "\(result.skipped) keys skipped")
+                    }
+                    if !result.skippedExisting.isEmpty {
+                        ResultRow(icon: "lock.shield", color: .orange,
+                                  text: L10n.s(
+                                    ja: "\(result.skippedExisting.count) 件は既存のためスキップしました（既存の値は変更していません）: \(result.skippedExisting.joined(separator: ", "))",
+                                    en: "\(result.skippedExisting.count) key(s) skipped because they already exist (existing values unchanged): \(result.skippedExisting.joined(separator: ", "))"))
                     }
                     if result.failed > 0 {
                         ResultRow(icon: "xmark.circle.fill", color: .red,
@@ -451,28 +463,19 @@ struct EnvImportView: View {
 
     private func performImport() {
         let selected = parsedEntries.filter(\.enabled)
-        var saved = 0
-        var failed = 0
         var removedFromZshrc = 0
-        var savedKeys: [String] = []
-        var unsupportedKeys: [String] = []
 
-        for entry in selected {
-            let account = entry.matchedService?.envVarName ?? entry.key
-            do {
-                try SecurityCLIKeychainService.shared.save(value: entry.value, for: account)
-                saved += 1
-                savedKeys.append(account)
-            } catch KeychainError.invalidData {
-                // 値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超 — .env に多い複数行 PEM 鍵
-                // 等）。一般の failed に混ぜず理由付きで別掲する（#179 二段レビュー N1）。
-                // ※ 旧 KeychainService の cliManaged fail-closed (#177) は、書き込みが
-                // security subprocess 単一経路になったことで構造的に不要になった。
-                unsupportedKeys.append(account)
-            } catch {
-                failed += 1
-            }
-        }
+        // プレビューで「Overwrite」と提示したものだけ -U で上書きし、それ以外は作成専用で
+        // 書く（exists() の fail-open で既存値を無確認上書きしない / #215）。
+        // 値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超 — .env に多い複数行 PEM 鍵
+        // 等）は一般の failed に混ぜず理由付きで別掲する（#179 二段レビュー N1）。
+        let written = KeyBatchWriter.write(
+            selected.map { KeyBatchWriter.Entry(account: $0.account, value: $0.value) },
+            overwriting: overwriteAccounts,
+            keychain: SecurityCLIKeychainService.shared)
+        // 既存のためスキップしたキーは Keychain 側の値が .env と異なり得るため、
+        // .zshrc の export 行は削除しない（保存できたキーのみ対象）。
+        let savedKeys = written.saved
 
         // .zshrc から export 行を削除
         if removeFromZshrc && !savedKeys.isEmpty {
@@ -485,8 +488,9 @@ struct EnvImportView: View {
         }
 
         let skipped = parsedEntries.count - selected.count
-        importResult = ImportResult(saved: saved, skipped: skipped, failed: failed,
-                                    removedFromZshrc: removedFromZshrc, unsupported: unsupportedKeys)
+        importResult = ImportResult(saved: written.saved.count, skipped: skipped, failed: written.failed.count,
+                                    removedFromZshrc: removedFromZshrc, unsupported: written.unsupported,
+                                    skippedExisting: written.skippedExisting)
     }
 
     private func isAIKey(_ key: String) -> Bool {
@@ -612,6 +616,8 @@ private struct ImportResult {
     /// できなかったキー。C7 (#174) のエンコーディング規約が入るまでの制約。
     /// 一般の failed に混ぜると理由が見えないため別掲する（#179 二段レビュー N1/D-Q1）。
     var unsupported: [String] = []
+    /// 上書き未選択で既存と同名だったため書き込まなかったキー（既存値は保護 / #215）。
+    var skippedExisting: [String] = []
 }
 
 struct EnvEntry: Identifiable {
@@ -622,6 +628,9 @@ struct EnvEntry: Identifiable {
     var matchedService: ServiceType?
     var guessedCategory: String?
     var recommendation: EnvRecommendation?
+
+    /// Keychain 上のアカウント名（既知サービスは envVarName、それ以外は .env のキー名）。
+    var account: String { matchedService?.envVarName ?? key }
 }
 
 enum EnvRecommendation {
@@ -639,6 +648,15 @@ enum EnvParser {
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
             .components(separatedBy: .newlines)
         var entries: [EnvEntry] = []
+        // キーごとに「最後の代入が取り込み不可だったか」を記録する（#215）。受理行だけで
+        // 後勝ちにすると、最後の代入が除外（空値・`$(...)` 展開など）でも古い値が残って保存され、
+        // .zshrc から実効行を含む export 行が消えるため、最後の代入が除外ならキーごと落とす。
+        var lastAssignmentExcluded: [String: Bool] = [:]
+        func consume(_ logical: String) {
+            let entry = parseLine(logical)
+            if let entry { entries.append(entry) }
+            if let key = assignmentKey(in: logical) { lastAssignmentExcluded[key] = (entry == nil) }
+        }
         var index = 0
         while index < lines.count {
             let line = lines[index]
@@ -671,22 +689,36 @@ enum EnvParser {
                         bodyLines.append(closing.last)
                         // 閉じクォート後の行末コメントは落とし、クォートで包んだ論理行にする
                         let logical = String(line[..<bodyStart]) + bodyLines.joined(separator: "\n") + String(quote)
-                        if let entry = parseLine(logical) { entries.append(entry) }
+                        consume(logical)
                         index = end + 1
                     } else {
                         // 閉じクォートが無い、または閉じクォート後に不正な文字列が続く:
                         // 壊れた値を作らないよう開き行だけを破棄し、後続行を巻き込まないよう
                         // 次の行から通常解析を再開する（結合候補だった行も改めて 1 行ずつ解析される）。
                         // 仕様: `P="C:\Users\"` のように `\"` で終わる単一行値もここで未終端として破棄する。
+                        if let key = assignmentKey(in: line) { lastAssignmentExcluded[key] = true }
                         index += 1
                     }
                     continue
                 }
             }
-            if let entry = parseLine(line) { entries.append(entry) }
+            consume(line)
             index += 1
         }
-        return entries
+        // 同名キーは後勝ちで 1 件に畳む（シェル / dotenv と同じ実効値。表示位置は初出を保つ）。
+        // 重複のまま渡すと作成専用書込みで先勝ち保存 + 2 件目が「既存のためスキップ」になり、
+        // さらに実効値の export 行まで .zshrc から消えてしまう（PR #218 レビュー / #215）。
+        var indexByKey: [String: Int] = [:]
+        var deduped: [EnvEntry] = []
+        for entry in entries where lastAssignmentExcluded[entry.key] != true {
+            if let i = indexByKey[entry.key] {
+                deduped[i] = entry
+            } else {
+                indexByKey[entry.key] = deduped.count
+                deduped.append(entry)
+            }
+        }
+        return deduped
     }
 
     /// 値（`=` 以降、`export ` 除去後）が `"` / `'` で始まる場合、そのクォートと直後の
@@ -734,6 +766,17 @@ enum EnvParser {
     /// parseLine の `trimmingCharacters(in: .whitespaces)` と同じ文字集合で判定する。
     private static func isHorizontalWhitespace(_ ch: Character) -> Bool {
         ch.unicodeScalars.allSatisfy { CharacterSet.whitespaces.contains($0) }
+    }
+
+    /// 代入行（`[export ]KEY=...`）のキー名を返す。値の採否は問わない（後勝ちの判定用 / #215）。
+    /// 前処理は parseLine と同じ。キー名が無効な行・コメント・空行は nil（取り込み候補外）。
+    private static func assignmentKey(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return nil }
+        let body = trimmed.hasPrefix("export ") ? String(trimmed.dropFirst(7)) : trimmed
+        guard let eqIndex = body.firstIndex(of: "=") else { return nil }
+        let key = String(body[..<eqIndex]).trimmingCharacters(in: .whitespaces)
+        return EnvVarName.isValid(key) ? key : nil
     }
 
     private static func parseLine(_ line: String) -> EnvEntry? {
