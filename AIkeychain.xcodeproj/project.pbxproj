@@ -24,6 +24,7 @@
 		30C8DB25105498065C1AF8F5 /* ViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69D54AA42B1FDEBB2AD036B /* ViewModelTests.swift */; };
 		329AFAC717680A8389A1B15A /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32265D7FB6EBE3FCEF791DDB /* StatusBadge.swift */; };
 		3A56CD00EE4C3F00A9F4D0AD /* KeyShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4FD4DB8058AD798CC211E6 /* KeyShareService.swift */; };
+		3A98643F50B25214C4580216 /* KeyBatchWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93046E516919F90083148E52 /* KeyBatchWriterTests.swift */; };
 		4013BBEA241CC555169FCF65 /* SecretRefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EDF5F4F543FDCFEAE87669B /* SecretRefTests.swift */; };
 		434F7D7FEE37A6CDED3AD084 /* ProxyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB424D42EDE63D9E03A86DD /* ProxyTests.swift */; };
 		47D0324B8366C625BD452CE3 /* ServiceIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0896F50DD989F27221B31944 /* ServiceIcon.swift */; };
@@ -61,6 +62,7 @@
 		E805C8A422ADCA7B2042DE29 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BBC08B62D864042131E96C /* AppState.swift */; };
 		E963094220E71C64DEA96121 /* FingerprintTOFUStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D8C7190C24537528AD2B987 /* FingerprintTOFUStore.swift */; };
 		F0BB7FFD1936E579F9D65861 /* SecurityCLIKeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6B529E3962BE2F851B2297B /* SecurityCLIKeychainServiceTests.swift */; };
+		F0CAB70B0B76F29677518823 /* KeyBatchWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5E000023D1750897E50293 /* KeyBatchWriter.swift */; };
 		F1F638CD03451687D1B92598 /* UpgradeTourView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 523C0657000343A2582C98A4 /* UpgradeTourView.swift */; };
 		F1FCE802F6B8CD69C82050FD /* CategoryIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5564B99419540E50E1276D79 /* CategoryIcon.swift */; };
 		F600C34E56EF17E276B8E5B8 /* SecurityCLIKeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956D2DFA56DC4FD7D699EC36 /* SecurityCLIKeychainService.swift */; };
@@ -122,6 +124,7 @@
 		86254B995FB20769DA53656A /* KeyListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyListViewModel.swift; sourceTree = "<group>"; };
 		8BAA59605A0988605BDA9071 /* APIKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKey.swift; sourceTree = "<group>"; };
 		92065103580C94C2BB99FB48 /* CustomKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomKeyStore.swift; sourceTree = "<group>"; };
+		93046E516919F90083148E52 /* KeyBatchWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyBatchWriterTests.swift; sourceTree = "<group>"; };
 		9337A8498BD6DA1B0AE6343C /* LegacyKeyScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyKeyScannerTests.swift; sourceTree = "<group>"; };
 		956D2DFA56DC4FD7D699EC36 /* SecurityCLIKeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityCLIKeychainService.swift; sourceTree = "<group>"; };
 		99B69E8B22FA2C8C00A6DF9A /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
@@ -143,6 +146,7 @@
 		FCD863D9D3D25902544E5FFC /* ShareKeysView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareKeysView.swift; sourceTree = "<group>"; };
 		FE1D9FC4A50AB922B9C1FD1A /* LegacyKeyScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyKeyScanner.swift; sourceTree = "<group>"; };
 		FE82389E8C1EDD586872750A /* IconPickerGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconPickerGrid.swift; sourceTree = "<group>"; };
+		FF5E000023D1750897E50293 /* KeyBatchWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyBatchWriter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -164,6 +168,7 @@
 		15C40E7A44262E24943115F6 /* AIkeychainTests */ = {
 			isa = PBXGroup;
 			children = (
+				93046E516919F90083148E52 /* KeyBatchWriterTests.swift */,
 				28DC4BEF20A119E940433F3A /* KeychainServiceTests.swift */,
 				0CE42D145C1D539331367E03 /* KeyShareHardeningTests.swift */,
 				E18270833BDFFEACBE8F6B44 /* KeyShareServiceTests.swift */,
@@ -330,6 +335,7 @@
 				28BBC08B62D864042131E96C /* AppState.swift */,
 				6D8C7190C24537528AD2B987 /* FingerprintTOFUStore.swift */,
 				442E3D918DD99B2AC191CC0B /* HTTPRequestParser.swift */,
+				FF5E000023D1750897E50293 /* KeyBatchWriter.swift */,
 				F1CFA57EED2AEC2489060E17 /* KeychainService.swift */,
 				2F4FD4DB8058AD798CC211E6 /* KeyShareService.swift */,
 				7DF81328B72F2A8A703BEFF2 /* L10n.swift */,
@@ -447,6 +453,7 @@
 				25101CE19322B14D1988F7ED /* HTTPRequestParser.swift in Sources */,
 				DB35D6EB592E09D00C582035 /* HelpView.swift in Sources */,
 				A333DEEBD8AD828CC031413A /* IconPickerGrid.swift in Sources */,
+				F0CAB70B0B76F29677518823 /* KeyBatchWriter.swift in Sources */,
 				C8354CC8F169967E2C4F8058 /* KeyCategory.swift in Sources */,
 				163DDFF8E8B54D9552084AC4 /* KeyEditorView.swift in Sources */,
 				057C67CA77C34F8753AC4E1B /* KeyEditorViewModel.swift in Sources */,
@@ -484,6 +491,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A98643F50B25214C4580216 /* KeyBatchWriterTests.swift in Sources */,
 				CD72365EE2B860B242D89708 /* KeyShareHardeningTests.swift in Sources */,
 				1991B82F1FDB41603BD80CEC /* KeyShareServiceTests.swift in Sources */,
 				A2F1064807E933FE345F8063 /* KeychainServiceTests.swift in Sources */,
