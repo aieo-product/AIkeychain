@@ -653,7 +653,9 @@ enum EnvParser {
         // .zshrc から実効行を含む export 行が消えるため、最後の代入が除外ならキーごと落とす。
         var lastAssignmentExcluded: [String: Bool] = [:]
         func consume(_ logical: String) {
-            let entry = parseLine(logical)
+            var entry = parseLine(logical)
+            // Secret Reference の参照行とアプリ管理の変数は取り込まない（除外 = 最後の代入判定に参加 / #219）
+            if let parsed = entry, isAppManaged(parsed) { entry = nil }
             if let entry { entries.append(entry) }
             if let key = assignmentKey(in: logical) { lastAssignmentExcluded[key] = (entry == nil) }
         }
@@ -766,6 +768,16 @@ enum EnvParser {
     /// parseLine の `trimmingCharacters(in: .whitespaces)` と同じ文字集合で判定する。
     private static func isHorizontalWhitespace(_ ch: Character) -> Bool {
         ch.unicodeScalars.allSatisfy { CharacterSet.whitespaces.contains($0) }
+    }
+
+    /// AI KeyChain 自身が .zshrc に書く行か（#219）。
+    /// - 値（クォート除去後）が `keychain://` で始まる: Secret Reference の参照（`ZshrcExporter`）。
+    ///   取り込むと既存の実シークレットを参照文字列で上書きし、参照行も .zshrc から消してしまう。
+    /// - キーが `AIKEYCHAIN_` で始まる: アプリ管理の変数（`AIKEYCHAIN_SESSION_TOKEN` 等 / `SetupManager`）。
+    /// 値の途中に `keychain://` を含むだけのものは対象外。
+    private static func isAppManaged(_ entry: EnvEntry) -> Bool {
+        entry.key.hasPrefix("AIKEYCHAIN_")
+            || entry.value.range(of: "keychain://", options: [.anchored, .caseInsensitive]) != nil
     }
 
     /// 代入行（`[export ]KEY=...`）のキー名を返す。値の採否は問わない（後勝ちの判定用 / #215）。

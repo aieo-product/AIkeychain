@@ -23,6 +23,7 @@
 		2B3A4963FF166104314944CF /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1CFA57EED2AEC2489060E17 /* KeychainService.swift */; };
 		30C8DB25105498065C1AF8F5 /* ViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69D54AA42B1FDEBB2AD036B /* ViewModelTests.swift */; };
 		329AFAC717680A8389A1B15A /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32265D7FB6EBE3FCEF791DDB /* StatusBadge.swift */; };
+		32CDC6CDB9FFCBDBB3DD7FDE /* EnvParserSecretRefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DFFA50D7956599C763030E /* EnvParserSecretRefTests.swift */; };
 		3A56CD00EE4C3F00A9F4D0AD /* KeyShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4FD4DB8058AD798CC211E6 /* KeyShareService.swift */; };
 		3A98643F50B25214C4580216 /* KeyBatchWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93046E516919F90083148E52 /* KeyBatchWriterTests.swift */; };
 		4013BBEA241CC555169FCF65 /* SecretRefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EDF5F4F543FDCFEAE87669B /* SecretRefTests.swift */; };
@@ -130,6 +131,7 @@
 		99B69E8B22FA2C8C00A6DF9A /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
 		9C17D41EA989227C3858DBEE /* AIkeychain.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIkeychain.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5AE0FFA12A5A654B81D2DBA /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		A8DFFA50D7956599C763030E /* EnvParserSecretRefTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvParserSecretRefTests.swift; sourceTree = "<group>"; };
 		AB1D3DCA2727A4F0E3B73623 /* AppAnimations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAnimations.swift; sourceTree = "<group>"; };
 		B34D69424777BDC24CCEE278 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		B71C2E4D1617957A56CFF459 /* KeyRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyRowView.swift; sourceTree = "<group>"; };
@@ -168,6 +170,7 @@
 		15C40E7A44262E24943115F6 /* AIkeychainTests */ = {
 			isa = PBXGroup;
 			children = (
+				A8DFFA50D7956599C763030E /* EnvParserSecretRefTests.swift */,
 				93046E516919F90083148E52 /* KeyBatchWriterTests.swift */,
 				28DC4BEF20A119E940433F3A /* KeychainServiceTests.swift */,
 				0CE42D145C1D539331367E03 /* KeyShareHardeningTests.swift */,
@@ -491,6 +494,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				32CDC6CDB9FFCBDBB3DD7FDE /* EnvParserSecretRefTests.swift in Sources */,
 				3A98643F50B25214C4580216 /* KeyBatchWriterTests.swift in Sources */,
 				CD72365EE2B860B242D89708 /* KeyShareHardeningTests.swift in Sources */,
 				1991B82F1FDB41603BD80CEC /* KeyShareServiceTests.swift in Sources */,
