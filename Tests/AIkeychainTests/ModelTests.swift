@@ -60,27 +60,23 @@ private final class ObservationFlag: @unchecked Sendable {
     var fired = false
 }
 
-@Suite("AppState keyManagementMode Observation Tests (#200)", .serialized)
-struct AppStateKeyManagementModeObservationTests {
+@Suite("AppState keyManagementMode Tests (#200)")
+struct AppStateKeyManagementModeTests {
+    private let modeKey = "key_management_mode"
+
+    /// 隔離した UserDefaults suite を注入した AppState（.standard / .shared には触れない）
+    private func isolatedState(seed raw: String? = nil) -> (AppState, UserDefaults, String) {
+        let suite = "test-appstate-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        if let raw { defaults.set(raw, forKey: modeKey) }
+        return (AppState(defaults: defaults), defaults, suite)
+    }
 
     @Test("Changing keyManagementMode notifies Observation and persists to UserDefaults")
     func keyManagementModeIsObservable() {
-        let state = AppState.shared
-        let defaults = UserDefaults.standard
-        let key = "key_management_mode"
-        // テスト後に元のモードと UserDefaults の生値（未設定なら削除）を復元する
-        let originalMode = state.keyManagementMode
-        let originalRaw = defaults.string(forKey: key)
-        defer {
-            state.keyManagementMode = originalMode
-            if let originalRaw {
-                defaults.set(originalRaw, forKey: key)
-            } else {
-                defaults.removeObject(forKey: key)
-            }
-        }
+        let (state, defaults, suite) = isolatedState()
+        defer { defaults.removePersistentDomain(forName: suite) }
 
-        let target: KeyManagementMode = originalMode == .proxy ? .standard : .proxy
         let flag = ObservationFlag()
         withObservationTracking {
             _ = state.keyManagementMode
@@ -88,11 +84,29 @@ struct AppStateKeyManagementModeObservationTests {
             flag.fired = true
         }
 
-        state.keyManagementMode = target
+        state.keyManagementMode = .proxy
 
         #expect(flag.fired, "keyManagementMode の変更が Observation に通知されない（SwiftUI が再描画されない）")
-        #expect(state.keyManagementMode == target)
-        #expect(defaults.string(forKey: key) == target.rawValue)
+        #expect(state.keyManagementMode == .proxy)
+        #expect(defaults.string(forKey: modeKey) == KeyManagementMode.proxy.rawValue)
+    }
+
+    @Test("A persisted mode is restored on init", arguments: [
+        KeyManagementMode.standard, .secretReference, .proxy,
+    ])
+    func restoresPersistedMode(_ mode: KeyManagementMode) {
+        let (state, defaults, suite) = isolatedState(seed: mode.rawValue)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(state.keyManagementMode == mode)
+    }
+
+    @Test("A missing or invalid persisted mode falls back to standard", arguments: [
+        nil, "", "bogus",
+    ] as [String?])
+    func fallsBackToStandard(_ raw: String?) {
+        let (state, defaults, suite) = isolatedState(seed: raw)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(state.keyManagementMode == .standard)
     }
 }
 
