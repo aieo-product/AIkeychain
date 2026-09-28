@@ -65,6 +65,7 @@
 		F1FCE802F6B8CD69C82050FD /* CategoryIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5564B99419540E50E1276D79 /* CategoryIcon.swift */; };
 		F600C34E56EF17E276B8E5B8 /* SecurityCLIKeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 956D2DFA56DC4FD7D699EC36 /* SecurityCLIKeychainService.swift */; };
 		F620D2BC08B405183D3732AB /* AppAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1D3DCA2727A4F0E3B73623 /* AppAnimations.swift */; };
+		F735EB7ACB74B545E23AD655 /* OnboardingViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D3FC54FEEEAAD28563EE99 /* OnboardingViewModelTests.swift */; };
 		F76438E441201123E08CCBA2 /* KeyListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2999D8FAA2B2AA1066D5B7 /* KeyListView.swift */; };
 /* End PBXBuildFile section */
 
@@ -114,6 +115,7 @@
 		6D8C7190C24537528AD2B987 /* FingerprintTOFUStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FingerprintTOFUStore.swift; sourceTree = "<group>"; };
 		725C9C438F482637B8B5A895 /* AIkeychainTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIkeychainTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		728E72380D1F60902EF105B2 /* ZshrcExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZshrcExporter.swift; sourceTree = "<group>"; };
+		73D3FC54FEEEAAD28563EE99 /* OnboardingViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViewModelTests.swift; sourceTree = "<group>"; };
 		76FF79BB82A54008BE24C981 /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
 		77DAFD5CC9DA2B47003B7C1F /* EnvImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvImportView.swift; sourceTree = "<group>"; };
 		7DF81328B72F2A8A703BEFF2 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
@@ -167,6 +169,7 @@
 				E18270833BDFFEACBE8F6B44 /* KeyShareServiceTests.swift */,
 				9337A8498BD6DA1B0AE6343C /* LegacyKeyScannerTests.swift */,
 				0F4D6C9DC84B322FB385ACE3 /* ModelTests.swift */,
+				73D3FC54FEEEAAD28563EE99 /* OnboardingViewModelTests.swift */,
 				BBB424D42EDE63D9E03A86DD /* ProxyTests.swift */,
 				1EDF5F4F543FDCFEAE87669B /* SecretRefTests.swift */,
 				D6B529E3962BE2F851B2297B /* SecurityCLIKeychainServiceTests.swift */,
@@ -486,6 +489,7 @@
 				A2F1064807E933FE345F8063 /* KeychainServiceTests.swift in Sources */,
 				1D01789D63D03F256B16DD7A /* LegacyKeyScannerTests.swift in Sources */,
 				CC6B7823B5DCA500A9A20A4D /* ModelTests.swift in Sources */,
+				F735EB7ACB74B545E23AD655 /* OnboardingViewModelTests.swift in Sources */,
 				434F7D7FEE37A6CDED3AD084 /* ProxyTests.swift in Sources */,
 				4013BBEA241CC555169FCF65 /* SecretRefTests.swift in Sources */,
 				F0BB7FFD1936E579F9D65861 /* SecurityCLIKeychainServiceTests.swift in Sources */,
