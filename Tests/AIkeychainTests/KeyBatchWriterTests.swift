@@ -90,6 +90,26 @@ struct KeyBatchWriterTests {
         #expect(multi.first?.value == "line1\nline2")
     }
 
+    @Test("EnvParser: boundary cases of the last-assignment rule (#215, Fable audit)")
+    func parserLastAssignmentBoundaries() {
+        // 3) システム変数も後勝ち判定に入るが結果は空。非代入行（コメント・値なし export・無効キー）は判定に影響しない
+        #expect(EnvParser.parse("PATH=a\nPATH=\n").isEmpty)
+        let nonAssign = EnvParser.parse("K=v\n# K=\nexport K\n1K=\n")
+        #expect(nonAssign.map(\.key) == ["K"])
+        #expect(nonAssign.first?.value == "v")
+        // 4) 閉じクォート後の不正な trailer で破棄された最後の代入
+        #expect(EnvParser.parse("K=new\nK=\"a\nb\" junk\n").isEmpty)
+        // 5) `K = ` のキー前後空白も同じキーへの代入
+        #expect(EnvParser.parse("export K=old\nK = \n").isEmpty)
+        // 6) 未終端クォートの本文行から記録された偽キーは他のキーを汚さない。
+        // 本文行 `MIIEvQ==` 自体の除外は #208（PR #211）の `=` パディング判定の担当なので、
+        // ここでは #208 の有無に依存しない不変条件（PK は落ち、NEXT は値ごと残る）を固定する。
+        // #211 マージ後は keys == ["NEXT"] になる。
+        let pem = EnvParser.parse("PK=\"-----BEGIN\nMIIEvQ==\nNEXT=ok\n")
+        #expect(!pem.contains { $0.key == "PK" })
+        #expect(pem.filter { $0.key == "NEXT" }.map(\.value) == ["ok"])
+    }
+
     @Test("Import: a parsed .env never puts one account in both saved and skippedExisting (#215)")
     func importDuplicateKeyNotBothSavedAndSkipped() {
         let blind = BlindExistsKeychainService()
