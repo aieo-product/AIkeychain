@@ -116,6 +116,20 @@ final class CustomKeyStore {
         saveKeys()
     }
 
+    /// キーの Keychain 値を削除した**後**に呼び、そのキーに紐づくメタデータを掃除する（#202 / #210）。
+    /// - `envVarName` のカテゴリ/アイコン上書きを削除（同名再登録で古い上書きが復活しないように）
+    /// - ユーザー定義のカスタムキーは、`keys` に同じ id が存在する場合のみ定義を削除する。
+    ///   プリセット（customKey なし）と CLI 発見キー（store に無い合成キー）では定義を操作しない。
+    /// Keychain 削除が失敗した場合は呼ばないこと（値だけ残って定義・上書きが消える不整合を作らない）。
+    func removeMetadata(for key: APIKey) {
+        setCategoryOverride(envVarName: key.envVarName, value: nil)
+        setIconOverride(envVarName: key.envVarName, icon: nil)
+        if let customKey = key.customKey,
+           keys.contains(where: { $0.id == customKey.id }) {
+            deleteKey(customKey.id)
+        }
+    }
+
     // MARK: - Category Overrides (for preset keys)
 
     /// プリセットキーのカテゴリを上書き
