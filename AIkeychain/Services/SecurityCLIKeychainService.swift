@@ -36,8 +36,10 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     static let securityLineMax = 4094
 
     /// 書き込みコマンドの prefix（66 文字 + キー名）。maxValueLength と save() で共有し、ずれを防ぐ。
-    static func writeCommandPrefix(forAccount account: String) -> String {
-        "add-generic-password -U -s \"\(managedService)\" -a \"\(account)\" -X "
+    /// `update == false`（新規作成専用 / #209）では `-U` を付けず、既存アイテムがあれば security が
+    /// errSecDuplicateItem（exit 45）で失敗する。上限計算は長い方（-U 付き）で保守的に行う。
+    static func writeCommandPrefix(forAccount account: String, update: Bool = true) -> String {
+        "add-generic-password \(update ? "-U " : "")-s \"\(managedService)\" -a \"\(account)\" -X "
     }
 
     /// 保存できる値の最大長（文字数）= (4094 − 66 − キー名長) / 2 ≒ 2000。
@@ -82,6 +84,17 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
     // MARK: - KeychainServiceProtocol
 
     func save(value: String, for account: String) throws {
+        try write(value: value, for: account, update: true)
+    }
+
+    /// 新規作成専用（#209）: `-U` なしで書き込み、既存アイテムがあれば上書きせず
+    /// `KeychainError.duplicateItem` を throw する。exists() の事前照会（失敗時 false = fail-open）
+    /// に依存せず、security 自身の重複検出で原子的に拒否する。
+    func create(value: String, for account: String) throws {
+        try write(value: value, for: account, update: false)
+    }
+
+    private func write(value: String, for account: String, update: Bool) throws {
         // 純粋な入力検証はロック判定より先に行う: 外部状態（ロック）で不正入力の
         // エラー種別が interactionRequired に化けると、呼び出し側の
         // unsupported/failed 分類が解錠の前後で変わってしまう（#183 レビュー SF-2）
@@ -106,9 +119,13 @@ final class SecurityCLIKeychainService: KeychainServiceProtocol {
 
         let hex = value.data(using: .utf8)!.map { String(format: "%02x", $0) }.joined()
         // -U: 既存アイテムの更新。security 所有アイテムへの -U は所有権・headless
-        // 読み取りを保つことを実測済み（#168 S7'）。
-        let command = Self.writeCommandPrefix(forAccount: account) + hex + "\n"
+        // 読み取りを保つことを実測済み（#168 S7'）。create は -U なし（作成専用）。
+        let command = Self.writeCommandPrefix(forAccount: account, update: update) + hex + "\n"
         let result = runSecurity(arguments: ["-i"], stdin: command, timeout: writeTimeout)
+        // -U なしで既存アイテムがあると "returned -25299"（errSecDuplicateItem）/ exit 45（実測）
+        if !update, case .exited(45, _, _) = result {
+            throw KeychainError.duplicateItem
+        }
         guard case .exited(let status, _, let stderr) = result, status == 0 else {
             throw KeychainError.unexpectedStatus(errSecIO).annotated(redact(resultDescription(result, stderr: true)))
         }

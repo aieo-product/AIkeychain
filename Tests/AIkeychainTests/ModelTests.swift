@@ -519,6 +519,135 @@ struct KeyEditorViewModelTests {
         listVM.loadKeys()
         #expect(!listVM.keys.contains { $0.envVarName == name })
     }
+
+    // MARK: - 新規追加時の同名拒否 (#209)
+
+    @Test("Adding a new key whose name already has a keychain value is rejected and the value is unchanged (#209)")
+    func addDuplicateExistingValueRejected() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let name = "DUP_VAL_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        try mock.save(value: "original", for: name) // 例: CLI「コマンド追加」済みのキー
+
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = name
+        vm.tokenValue = "overwritten"
+        #expect(throws: KeychainError.self) { try vm.save() }
+
+        // 無言上書きされない・定義も作られない・既存行からの編集を案内する
+        #expect(mock.store[name] == "original")
+        #expect(!store.keys.contains { $0.envVarName == name })
+        #expect(vm.errorMessage != nil)
+        #expect(vm.errorMessage != KeychainError.duplicateItem.localizedDescription)
+        #expect(vm.isSaving == false)
+        #expect(vm.showSaveSuccess == false)
+    }
+
+    @Test("Adding a new key with the same name as an existing custom definition does not duplicate it (#209)")
+    func addDuplicateCustomDefinitionRejected() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let name = "DUP_DEF_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let existing = CustomKey(envVarName: name, displayName: name,
+                                 categoryId: KeyCategory.ai.stableId)
+        store.addKey(existing) // 定義のみ（値なし = 未設定行）
+
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = name
+        vm.tokenValue = "secret"
+        #expect(throws: KeychainError.self) { try vm.save() }
+
+        #expect(store.keys.filter { $0.envVarName == name } == [existing])
+        #expect(CustomKeyStore(defaults: defaults).keys.filter { $0.envVarName == name }.count == 1)
+        #expect(mock.store[name] == nil) // Keychain にも書かない
+        #expect(vm.errorMessage != nil)
+    }
+
+    @Test("New-key save is rejected atomically even when exists() misses the item (fail-open pre-check, #209)")
+    func addDuplicateRejectedWhenExistsFailsOpen() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // SecItemCopyMatching の失敗等で exists() が false を返しても、作成専用の書き込みで拒否する
+        let blind = BlindExistsKeychainService()
+        let name = "DUP_BLIND_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        blind.store[name] = "original"
+
+        let vm = KeyEditorViewModel(keychainService: blind, customStore: store)
+        vm.selectedCategorySelection = .builtin(.devTools)
+        vm.envVarName = name
+        vm.tokenValue = "overwritten"
+        #expect { try vm.save() } throws: { error in
+            if case KeychainError.duplicateItem = error { return true } else { return false }
+        }
+
+        #expect(blind.store[name] == "original")
+        #expect(!store.keys.contains { $0.envVarName == name })
+        #expect(vm.errorMessage?.contains(name) == true) // 汎用文言ではなく既存行からの編集を案内
+        #expect(vm.errorMessage != KeychainError.duplicateItem.localizedDescription)
+        #expect(vm.isSaving == false)
+        #expect(vm.showSaveSuccess == false)
+    }
+
+    @Test("Adding an unconfigured preset name as a new key still saves (#209)")
+    func addUnconfiguredPresetAllowed() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let vm = KeyEditorViewModel(keychainService: mock, customStore: store)
+        vm.selectedCategorySelection = .builtin(.codeAndGit)
+        vm.envVarName = "GITHUB_TOKEN"
+        vm.tokenValue = "ghp_new"
+        try vm.save()
+
+        #expect(mock.store["GITHUB_TOKEN"] == "ghp_new")
+        #expect(vm.errorMessage == nil)
+        #expect(vm.showSaveSuccess == true)
+    }
+
+    @Test("Editing an existing key still overwrites its value (#209 does not affect editing)")
+    func editExistingKeyUnaffected() throws {
+        let (store, defaults, suite) = isolatedStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let mock = MockKeychainService()
+        let name = "EDIT_OK_" + UUID().uuidString.replacingOccurrences(of: "-", with: "_")
+        let custom = CustomKey(envVarName: name, displayName: name,
+                               categoryId: KeyCategory.devTools.stableId)
+        store.addKey(custom)
+        try mock.save(value: "v1", for: name)
+
+        let key = APIKey(customKey: custom, isConfigured: true)
+        let vm = KeyEditorViewModel(editingKey: key, keychainService: mock, customStore: store)
+        vm.tokenValue = "v2"
+        try vm.save()
+
+        #expect(mock.store[name] == "v2")
+        #expect(store.keys.filter { $0.envVarName == name }.count == 1)
+        #expect(vm.errorMessage == nil)
+    }
+}
+
+/// `exists()` が常に false（fail-open）だが、作成専用書き込みは既存を拒否するテストダブル（#209）。
+final class BlindExistsKeychainService: KeychainServiceProtocol {
+    var store: [String: String] = [:]
+    func save(value: String, for account: String) throws { store[account] = value }
+    func create(value: String, for account: String) throws {
+        guard store[account] == nil else { throw KeychainError.duplicateItem }
+        store[account] = value
+    }
+    func retrieve(for account: String) throws -> String? { store[account] }
+    func retrieveNoninteractive(for account: String) throws -> String? { store[account] }
+    func delete(for account: String) throws { store.removeValue(forKey: account) }
+    func exists(for account: String) -> Bool { false }
+    func allAccounts() -> [String] { Array(store.keys) }
 }
 
 /// `delete` だけ失敗させるテストダブル（Keychain 削除失敗時の定義保持を検証 / #202）。
