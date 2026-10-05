@@ -545,6 +545,9 @@ private struct ReceiveTab: View {
     @State private var failedCount = 0
     /// 上書き未承諾で既存と同名だったため書き込まなかったキー（既存値は保護 / #215）。
     @State private var skippedExisting: [String] = []
+    /// AI KeyChain 自身が管理する値（`keychain://` 参照・`<VALUE>` テンプレート・`AIKEYCHAIN_` 変数）
+    /// のため取り込まないキー。復号時に確定しプレビューと結果に表示する（#219）。
+    @State private var appManagedSkipped: [String] = []
     @State private var errorMessage: String?
     // 復号時に envVarName で重複排除（先勝ち）した表示用エントリ（finding 10）と、
     // その時点で一度だけ Keychain を引いて数えた上書き件数（finding 11）。
@@ -820,6 +823,10 @@ private struct ReceiveTab: View {
                 }
             }
 
+            if !appManagedSkipped.isEmpty {
+                appManagedNote
+            }
+
             if overwriteCount > 0 {
                 Toggle(isOn: $overwriteConfirmed) {
                     Text(L10n.s(ja: "既存の \(overwriteCount) 件を上書きします", en: "Overwrite \(overwriteCount) existing key(s)"))
@@ -852,6 +859,17 @@ private struct ReceiveTab: View {
         )
     }
 
+    /// アプリ管理の値のためスキップするキーの案内（プレビュー / 結果で共用 / #219）。
+    private var appManagedNote: some View {
+        Label(L10n.s(
+            ja: "\(appManagedSkipped.count) 件はアプリ管理の値（keychain:// 参照・<VALUE> テンプレート・AIKEYCHAIN_ 変数）のためスキップします: \(appManagedSkipped.joined(separator: ", "))",
+            en: "\(appManagedSkipped.count) key(s) skipped because they are app-managed values (keychain:// references, <VALUE> templates, AIKEYCHAIN_ variables): \(appManagedSkipped.joined(separator: ", "))"),
+              systemImage: "lock.shield")
+            .font(.system(size: 11))
+            .foregroundStyle(.orange)
+            .multilineTextAlignment(.center)
+    }
+
     // MARK: Complete
 
     private var completeView: some View {
@@ -875,6 +893,9 @@ private struct ReceiveTab: View {
                     .foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
+            }
+            if !appManagedSkipped.isEmpty {
+                appManagedNote
             }
             if !skippedExisting.isEmpty {
                 Label(L10n.s(
@@ -912,6 +933,7 @@ private struct ReceiveTab: View {
         share = nil
         entries = []
         overwriteNames = []
+        appManagedSkipped = []
         revealed = []
         fingerprintConfirmed = false
         unsignedAck = false
@@ -932,10 +954,16 @@ private struct ReceiveTab: View {
                 // 後勝ちで意図せぬ値を保存する事故を防ぐ（finding 10）。
                 var seen = Set<String>()
                 let deduped = decrypted.entries.filter { seen.insert($0.envVarName).inserted }
+                // アプリ管理の値（参照・テンプレート・AIKEYCHAIN_）は候補から外す。取り込むと
+                // 実シークレットを参照文字列で上書きし得る（#219）。
+                let partition = KeyBatchWriter.partitionAppManaged(
+                    deduped.map { KeyBatchWriter.Entry(account: $0.envVarName, value: $0.value) })
+                let candidates = partition.writable.map { (envVarName: $0.account, value: $0.value) }
                 // 上書き対象は decrypt 時に一度だけ Keychain を引いて確定（毎描画で
                 // 引かない / finding 11）。
-                let owNames = Set(deduped.map(\.envVarName).filter { SecurityCLIKeychainService.shared.exists(for: $0) })
-                entries = deduped
+                let owNames = Set(candidates.map(\.envVarName).filter { SecurityCLIKeychainService.shared.exists(for: $0) })
+                entries = candidates
+                appManagedSkipped = partition.appManaged
                 overwriteNames = owNames
                 share = decrypted
                 // TOFU 分類 & 鮮度（#126）を復号時に一度だけ算出。
@@ -963,12 +991,16 @@ private struct ReceiveTab: View {
         // シェル export に不正な名前はスキップする（SecurityCLIKeychainService.save 側でも
         // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
         let valid = entries.filter { EnvVarName.isValid($0.envVarName) }
+        // アプリ管理の値は書き込まない（復号時に除外済みだが、書込み直前にも防御的に適用 / #219）。
+        let partition = KeyBatchWriter.partitionAppManaged(
+            valid.map { KeyBatchWriter.Entry(account: $0.envVarName, value: $0.value) })
+        appManagedSkipped += partition.appManaged.filter { !appManagedSkipped.contains($0) }
         // 「上書き」と提示し承諾を得た overwriteNames だけ -U で上書きし、それ以外は作成専用で
         // 書く（exists() の fail-open で既存値を無確認上書きしない / #215）。
         // 値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超）とその他の失敗（keychain ロック等）
         // は理由別に別集計する（#179 二段レビュー N1/D-Q1・codex 指摘）。
         let written = KeyBatchWriter.write(
-            valid.map { KeyBatchWriter.Entry(account: $0.envVarName, value: $0.value) },
+            partition.writable,
             overwriting: overwriteConfirmed ? overwriteNames : [],
             keychain: SecurityCLIKeychainService.shared)
         importCount = written.saved.count

@@ -149,6 +149,20 @@ struct KeyBatchWriterTests {
         #expect(result.failed.isEmpty)
     }
 
+    @Test("Share: app-managed values are filtered out before writing (#219)")
+    func shareFiltersAppManaged() {
+        let entries: [KeyBatchWriter.Entry] = [
+            .init(account: "OPENAI_API_KEY", value: "keychain://OPENAI_API_KEY"),
+            .init(account: "GITHUB_TOKEN", value: "<VALUE>"),
+            .init(account: "AIKEYCHAIN_SESSION_TOKEN", value: "abc"),
+            .init(account: "ANTHROPIC_API_KEY", value: "sk-ant-real"),
+            .init(account: "NOTE", value: "my keychain://notes"),
+        ]
+        let (writable, appManaged) = KeyBatchWriter.partitionAppManaged(entries)
+        #expect(writable.map(\.account) == ["ANTHROPIC_API_KEY", "NOTE"])
+        #expect(appManaged == ["OPENAI_API_KEY", "GITHUB_TOKEN", "AIKEYCHAIN_SESSION_TOKEN"])
+    }
+
     @Test("Unsupported value and other errors keep their own tallies (#215 regression)")
     func errorTalliesUnchanged() {
         let keychain = ThrowingWriteKeychainService()

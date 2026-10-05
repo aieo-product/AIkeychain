@@ -653,7 +653,11 @@ enum EnvParser {
         // .zshrc から実効行を含む export 行が消えるため、最後の代入が除外ならキーごと落とす。
         var lastAssignmentExcluded: [String: Bool] = [:]
         func consume(_ logical: String) {
-            let entry = parseLine(logical)
+            var entry = parseLine(logical)
+            // Secret Reference の参照行とアプリ管理の変数は取り込まない（除外 = 最後の代入判定に参加 / #219）
+            // 生の論理行で判定する: `K="keychain://K" # c` のように閉じクォート後にコメントが続くと
+            // parseLine はクォートを剥がせず値が `"` で始まるため、entry の値では判定できない。
+            if entry != nil, isAppManagedLine(logical) { entry = nil }
             if let entry { entries.append(entry) }
             if let key = assignmentKey(in: logical) { lastAssignmentExcluded[key] = (entry == nil) }
         }
@@ -766,6 +770,65 @@ enum EnvParser {
     /// parseLine の `trimmingCharacters(in: .whitespaces)` と同じ文字集合で判定する。
     private static func isHorizontalWhitespace(_ ch: Character) -> Bool {
         ch.unicodeScalars.allSatisfy { CharacterSet.whitespaces.contains($0) }
+    }
+
+    /// AI KeyChain 自身が .zshrc に書く行か（#219）。
+    /// - 値（クォート除去後）が `keychain://` で始まる: Secret Reference の参照（`ZshrcExporter`）。
+    ///   取り込むと既存の実シークレットを参照文字列で上書きし、参照行も .zshrc から消してしまう。
+    /// - キーが `AIKEYCHAIN_` で始まる: アプリ管理の変数（`AIKEYCHAIN_SESSION_TOKEN` 等 / `SetupManager`）。
+    /// - 値が `<VALUE>` 形式のテンプレート（`ZshrcExporter` の .env 出力）: 実値ではない。
+    /// 値の途中に `keychain://` を含むだけのもの・小文字の `<value>` は対象外。
+    /// 共有受信（`KeyBatchWriter.partitionAppManaged`）でも同じ述語を使う。
+    static func isAppManaged(key: String, value: String) -> Bool {
+        key.hasPrefix("AIKEYCHAIN_")
+            || value.range(of: "keychain://", options: [.anchored, .caseInsensitive]) != nil
+            || value.range(of: #"^<[A-Z][A-Z0-9_ ]*>$"#, options: .regularExpression) != nil
+    }
+
+    /// 論理行（`[export ]KEY=VALUE`）に isAppManaged を適用する（判定専用。保存値には使わない）。
+    /// 値はクォート対応で取り出す（effectiveValue）。クォートで始まるのに正しく閉じない／
+    /// 閉じた後に不正な文字列が続く値は、開きクォートの直後から判定する（fail-closed:
+    /// `K="keychain://K" junk` も除外）。
+    private static func isAppManagedLine(_ line: String) -> Bool {
+        guard let key = assignmentKey(in: line) else { return false }
+        if let value = effectiveValue(in: line) {
+            return isAppManaged(key: key, value: value)
+        }
+        guard let raw = rawValue(in: line), let quote = raw.first, quote == "\"" || quote == "'" else {
+            return key.hasPrefix("AIKEYCHAIN_")
+        }
+        return isAppManaged(key: key, value: String(raw.dropFirst()))
+    }
+
+    /// `=` 以降の値（前方空白除去）。前処理は openingQuote と同じ。
+    private static func rawValue(in line: String) -> Substring? {
+        let working = line.drop(while: isHorizontalWhitespace)
+        let body = working.hasPrefix("export ") ? working.dropFirst(7) : working
+        guard let eqIndex = body.firstIndex(of: "=") else { return nil }
+        return body[body.index(after: eqIndex)...].drop(while: isHorizontalWhitespace)
+    }
+
+    /// 判定用の実効値。クォート始まりなら閉じクォートまでの本文（後続は空白/コメントのみ許可）、
+    /// 閉じない・後続が不正なら nil。クォート無しなら空白に続く `#` 以降のコメントと末尾空白を落とす。
+    private static func effectiveValue(in line: String) -> String? {
+        guard let value = rawValue(in: line) else { return nil }
+        if let quote = value.first, quote == "\"" || quote == "'" {
+            let inner = value.dropFirst()
+            var escaped = false
+            guard let close = scanClosingQuote(in: inner, quote: quote, escaped: &escaped),
+                  isValidTrailer(inner[inner.index(after: close)...]) else { return nil }
+            return String(inner[..<close])
+        }
+        var end = value.endIndex
+        var i = value.startIndex
+        while i < value.endIndex {
+            if value[i] == "#", i > value.startIndex, isHorizontalWhitespace(value[value.index(before: i)]) {
+                end = i
+                break
+            }
+            i = value.index(after: i)
+        }
+        return String(String(value[..<end]).reversed().drop(while: isHorizontalWhitespace).reversed())
     }
 
     /// 代入行（`[export ]KEY=...`）のキー名を返す。値の採否は問わない（後勝ちの判定用 / #215）。
