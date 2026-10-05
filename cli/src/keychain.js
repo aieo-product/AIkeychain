@@ -42,6 +42,51 @@ export const MANAGED_SERVICE = 'com.aieo.aikeychain.managed';
 
 export class KeychainError extends Error {}
 
+/**
+ * The Keychain search itself could not be performed — distinct from "the key
+ * does not exist". Seen when `security` runs in a process that cannot reach the
+ * login keychain (measured: a sandboxed agent shell such as Codex
+ * `workspace-write`), where `security` still exits 44 but stderr carries an
+ * earlier `SecKeychainSearchCreateFromAttributes: … not valid` error. The key
+ * may well exist, so callers must fail closed and must not report "not found".
+ */
+export class KeychainAccessError extends KeychainError {
+  constructor(message) {
+    super(message);
+    this.code = 'KEYCHAIN_UNAVAILABLE';
+  }
+}
+
+// The one stderr line a genuine miss produces:
+//   security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.
+const NOT_FOUND_LINE = /The specified item could not be found in the keychain\.?$/;
+
+/**
+ * Classify a `security` exit 44. It is a real "not found" only when every
+ * stderr line is the not-found line (or stderr is empty). Any other line means
+ * the search failed before it could look — we cannot tell whether the key
+ * exists, so this is NOT a not-found. Exported for tests.
+ */
+export function classifyExit44(stderr) {
+  const other = String(stderr ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !NOT_FOUND_LINE.test(l));
+  return other.length === 0 ? { notFound: true } : { notFound: false, detail: other[0] };
+}
+
+function accessError(what, detail) {
+  return new KeychainAccessError(
+    `${what}: the Keychain search itself failed (security: ${redactSecrets(detail)}). ` +
+      'This is NOT a "key not found" — this process cannot reach the login keychain ' +
+      '(e.g. a sandboxed agent shell or a non-GUI session); the key may still exist. ' +
+      'Re-run the command outside the sandbox through your agent\'s explicit approval ' +
+      'mechanism. MCP tools run in the MCP server\'s own process, so they may still work ' +
+      'depending on how that server was launched — but MCP registration alone does not ' +
+      'inject secrets into other commands; keychain:// references still need `akc run`.'
+  );
+}
+
 export function assertMacOS() {
   if (process.platform !== 'darwin') {
     throw new KeychainError(
@@ -106,7 +151,11 @@ export async function resolveKey(name) {
     const value = stripTrailingNewline(r.stdout);
     return value || null;
   }
-  if (r.code === 44) return null;
+  if (r.code === 44) {
+    const c = classifyExit44(r.stderr);
+    if (c.notFound) return null;
+    throw accessError(`reading "${name}" could not be performed`, c.detail);
+  }
   if (r.timedOut) {
     throw new KeychainError(
       `reading "${name}" timed out — the keychain is likely locked or unavailable. ` +
@@ -126,7 +175,11 @@ export async function resolveKey(name) {
 export async function keyExists(name) {
   const r = await security(['find-generic-password', '-s', MANAGED_SERVICE, '-a', name]);
   if (r.ok) return { name, exists: true };
-  if (r.code === 44) return { name, exists: false };
+  if (r.code === 44) {
+    const c = classifyExit44(r.stderr);
+    if (c.notFound) return { name, exists: false };
+    throw accessError(`checking "${name}" could not be performed`, c.detail);
+  }
   throw new KeychainError(
     `keychain probe failed (exit ${r.code}): ${r.stderr.trim() || 'unknown error'}`
   );
@@ -262,10 +315,39 @@ export async function setKey(name, value) {
 export async function deleteKey(name) {
   const r = await security(['delete-generic-password', '-s', MANAGED_SERVICE, '-a', name]);
   if (r.ok) return true;
-  if (r.code === 44) return false;
+  if (r.code === 44) {
+    const c = classifyExit44(r.stderr);
+    if (c.notFound) return false;
+    throw accessError(`deleting "${name}" could not be performed`, c.detail);
+  }
   throw new KeychainError(
     `failed to delete "${name}" (exit ${r.code}): ${r.stderr.trim() || 'unknown error'}`
   );
+}
+
+// An account name that is never registered (KEY_NAME_PATTERN allows it, but
+// nothing creates it). Looking it up must yield a clean exit 44.
+export const ACCESS_PROBE_ACCOUNT = '__aikeychain_access_probe__';
+
+/**
+ * Verify that this process can search the keychain at all, without reading any
+ * value: a metadata lookup of an unregistered account must end in a clean
+ * exit 44. Throws KeychainAccessError when the search itself fails.
+ */
+export async function probeKeychainAccess() {
+  const r = await security(['find-generic-password', '-s', MANAGED_SERVICE, '-a', ACCESS_PROBE_ACCOUNT]);
+  if (r.ok) return; // someone created it; the search still worked
+  if (r.code === 44) {
+    const c = classifyExit44(r.stderr);
+    if (c.notFound) return;
+    throw accessError('keychain access check failed', c.detail);
+  }
+  if (r.timedOut) {
+    throw new KeychainAccessError(
+      'keychain access check timed out — the keychain is likely locked or unavailable. Unlock the login keychain and retry.'
+    );
+  }
+  throw new KeychainError(`keychain access check failed (exit ${r.code}): ${r.stderr.trim() || 'unknown error'}`);
 }
 
 /** Parse `security dump-keychain` output into { service, account } records. */
@@ -285,12 +367,8 @@ export function parseDump(dump) {
  * Returns [{ name }] sorted by name.
  */
 export async function listKeys() {
-  const r = await security(['dump-keychain']);
-  if (!r.ok) {
-    throw new KeychainError(`failed to enumerate keychain items: ${r.stderr.trim()}`);
-  }
   const names = new Set();
-  for (const { service, account } of parseDump(r.stdout)) {
+  for (const { service, account } of await dumpRecords()) {
     if (service === MANAGED_SERVICE && account) names.add(account);
   }
   return [...names]
@@ -304,7 +382,11 @@ export async function dumpRecords() {
   if (!r.ok) {
     throw new KeychainError(`failed to enumerate keychain items: ${r.stderr.trim()}`);
   }
-  return parseDump(r.stdout);
+  const records = parseDump(r.stdout);
+  // An empty or managed-less dump is ambiguous: a restricted process can get a
+  // successful but empty dump. Confirm the search works before reporting "none".
+  if (!records.some((rec) => rec.service === MANAGED_SERVICE)) await probeKeychainAccess();
+  return records;
 }
 
 // 固定長マスク。桁数（value.length）は出さない: 正確な長さは総当たりコストを

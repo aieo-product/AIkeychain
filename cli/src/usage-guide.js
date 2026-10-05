@@ -43,6 +43,17 @@ prompts, no hangs, ever. (v2.0 dropped the old v1.x GUI store / manual scheme;
 if you upgraded from v1.x, bulk-migrate with \`akc migrate\` or re-register
 with \`akc set <KEY>\`.)
 
+## Sandboxed agent shells (e.g. Codex workspace-write)
+
+A sandboxed shell may be unable to search the login keychain at all. akc then
+reports "the Keychain search itself failed" — this is NOT "key not found"; the
+key may exist. Re-run \`akc check\` / \`akc run -- <command>\` outside the sandbox
+through your agent's explicit approval mechanism. Do not change sandbox or
+approval settings to work around it.
+MCP tools run in the MCP server's own process, so they may still work depending
+on how that server was launched — but MCP registration alone never injects
+secrets into other commands; keychain:// references still need \`akc run\`.
+
 ## Where keys live
 
 | Store | service attribute | account attribute |
