@@ -912,3 +912,55 @@ struct EnvParserJoinGuardTests {
         #expect(elapsed < .milliseconds(500), "parse took \(elapsed)")
     }
 }
+
+@Suite("EnvParser base64 padding line Tests (#208)")
+struct EnvParserBase64PaddingLineTests {
+
+    @Test("A line whose value is only '=' characters is not a candidate")
+    func valueOnlyEqualsIsExcluded() {
+        #expect(EnvParser.parse("c2VjcmV0UGF5bG9hZA==").isEmpty)
+        #expect(EnvParser.parse("c2VjcmV0UGF5bG9hZA=").isEmpty)
+        #expect(EnvParser.parse("KEY==").isEmpty)
+        #expect(EnvParser.parse("KEY===").isEmpty)
+        #expect(EnvParser.parse("KEY=\"=\"").isEmpty)
+    }
+
+    @Test("Unterminated PEM: base64 body lines are not exposed as key names")
+    func unterminatedPemYieldsOnlyNext() {
+        let text = "PK=\"-----BEGIN\nc2VjcmV0UGF5bG9hZA==\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["NEXT"])
+        #expect(entries.first?.value == "ok")
+    }
+
+    @Test("Values containing '=' among other characters are still imported")
+    func valuesWithEqualsStillParsed() {
+        let entries = EnvParser.parse("A=b=c\nTOKEN=abc==")
+        #expect(entries.map(\.key) == ["A", "TOKEN"])
+        #expect(entries.map(\.value) == ["b=c", "abc=="])
+    }
+
+    @Test("Decorated/corrupted padding lines in an unterminated PEM are not exposed as key names")
+    func decoratedPaddingLinesExcluded() {
+        #expect(EnvParser.parse("PK=\"-----BEGIN\nc2VjcmV0UGF5bG9hZA==\" junk\nNEXT=ok").map(\.key) == ["NEXT"])
+        #expect(EnvParser.parse("PK=\"-----BEGIN\nc2VjcmV0UGF5bG9hZA== # copied\nNEXT=ok").map(\.key) == ["NEXT"])
+        #expect(EnvParser.parse("PK=\"-----BEGIN\nc2VjcmV0UGF5bG9hZA==YWJj\nNEXT=ok").map(\.key) == ["NEXT"])
+    }
+
+    @Test("A realistic PEM body: invalid trailer / unterminated drop it, a closed PEM still joins")
+    func realisticPem() {
+        let pem = "PK=\"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\nc2VjcmV0UGF5bG9hZA==\n-----END PRIVATE KEY-----"
+        #expect(EnvParser.parse(pem + "\" junk\nNEXT=ok").map(\.key) == ["NEXT"])
+        #expect(EnvParser.parse(pem + "\nNEXT=ok").map(\.key) == ["NEXT"])
+        let closed = EnvParser.parse(pem + "\"")
+        #expect(closed.map(\.key) == ["PK"])
+        #expect(closed.first?.value.hasSuffix("-----END PRIVATE KEY-----") == true)
+    }
+
+    @Test("Boundary: '=' only values with spacing/quotes are excluded, quoted '=abc' is kept")
+    func equalsBoundaries() {
+        #expect(EnvParser.parse("export KEY = ==").isEmpty)
+        #expect(EnvParser.parse("KEY='='").isEmpty)
+        #expect(EnvParser.parse("KEY=\"=abc\"").first?.value == "=abc")
+    }
+}
