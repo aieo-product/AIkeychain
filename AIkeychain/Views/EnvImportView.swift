@@ -780,6 +780,17 @@ enum EnvParser {
         // `KEY="="` はクォートで始まるので allSatisfy 側で扱う (#208)。
         if rawValue.hasPrefix("=") || value.allSatisfy({ $0 == "=" }) { return nil }
 
+        // クォート無しの複数行 PEM（`PK=-----BEGIN PRIVATE KEY-----` の後に本文行）は
+        // dotenv 同様 1 行目しか取れず、ヘッダ単体の値は鍵として不完全。黙って候補化・保存
+        // しないよう除外する。ラベルは任意（`X9.42 DH PARAMETERS`・`PKCS #7 SIGNED DATA`・
+        // `PGP MESSAGE, PART 1/3`・空ラベル等）。RFC 7468 の厳密文法にすると二重空白・末尾空白の
+        // ラベルが候補に戻るため採らない。ただしラベルは閉じ区切り `-----` を含まない（`.*` だと
+        // `-----BEGIN PRIVATE KEY-----\nYWJj\n-----END PRIVATE KEY-----` のような `\n` エスケープ
+        // 1 行 PEM や `-----BEGIN CERTIFICATE-----abc-----` まで除外してしまう）。生値全体で判定する
+        // ので、クォート付き PEM（#201 で結合）や `-----BEGIN` を途中に含むだけの値・ヘッダの後に
+        // 文字が続く値は影響を受けない (#214, #216)。
+        if rawValue.range(of: #"^-----BEGIN (?:(?!-----).)*-----$"#, options: .regularExpression) != nil { return nil }
+
         // 安全なシェル変数名パターンに一致しないキーはインポート対象から除外する
         // （不正な文字列が Keychain に書き込まれる/後続処理でシェル展開されるのを防ぐ）。
         guard EnvVarName.isValid(key) else { return nil }

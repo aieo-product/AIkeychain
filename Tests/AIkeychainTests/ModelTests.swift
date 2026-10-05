@@ -964,3 +964,105 @@ struct EnvParserBase64PaddingLineTests {
         #expect(EnvParser.parse("KEY=\"=abc\"").first?.value == "=abc")
     }
 }
+
+@Suite("EnvParser unquoted PEM header Tests (#214)")
+struct EnvParserUnquotedPemHeaderTests {
+
+    @Test("Unquoted multi-line PEM: the truncated header-only value is not a candidate")
+    func unquotedPemYieldsOnlyNext() {
+        let text = """
+        PK=-----BEGIN PRIVATE KEY-----
+        MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7
+        c2VjcmV0UGF5bG9hZA==
+        -----END PRIVATE KEY-----
+        NEXT=ok
+        """
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["NEXT"])
+        #expect(entries.first?.value == "ok")
+    }
+
+    @Test("export-prefixed / spaced unquoted PEM headers are excluded too")
+    func exportedPemHeaderExcluded() {
+        #expect(EnvParser.parse("export PK=-----BEGIN OPENSSH PRIVATE KEY-----").isEmpty)
+        #expect(EnvParser.parse("PK = -----BEGIN RSA PRIVATE KEY-----  ").isEmpty)
+    }
+
+    @Test("A quoted multi-line PEM still joins into one entry")
+    func quotedPemStillJoins() {
+        let text = "PK=\"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----\"\nNEXT=ok"
+        let entries = EnvParser.parse(text)
+        #expect(entries.map(\.key) == ["PK", "NEXT"])
+        #expect(entries.first?.value == "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----")
+    }
+
+    @Test("Values that merely contain '-----BEGIN' or are not header-only are kept")
+    func nonHeaderValuesKept() {
+        let entries = EnvParser.parse("NOTE=see -----BEGIN marker\nCERT=-----BEGIN CERTIFICATE-----abc")
+        #expect(entries.map(\.key) == ["NOTE", "CERT"])
+        #expect(entries.map(\.value) == ["see -----BEGIN marker", "-----BEGIN CERTIFICATE-----abc"])
+    }
+
+    @Test("Header-only values with arbitrary labels (symbols / empty) are excluded (#216 review)")
+    func arbitraryLabelHeadersExcluded() {
+        #expect(EnvParser.parse("PK=-----BEGIN X9.42 DH PARAMETERS-----").isEmpty)
+        #expect(EnvParser.parse("PK=-----BEGIN PKCS #7 SIGNED DATA-----").isEmpty)
+        #expect(EnvParser.parse("PK=-----BEGIN PGP MESSAGE, PART 1/3-----").isEmpty)
+        #expect(EnvParser.parse("PK=-----BEGIN -----").isEmpty)
+        let mixed = "PK=-----BEGIN X9.42 DH PARAMETERS-----\nYWJj\n-----END X9.42 DH PARAMETERS-----\nNEXT=ok"
+        #expect(EnvParser.parse(mixed).map(\.key) == ["NEXT"])
+    }
+
+    @Test("The guard judges the raw value: quoted single-line headers and headers without closing dashes are kept")
+    func rawValuePinning() {
+        let dq = EnvParser.parse("PK=\"-----BEGIN PRIVATE KEY-----\"")
+        #expect(dq.map(\.key) == ["PK"])
+        #expect(dq.first?.value == "-----BEGIN PRIVATE KEY-----")
+        let sq = EnvParser.parse("PK='-----BEGIN PRIVATE KEY-----'")
+        #expect(sq.map(\.key) == ["PK"])
+        #expect(sq.first?.value == "-----BEGIN PRIVATE KEY-----")
+        let open = EnvParser.parse("PK=-----BEGIN PRIVATE KEY")
+        #expect(open.map(\.key) == ["PK"])
+        #expect(open.first?.value == "-----BEGIN PRIVATE KEY")
+    }
+
+    @Test("The label never spans past the first closing delimiter: one-line values with more after the header are kept (#216 re-review)")
+    func labelDoesNotSpanClosingDelimiter() {
+        // `\n` はリテラルの 2 文字（GCP/Firebase の private_key を .env に 1 行で書く形式）
+        let escaped = EnvParser.parse("PK=-----BEGIN PRIVATE KEY-----\\nYWJj\\n-----END PRIVATE KEY-----")
+        #expect(escaped.map(\.key) == ["PK"])
+        #expect(escaped.first?.value == "-----BEGIN PRIVATE KEY-----\\nYWJj\\n-----END PRIVATE KEY-----")
+        let cert = EnvParser.parse("CERT=-----BEGIN CERTIFICATE-----abc-----")
+        #expect(cert.map(\.key) == ["CERT"])
+        #expect(cert.first?.value == "-----BEGIN CERTIFICATE-----abc-----")
+    }
+
+    @Test("Header-only values with double-space / trailing-space labels are still excluded")
+    func irregularSpacingLabelsExcluded() {
+        #expect(EnvParser.parse("PK=-----BEGIN  PRIVATE KEY-----").isEmpty)
+        #expect(EnvParser.parse("PK=-----BEGIN PRIVATE KEY -----").isEmpty)
+    }
+
+    @Test("The header guard stays fast on long hyphen-heavy input")
+    func headerGuardIsFastOnLongInput() {
+        let hyphens = "PK=-----BEGIN " + String(repeating: "-", count: 100_000)
+        let mixed = "PK=-----BEGIN " + String(repeating: "a----", count: 20_000) + "x"
+        let clock = ContinuousClock()
+        var results: [[EnvEntry]] = []
+        let elapsed = clock.measure {
+            results = [EnvParser.parse(hyphens), EnvParser.parse(mixed)]
+        }
+        #expect(results.map { $0.map(\.key) } == [["PK"], ["PK"]])
+        #expect(elapsed < .milliseconds(500), "parse took \(elapsed)")
+    }
+
+    @Test("Boundary pins: extra closing dashes / glued END / escaped empty body are kept, non-ASCII labels are excluded")
+    func headerBoundaryPins() {
+        // 閉じダッシュ 7 本は正しいヘッダではない（意図的に保持）
+        #expect(EnvParser.parse("PK=-----BEGIN PRIVATE KEY-------").map(\.key) == ["PK"])
+        #expect(EnvParser.parse("PK=-----BEGIN PRIVATE KEY----------END PRIVATE KEY-----").map(\.key) == ["PK"])
+        // `\n` はリテラルの 2 文字（本文が空のエスケープ 1 行 PEM）
+        #expect(EnvParser.parse("PK=-----BEGIN PRIVATE KEY-----\\n-----END PRIVATE KEY-----").map(\.key) == ["PK"])
+        #expect(EnvParser.parse("PK=-----BEGIN 日本語 ラベル-----").isEmpty)
+    }
+}
