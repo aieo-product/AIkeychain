@@ -116,12 +116,15 @@ export async function cmdRun(argv) {
       }
     }
     process.stdout.write(`\nResolved: ${Object.keys(resolved).length}, Failed: ${failed.length}\n`);
+    // Hints follow the failure kind: an access failure is never "register the key",
+    // and a timeout/other error (reason set, not access) gets neither hint.
     if (failed.some((f) => f.access)) {
       process.stdout.write(
         'The keychain could not be searched from this process — the keys were NOT reported missing. ' +
           'Re-run outside the sandbox via your agent\'s explicit approval mechanism.\n'
       );
-    } else if (failed.length > 0) {
+    }
+    if (failed.some((f) => f.reason === null)) {
       process.stdout.write('Register missing keys in AI KeyChain or macOS Keychain.\n');
     }
     return 0;

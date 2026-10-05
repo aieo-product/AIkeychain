@@ -182,6 +182,31 @@ test('scripts/akc cmd_run reports a failed search as an access failure', async (
   assert.doesNotMatch(result.stderr, /not found in Keychain/);
 });
 
+test('scripts/akc cmd_run --dry-run summary: access failure never says "Register missing keys"', async () => {
+  for (const scenario of ['managed_sandbox44', 'reprobe_51', 'reprobe_exists']) {
+    const result = spawnSync('/bin/bash', [cmdHarnessPath, securityPath, callsPath, scenario, envPath], {
+      encoding: 'utf8',
+    });
+    assert.match(result.stdout, /could not be searched from this process/, scenario);
+    assert.doesNotMatch(result.stdout, /Register missing keys/, scenario);
+  }
+});
+
+test('scripts/akc cmd_run --dry-run summary: a genuine miss still says "Register missing keys"', async () => {
+  const result = spawnSync('/bin/bash', [cmdHarnessPath, securityPath, callsPath, 'managed_missing44', envPath], {
+    encoding: 'utf8',
+  });
+  assert.match(result.stdout, /Register missing keys/);
+  assert.doesNotMatch(result.stdout, /could not be searched from this process/);
+});
+
+test('scripts/akc cmd_run --dry-run summary: a non-44 failure gets neither hint', async () => {
+  const result = spawnSync('/bin/bash', [cmdHarnessPath, securityPath, callsPath, 'managed_51', envPath], {
+    encoding: 'utf8',
+  });
+  assert.doesNotMatch(result.stdout, /Register missing keys|could not be searched/);
+});
+
 test('scripts/akc resolve_keychain maps a managed timeout to 125 (locked keychain, #188)', async () => {
   await writeFile(callsPath, '');
   // シークレットを一時ファイル経由で運ばないことも検証 (#185 B1): 専用 TMPDIR に

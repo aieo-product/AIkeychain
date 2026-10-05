@@ -131,6 +131,12 @@ test('run --dry-run: access failure gets the sandbox hint, not "register missing
   assert.doesNotMatch(r.stdout, /Register missing keys/);
 });
 
+test('run --dry-run: a genuine miss still gets "Register missing keys"', async () => {
+  const r = await runAkc(['run', '--dry-run'], { MY_TOKEN: 'keychain://MISSING_KEY' });
+  assert.match(r.stdout, /Register missing keys/);
+  assert.doesNotMatch(r.stdout, /could not be searched from this process/);
+});
+
 test('get --reveal: access failure prints no value and is not "not found"', async () => {
   const r = await runAkc(['get', 'GOOD_KEY', '--reveal'], { STUB_MODE: 'sandbox' });
   assert.equal(r.code, 1);

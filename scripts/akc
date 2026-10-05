@@ -213,6 +213,8 @@ cmd_run() {
     # Find and resolve keychain:// references
     local resolved_count=0
     local failed_count=0
+    # 失敗種別ごとの件数（まとめ案内の出し分け用）
+    local missing_count=0 access_count=0
     local -a export_names=() export_values=()
 
     while IFS='=' read -r var_name var_value; do
@@ -251,8 +253,10 @@ cmd_run() {
                         # managed 段の timeout = keychain ロック/不可用 (#188)
                         echo "  ❌ $var_name — keychain://$key_name: managed read timed out — keychain locked or unavailable. Unlock the login keychain and retry." >&2
                     elif [ "$rk_rc" -eq 126 ]; then
+                        access_count=$((access_count + 1))
                         echo "  ❌ $var_name — keychain://$key_name: the Keychain search itself failed or gave inconsistent results in this process (e.g. a sandboxed agent shell) — NOT a missing key. Re-run outside the sandbox via your agent's explicit approval mechanism." >&2
                     elif [ "$rk_rc" -eq 1 ] || [ "$rk_rc" -eq 44 ]; then
+                        missing_count=$((missing_count + 1))
                         echo "  ❌ $var_name — keychain://$key_name not found in Keychain" >&2
                     else
                         echo "  ❌ $var_name — keychain://$key_name: keychain lookup failed (exit $rk_rc)" >&2
@@ -265,7 +269,11 @@ cmd_run() {
     if $dry_run; then
         echo ""
         echo "Resolved: $resolved_count, Failed: $failed_count"
-        if [ "$failed_count" -gt 0 ]; then
+        # 案内は失敗種別に合わせる: アクセス不可を「キー未登録」と案内しない
+        if [ "$access_count" -gt 0 ]; then
+            echo "The keychain could not be searched from this process — the keys were NOT reported missing. Re-run outside the sandbox via your agent's explicit approval mechanism."
+        fi
+        if [ "$missing_count" -gt 0 ]; then
             echo "Register missing keys in AI KeyChain or macOS Keychain."
         fi
         return 0
