@@ -543,6 +543,8 @@ private struct ReceiveTab: View {
     @State private var unsupportedCount = 0
     /// 値形式以外の理由（keychain ロック等）で保存できなかった件数。
     @State private var failedCount = 0
+    /// 上書き未承諾で既存と同名だったため書き込まなかったキー（既存値は保護 / #215）。
+    @State private var skippedExisting: [String] = []
     @State private var errorMessage: String?
     // 復号時に envVarName で重複排除（先勝ち）した表示用エントリ（finding 10）と、
     // その時点で一度だけ Keychain を引いて数えた上書き件数（finding 11）。
@@ -874,6 +876,16 @@ private struct ReceiveTab: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
             }
+            if !skippedExisting.isEmpty {
+                Label(L10n.s(
+                    ja: "\(skippedExisting.count) 件は既存のためスキップしました（既存の値は変更していません）: \(skippedExisting.joined(separator: ", "))",
+                    en: "\(skippedExisting.count) key(s) skipped because they already exist (existing values unchanged): \(skippedExisting.joined(separator: ", "))"),
+                      systemImage: "lock.shield")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
             if failedCount > 0 {
                 Label(L10n.s(
                     ja: "\(failedCount) 件は保存に失敗しました（Keychain のロック等）。もう一度お試しください。",
@@ -947,31 +959,22 @@ private struct ReceiveTab: View {
         if let share, share.isAuthenticated, let fp = share.senderFingerprint {
             tofu.confirm(fp)
         }
-        var count = 0
-        var unsupported: [String] = []
-        var failed: [String] = []
-        for entry in entries {
-            // 外部由来の .aikeychain ファイルの envVarName は信頼できない。
-            // シェル export に不正な名前はスキップする（SecurityCLIKeychainService.save 側でも
-            // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
-            guard EnvVarName.isValid(entry.envVarName) else { continue }
-            do {
-                try SecurityCLIKeychainService.shared.save(value: entry.value, for: entry.envVarName)
-                count += 1
-            } catch KeychainError.invalidData {
-                // 値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超）。share フォーマット自体は
-                // UTF-8 を運べるため、受信側の制約として理由付きで surface する
-                // （#179 二段レビュー N1/D-Q1。C7 #174 のエンコーディング規約で解消予定）。
-                unsupported.append(entry.envVarName)
-            } catch {
-                // その他の失敗（keychain ロック等）は理由別に別集計。
-                // 誤案内で本当の失敗を隠さないため（codex 指摘）。
-                failed.append(entry.envVarName)
-            }
-        }
-        importCount = count
-        unsupportedCount = unsupported.count
-        failedCount = failed.count
+        // 外部由来の .aikeychain ファイルの envVarName は信頼できない。
+        // シェル export に不正な名前はスキップする（SecurityCLIKeychainService.save 側でも
+        // 弾かれるが、ここで明示的に skip して意図を明確化 / #116）。
+        let valid = entries.filter { EnvVarName.isValid($0.envVarName) }
+        // 「上書き」と提示し承諾を得た overwriteNames だけ -U で上書きし、それ以外は作成専用で
+        // 書く（exists() の fail-open で既存値を無確認上書きしない / #215）。
+        // 値形式が未対応（非 ASCII / 複数行 / 約 2,000 文字超）とその他の失敗（keychain ロック等）
+        // は理由別に別集計する（#179 二段レビュー N1/D-Q1・codex 指摘）。
+        let written = KeyBatchWriter.write(
+            valid.map { KeyBatchWriter.Entry(account: $0.envVarName, value: $0.value) },
+            overwriting: overwriteConfirmed ? overwriteNames : [],
+            keychain: SecurityCLIKeychainService.shared)
+        importCount = written.saved.count
+        unsupportedCount = written.unsupported.count
+        failedCount = written.failed.count
+        skippedExisting = written.skippedExisting
         imported = true
         onImport() // キーリストを更新
     }
