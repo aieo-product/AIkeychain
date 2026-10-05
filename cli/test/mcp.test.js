@@ -105,7 +105,10 @@ test('usage_guide returns the agent guide text', async () => {
   const guideText = call.result.content[0].text;
   assert.match(guideText, /keychain:\/\//);
   assert.match(guideText, /akc run/);
-  assert.match(guideText, /-a "\$USER"/);
+  // v2 (#188): the guide points at the managed namespace form; the legacy
+  // `-a "$USER"` pin (#91) must not be suggested anymore.
+  assert.match(guideText, /-s "com\.aieo\.aikeychain\.managed" -a "<KEY>"/);
+  assert.doesNotMatch(guideText, /-a "\$USER"/);
 });
 
 test('delete_secret refuses without confirm=true', async () => {
@@ -130,6 +133,7 @@ test('delete_secret refuses without confirm=true', async () => {
   ]);
   const call = responses.find((r) => r.id === 2);
   const payload = JSON.parse(call.result.content[0].text);
-  assert.deepEqual(payload.deleted, []);
+  // v2: `deleted` is a boolean (was an array of removed entries in v1)
+  assert.equal(payload.deleted, false);
   assert.match(payload.note, /confirm=true/);
 });
