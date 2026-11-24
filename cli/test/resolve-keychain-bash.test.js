@@ -41,6 +41,12 @@ if [ "$svc" = "com.aieo.aikeychain.managed" ]; then
     reprobe_51) $want_value && exit 44; exit 51 ;;
     reprobe_exists) $want_value && exit 44; exit 0 ;;
     reprobe_hang) $want_value && exit 44; sleep 60 ;;
+    managed_oneline44)
+      echo "security: SecKeychainSearchCreateFromAttributes failed; SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2
+      exit 44 ;;
+    managed_missing44_crlf)
+      printf 'SecKeychainSearchCopyNext: The specified item could not be found in the keychain\\r\\n\\n' >&2
+      exit 44 ;;
     managed_missing44)
       echo "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2
       exit 44 ;;
@@ -96,6 +102,7 @@ after(async () => {
 function runResolver(scenario, env = {}) {
   const result = spawnSync('/bin/bash', [harnessPath, securityPath, callsPath, scenario], {
     encoding: 'utf8',
+    timeout: 30000, // never let a hung stub stall the whole suite
     env: { ...process.env, ...env },
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
@@ -143,6 +150,20 @@ test('scripts/akc resolve_keychain keeps a genuine miss (not-found stderr only) 
   });
 });
 
+test('scripts/akc resolve_keychain keeps a CRLF / no-prefix / no-period not-found line as 44', async () => {
+  await assertScenario('managed_missing44_crlf', {
+    result: { status: 44, stdout: '', stderr: '' },
+    calls: 'managed\nmanaged\n',
+  });
+});
+
+test('scripts/akc resolve_keychain: a search error on the not-found line itself is 126', async () => {
+  await assertScenario('managed_oneline44', {
+    result: { status: 126, stdout: '', stderr: '' },
+    calls: 'managed\nmanaged\n',
+  });
+});
+
 test('scripts/akc resolve_keychain maps a failed search (dirty 44) to 126, not "not found"', async () => {
   await assertScenario('managed_sandbox44', {
     result: { status: 126, stdout: '', stderr: '' },
@@ -164,8 +185,12 @@ for (const [scenario, why] of [
 
 test('scripts/akc resolve_keychain maps a timed-out re-probe to 125, not "not found"', async () => {
   await writeFile(callsPath, '');
+  const started = Date.now();
   const result = runResolver('reprobe_hang', { AKC_SECURITY_TIMEOUT_SECS: '1' });
+  const elapsed = Date.now() - started;
   assert.equal(result.status, 125);
+  // bounded: the 1 s limit must actually cut the hung re-probe short (the stub sleeps 60 s)
+  assert.ok(elapsed < 15000, `re-probe timeout took ${elapsed} ms`);
   assert.equal(result.stdout, '');
 });
 

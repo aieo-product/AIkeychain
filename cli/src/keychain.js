@@ -59,7 +59,11 @@ export class KeychainAccessError extends KeychainError {
 
 // The one stderr line a genuine miss produces:
 //   security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.
-const NOT_FOUND_LINE = /The specified item could not be found in the keychain\.?$/;
+// The whole line must match (an optional `security: ` prefix, an optional final
+// period): a substring/suffix match would also accept a line that carries a
+// search-creation error in front of the not-found text.
+const NOT_FOUND_LINE =
+  /^(?:security: )?SecKeychainSearchCopyNext: The specified item could not be found in the keychain\.?$/;
 
 /**
  * Classify a `security` exit 44. It is a real "not found" only when every
@@ -75,9 +79,13 @@ export function classifyExit44(stderr) {
   return other.length === 0 ? { notFound: true } : { notFound: false, detail: other[0] };
 }
 
+// `detail` is shown only for metadata lookups (no `-w`). The value read passes
+// null: its stderr is used for classification only and never echoed, so an
+// unexpected tool output can't carry anything value-like into logs.
 function accessError(what, detail) {
+  const shown = detail == null ? '' : ` (security: ${redactSecrets(detail)})`;
   return new KeychainAccessError(
-    `${what}: the Keychain search itself failed (security: ${redactSecrets(detail)}). ` +
+    `${what}: the Keychain search itself failed${shown}. ` +
       'This is NOT a "key not found" — this process cannot reach the login keychain ' +
       '(e.g. a sandboxed agent shell or a non-GUI session); the key may still exist. ' +
       'Re-run the command outside the sandbox through your agent\'s explicit approval ' +
@@ -154,7 +162,7 @@ export async function resolveKey(name) {
   if (r.code === 44) {
     const c = classifyExit44(r.stderr);
     if (c.notFound) return null;
-    throw accessError(`reading "${name}" could not be performed`, c.detail);
+    throw accessError(`reading "${name}" could not be performed`, null);
   }
   if (r.timedOut) {
     throw new KeychainError(

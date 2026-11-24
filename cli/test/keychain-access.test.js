@@ -42,6 +42,12 @@ case "$cmd" in
     if [ "$STUB_MODE" = "sandbox" ]; then
       echo "${SEARCH_ERR}" >&2; echo "${NOT_FOUND}" >&2; exit 44
     fi
+    if [ "$STUB_MODE" = "oneline" ]; then
+      echo "security: SecKeychainSearchCreateFromAttributes failed; SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2; exit 44
+    fi
+    if [ "$STUB_MODE" = "tokennoise" ] && $want_value; then
+      echo "security: unexpected output stub-plain-token-zzz" >&2; exit 44
+    fi
     if [ "$STUB_MODE" = "hexnoise" ]; then
       echo "security: weird failure 0123456789abcdef0123456789abcdef" >&2; exit 44
     fi
@@ -91,6 +97,25 @@ test('classifyExit44: only a pure not-found stderr is a miss', async () => {
   const c = classifyExit44(`${SEARCH_ERR}\n${NOT_FOUND}\n`);
   assert.equal(c.notFound, false);
   assert.match(c.detail, /SecKeychainSearchCreateFromAttributes/);
+  // the whole line must be the not-found line — no substring/suffix match
+  assert.deepEqual(classifyExit44('SecKeychainSearchCopyNext: The specified item could not be found in the keychain'), {
+    notFound: true,
+  });
+  assert.equal(classifyExit44(`security: X failed; ${NOT_FOUND.replace('security: ', '')}`).notFound, false);
+  assert.equal(classifyExit44('could not be found').notFound, false);
+});
+
+test('check: a search error on the same line as the not-found text is an access failure', async () => {
+  const r = await runAkc(['check', 'GOOD_KEY'], { STUB_MODE: 'oneline' });
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, ACCESS);
+  assert.doesNotMatch(r.stdout, /not found/);
+});
+
+test('run --dry-run: the value read\'s stderr is never echoed', async () => {
+  const r = await runAkc(['run', '--dry-run'], { STUB_MODE: 'tokennoise', MY_TOKEN: 'keychain://GOOD_KEY' });
+  assert.match(r.stdout + r.stderr, ACCESS);
+  assert.doesNotMatch(r.stdout + r.stderr, /stub-plain-token-zzz/);
 });
 
 test('check: a genuinely missing key is still "not found"', async () => {
