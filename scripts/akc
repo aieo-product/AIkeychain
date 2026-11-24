@@ -184,10 +184,15 @@ stderr_is_only_not_found() {
         line="${line%$'\r'}"
         line="${line#"${line%%[![:space:]]*}"}"
         line="${line%"${line##*[![:space:]]}"}"
-        line="${line#security: }"
-        line="${line%.}"
         [ -z "$line" ] && continue
-        [ "$line" = "SecKeychainSearchCopyNext: The specified item could not be found in the keychain" ] || return 1
+        # 接頭辞・末尾 . を削ってから比べると "." 等が空行扱いで通るため、許可形と完全一致させる
+        case "$line" in
+            "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain."|\
+            "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain"|\
+            "SecKeychainSearchCopyNext: The specified item could not be found in the keychain."|\
+            "SecKeychainSearchCopyNext: The specified item could not be found in the keychain") ;;
+            *) return 1 ;;
+        esac
     done
     return 0
 }

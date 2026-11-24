@@ -41,6 +41,8 @@ if [ "$svc" = "com.aieo.aikeychain.managed" ]; then
     reprobe_51) $want_value && exit 44; exit 51 ;;
     reprobe_exists) $want_value && exit 44; exit 0 ;;
     reprobe_hang) $want_value && exit 44; sleep 60 ;;
+    managed_dot44) echo "." >&2; exit 44 ;;
+    managed_prefixdot44) echo "security: ." >&2; exit 44 ;;
     managed_oneline44)
       echo "security: SecKeychainSearchCreateFromAttributes failed; SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2
       exit 44 ;;
@@ -163,6 +165,15 @@ test('scripts/akc resolve_keychain: a search error on the not-found line itself 
     calls: 'managed\nmanaged\n',
   });
 });
+
+for (const scenario of ['managed_dot44', 'managed_prefixdot44']) {
+  test(`scripts/akc resolve_keychain: a non-empty diagnostic line (${scenario}) is 126, not "not found"`, async () => {
+    await assertScenario(scenario, {
+      result: { status: 126, stdout: '', stderr: '' },
+      calls: 'managed\nmanaged\n',
+    });
+  });
+}
 
 test('scripts/akc resolve_keychain maps a failed search (dirty 44) to 126, not "not found"', async () => {
   await assertScenario('managed_sandbox44', {
