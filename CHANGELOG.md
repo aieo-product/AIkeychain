@@ -2,7 +2,7 @@
 
 All notable changes to AI KeyChain are documented in this file.
 
-## [2.0.0] - 2026-08-17
+## [2.0.0] - 2026-11-24
 
 完全リニューアル。単一の managed namespace (`com.aieo.aikeychain.managed`) を唯一の保管場所に絞り、v1.x の後方互換（旧 GUI store / manual スキーム）を全撤去した。
 
@@ -18,6 +18,24 @@ All notable changes to AI KeyChain are documented in this file.
 - **単一 namespace 化** — resolver を 3 段ルックアップ（managed → 旧 GUI → manual）から **managed 単一**に簡素化。`security` 所有なのでヘッドレス読取はプロンプト/ハングしない。fail-closed 契約（exit 44 のみ not-found、それ以外は権威的失敗）は維持 (#188)
 - CLI（`cli/`）・bash 版（`scripts/akc`）・GUI（Swift）すべてを managed 単一に統一。GUI のキー発見・`.zshrc` エクスポート・削除も managed のみを対象に
 - **値の長さ上限を実効値に修正**: `security -i` の 1 行上限（4096 バイト fgets バッファ = 4094 文字 + 改行）により、保存できる値は `floor((4094 − 66 − キー名長) / 2) ≒ 2,000 文字`（従来の 8192 宣言は到達不能だった）。上限超過は `security` を呼ぶ前に明示的なエラーで拒否し、失敗時のエラー文言から hex 化した値の断片を無条件に除去（CLI / GUI / MCP `set_secret` 共通）。hex 方式は `security -i` への注入防止として維持し、より長い値は対象外とする (#191)
+
+### Fixed
+- **`akc` が実在するキーを「not found」と誤報告する問題** — サンドボックス化された agent シェル（Codex `workspace-write` など）では、`security` が検索自体に失敗しても exit 44 を返す。これを「未登録」と区別し、fail closed（子プロセスを起動しない）にした。`akc check` / `get` / `list` / `run` / `doctor` と bash 版 `scripts/akc` は「このプロセスから Keychain を検索できない（キーは存在し得る）」と案内する。値の読み取り時の stderr は表示しない (#225)
+- **.env インポートの誤検出・取りこぼし**
+  - 値が `=` だけの行（base64 のパディング）や、クォートなしの PEM ヘッダ単体をキー候補から除外 (#208, #214)
+  - クォート付きの複数行の値を結合して解釈し、途中で切れた値が保存されないようにした (#201)
+  - `keychain://` 参照や `AIKEYCHAIN_` 変数を取り込み対象から除外 (#219)
+- **既存値の無言上書きを防止**
+  - キー追加で既存と同じ名前の保存を拒否 (#209)
+  - .env インポートとキー共有の受信では、上書きを選んでいないエントリは新規作成だけにし、既存の値を書き換えない (#215)
+- **GUI**
+  - アップグレードツアーで「0 件」と表示される問題を修正 (#194)
+  - キー行全体をダブルクリックで開けるようにした (#198)
+  - モード切替でバッジがすぐ更新されない問題を修正 (#200)
+  - カスタムキーを削除しても一覧に残る問題を修正 (#202)
+  - 再表示したオンボーディングに、閉じるボタンと Esc での閉じる操作を追加 (#203)
+  - キー削除後のメタデータ掃除を一箇所に集約 (#210)
+- MCP テストの期待値を v2 の仕様に合わせた（`npm test` / `prepublishOnly` が通るように） (#226)
 
 ### Removed
 - 旧 GUI store / manual スキームの読み取り fallback・書き込み・削除掃除
