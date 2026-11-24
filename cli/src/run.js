@@ -5,7 +5,7 @@
 
 import { spawn } from 'node:child_process';
 import { constants as osConstants } from 'node:os';
-import { resolveKey, maskValue, KeychainError, SUBPROCESS_TIMEOUT_MS } from './keychain.js';
+import { resolveKey, maskValue, KeychainError, KeychainAccessError, SUBPROCESS_TIMEOUT_MS } from './keychain.js';
 
 export const REF_PREFIX = 'keychain://';
 
@@ -52,7 +52,12 @@ export async function resolveRefs(refs, { deadlineMs = SUBPROCESS_TIMEOUT_MS * 3
       cache.set(keyName, entry);
     }
     if (entry.err) {
-      failed.push({ varName, keyName, reason: entry.err.message });
+      failed.push({
+        varName,
+        keyName,
+        reason: entry.err.message,
+        access: entry.err instanceof KeychainAccessError,
+      });
     } else if (entry.value) {
       resolved[varName] = entry.value;
     } else {
@@ -111,7 +116,15 @@ export async function cmdRun(argv) {
       }
     }
     process.stdout.write(`\nResolved: ${Object.keys(resolved).length}, Failed: ${failed.length}\n`);
-    if (failed.length > 0) {
+    // Hints follow the failure kind: an access failure is never "register the key",
+    // and a timeout/other error (reason set, not access) gets neither hint.
+    if (failed.some((f) => f.access)) {
+      process.stdout.write(
+        'The keychain could not be searched from this process — the keys were NOT reported missing. ' +
+          'Re-run outside the sandbox via your agent\'s explicit approval mechanism.\n'
+      );
+    }
+    if (failed.some((f) => f.reason === null)) {
       process.stdout.write('Register missing keys in AI KeyChain or macOS Keychain.\n');
     }
     return 0;

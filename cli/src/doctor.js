@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { collectRefs, resolveRefs } from './run.js';
-import { resolveKey, dumpRecords, KeychainError, MANAGED_SERVICE } from './keychain.js';
+import { resolveKey, dumpRecords, probeKeychainAccess, KeychainError, MANAGED_SERVICE } from './keychain.js';
 
 /**
  * Extract keychain://KEY and `security find-generic-password -s "..." -a "KEY"`
@@ -123,6 +123,9 @@ export async function runDoctor({ env = process.env, zshrcPath, codexTomlPath, c
   // Keychain enumeration (v2.0: managed namespace only). Names/accts only;
   // values are never read.
   try {
+    // Search first: a restricted process (e.g. a sandboxed agent shell) can
+    // enumerate nothing yet "succeed", which must not read as "0 keys".
+    await probeKeychainAccess();
     const records = await dumpRecords();
     const names = new Set(
       records.filter((r) => r.service === MANAGED_SERVICE && r.account).map((r) => r.account)

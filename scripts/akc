@@ -79,9 +79,16 @@ if [ "$AKC_SECURITY_TIMEOUT_SECS" -lt 1 ] || [ "$AKC_SECURITY_TIMEOUT_SECS" -gt 
 fi
 
 security_bounded() {
-    local out rc
+    local out rc capture_err=false
+    # --stderr: stdout を捨てて stderr を返す（メタデータ照会の診断専用。
+    # -w 付きの値読取には使わない — 値は stdout にしか出ないため混入しない）。
+    if [ "${1:-}" = "--stderr" ]; then capture_err=true; shift; fi
     out=$(
-        "$SECURITY_BIN" "$@" 2>/dev/null &
+        if $capture_err; then
+            "$SECURITY_BIN" "$@" 2>&1 >/dev/null &
+        else
+            "$SECURITY_BIN" "$@" 2>/dev/null &
+        fi
         pid=$!
         (
             w=0
@@ -132,8 +139,62 @@ resolve_keychain() {
     else
         rc=$?
         [ "$rc" -eq 124 ] && return 125
+        # exit 44 は「見つからない」とは限らない: サンドボックス化された agent
+        # シェル等では検索自体が失敗しても 44 を返し、stderr に先行する
+        # SecKeychainSearchCreateFromAttributes 等のエラーが出る（実測）。
+        # 値を読まないメタデータ照会で stderr を取り直し、not-found 行以外が
+        # あれば 126 = keychain に到達できない（キーは存在し得る）として返す。
+        if [ "$rc" -eq 44 ]; then
+            local probe_rc=0
+            keychain_44_is_not_found "$key_name" || probe_rc=$?
+            case "$probe_rc" in
+                0) return 44 ;;     # 本当に未登録
+                124) return 125 ;;  # 再照会がタイムアウト = ロック/不可用
+                *) return 126 ;;    # 検索失敗・結果不一致 = 未登録とは判定できない
+            esac
+        fi
         return "$rc"
     fi
+}
+
+# 再照会（値は読まないメタデータ照会）で exit 44 の意味を確かめる。
+#   0   = 本当に未登録: 再照会も exit 44 で、stderr が not-found 行のみ / 空
+#   124 = 再照会がタイムアウト
+#   1   = それ以外（検索自体の失敗・別の終了コード・今度は存在した等）。
+#         キーは存在し得るので「未登録」とは言わず fail closed にする。
+keychain_44_is_not_found() {
+    local err rc other
+    if err=$(security_bounded --stderr find-generic-password -s "com.aieo.aikeychain.managed" -a "$1"); then
+        rc=0
+    else
+        rc=$?
+    fi
+    [ "$rc" -eq 124 ] && return 124
+    [ "$rc" -eq 44 ] || return 1
+    # grep に頼らず（フィルターの実行失敗を「該当行なし」と取り違えない）、
+    # 行全体が not-found 行のときだけ受け入れる。
+    printf '%s\n' "$err" | stderr_is_only_not_found || return 1
+    return 0
+}
+
+# stdin の各行が空行か not-found 行そのもの（`security: ` 接頭辞と末尾の . は任意）なら 0。
+stderr_is_only_not_found() {
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [ -z "$line" ] && continue
+        # 接頭辞・末尾 . を削ってから比べると "." 等が空行扱いで通るため、許可形と完全一致させる
+        case "$line" in
+            "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain."|\
+            "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain"|\
+            "SecKeychainSearchCopyNext: The specified item could not be found in the keychain."|\
+            "SecKeychainSearchCopyNext: The specified item could not be found in the keychain") ;;
+            *) return 1 ;;
+        esac
+    done
+    return 0
 }
 
 mask_value() {
@@ -173,6 +234,8 @@ cmd_run() {
     # Find and resolve keychain:// references
     local resolved_count=0
     local failed_count=0
+    # 失敗種別ごとの件数（まとめ案内の出し分け用）
+    local missing_count=0 access_count=0
     local -a export_names=() export_values=()
 
     while IFS='=' read -r var_name var_value; do
@@ -210,7 +273,11 @@ cmd_run() {
                     if [ "$rk_rc" -eq 125 ]; then
                         # managed 段の timeout = keychain ロック/不可用 (#188)
                         echo "  ❌ $var_name — keychain://$key_name: managed read timed out — keychain locked or unavailable. Unlock the login keychain and retry." >&2
+                    elif [ "$rk_rc" -eq 126 ]; then
+                        access_count=$((access_count + 1))
+                        echo "  ❌ $var_name — keychain://$key_name: the Keychain search itself failed or gave inconsistent results in this process (e.g. a sandboxed agent shell) — NOT a missing key. Re-run outside the sandbox via your agent's explicit approval mechanism." >&2
                     elif [ "$rk_rc" -eq 1 ] || [ "$rk_rc" -eq 44 ]; then
+                        missing_count=$((missing_count + 1))
                         echo "  ❌ $var_name — keychain://$key_name not found in Keychain" >&2
                     else
                         echo "  ❌ $var_name — keychain://$key_name: keychain lookup failed (exit $rk_rc)" >&2
@@ -223,7 +290,11 @@ cmd_run() {
     if $dry_run; then
         echo ""
         echo "Resolved: $resolved_count, Failed: $failed_count"
-        if [ "$failed_count" -gt 0 ]; then
+        # 案内は失敗種別に合わせる: アクセス不可を「キー未登録」と案内しない
+        if [ "$access_count" -gt 0 ]; then
+            echo "The keychain could not be searched from this process — the keys were NOT reported missing. Re-run outside the sandbox via your agent's explicit approval mechanism."
+        fi
+        if [ "$missing_count" -gt 0 ]; then
             echo "Register missing keys in AI KeyChain or macOS Keychain."
         fi
         return 0
